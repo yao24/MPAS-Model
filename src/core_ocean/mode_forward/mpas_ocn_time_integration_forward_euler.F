@@ -246,8 +246,8 @@ contains
                      !$omp do schedule(runtime) private(k)
                      do iCell = 1, nCells
                         do k = 1, maxLevelCell(iCell)
-                           tracersGroupNew(:, k, iCell) = tracersGroupCur(:, k, iCell) + dt &
-                              * tracersGroupTend(:, k, iCell)
+                           tracersGroupNew(:, k, iCell) = (tracersGroupCur(:, k, iCell) * layerThicknessCur(k, iCell) + dt &
+                              * tracersGroupTend(:, k, iCell) ) / layerThicknessNew(k, iCell)
                         end do
                      end do
                      !$omp end do
@@ -477,21 +477,21 @@ contains
 
       call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
 
-      call mpas_pool_begin_iteration(tracersPool)
-      do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-         if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-            call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
-            if ( associated(tracersGroupNew) ) then
-               !$omp do schedule(runtime) private(k)
-               do iCell = 1, nCells
-                  do k = 1, maxLevelCell(iCell)
-                     tracersGroupNew(:, k, iCell) = tracersGroupNew(:, k, iCell) / layerThicknessNew(k, iCell)
-                  end do
-               end do
-               !$omp end do
-            end if
-         end if
-      end do
+      !call mpas_pool_begin_iteration(tracersPool)
+      !do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+      !   if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+      !      call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+      !      if ( associated(tracersGroupNew) ) then
+      !         !$omp do schedule(runtime) private(k)
+      !         do iCell = 1, nCells
+      !            do k = 1, maxLevelCell(iCell)
+      !               tracersGroupNew(:, k, iCell) = tracersGroupNew(:, k, iCell) / layerThicknessNew(k, iCell)
+      !            end do
+      !         end do
+      !         !$omp end do
+      !      end if
+      !   end if
+      !end do
 
       call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 2)
       call mpas_threading_barrier()
