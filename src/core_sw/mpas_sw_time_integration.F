@@ -44,7 +44,9 @@ module sw_time_integration
       call mpas_pool_get_config(domain % configs, 'config_time_integration', config_time_integration)
 
       if (trim(config_time_integration) == 'RK4') then
-         call sw_rk4(domain, dt)
+         call sw_rk4(domain, dt) 
+      else if (trim(config_time_integration) == 'SSPRK') then
+         call sw_ssprk(domain, dt)
       else
          call mpas_log_write('Unknown time integration option '//trim(config_time_integration), MPAS_LOG_ERR)
          call mpas_log_write('Currently, only ''RK4'' is supported.', MPAS_LOG_CRIT)
@@ -356,6 +358,300 @@ module sw_time_integration
 
    end subroutine sw_rk4
 
+   subroutine sw_ssprk(domain, dt)
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+   ! Advance model state forward in time by the specified time step using 
+   !   a Strong Stability Preserving Runge Kutta method of order 2 (for now)
+   !
+   ! Input: domain - current model state in time level 1 (e.g., time_levs(1)state%h(:,:)) 
+   !                 plus grid meta-data
+   ! Output: domain - upon exit, time level 2 (e.g., time_levs(2)%state%h(:,:)) contains 
+   !                  model state advanced forward in time by dt seconds
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+
+      implicit none
+
+      type (domain_type), intent(inout) :: domain
+      real (kind=RKIND), intent(in) :: dt
+      !integer, intent(in) :: order !TODO
+
+      integer :: iCell, k
+      type (block_type), pointer :: block
+      type (mpas_pool_type), pointer :: statePool
+      type (mpas_pool_type), pointer :: meshPool
+      type (mpas_pool_type), pointer :: tendPool
+      type (mpas_pool_type), pointer :: firstStageStatePool !need 1st stage soln
+      type (mpas_pool_type), pointer :: secondStageStatePool!need 2nd stage soln
+      type (mpas_pool_type), pointer :: provisStatePool
+      type (mpas_pool_type), pointer :: prevProvisPool, nextProvisPool
+
+      integer :: rk_step
+
+      real (kind=RKIND), dimension(4) :: rk_weights, rk_substep_weights
+
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels
+
+      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uProvis, uTend, u1stStage, u2ndStage ! check
+      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hProvis, hTend, h1stStage, h2ndStage ! check
+      real (kind=RKIND), dimension(:,:), pointer :: uReconstructX, uReconstructY, uReconstructZ, uReconstructZonal, uReconstructMeridional
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersProvis, tracersTend, tracers1stStage, tracers2ndStage ! check
+
+      integer, pointer :: config_test_case
+      real (kind=RKIND), pointer :: config_h_mom_eddy_visc4
+
+
+      call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
+      call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
+
+     !
+     ! Initialize time_levs(2) with state at current time
+     ! Initialize first RK state
+     ! Couple tracers time_levs(2) with h in time-levels
+     ! Initialize RK weights
+     !
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+        call mpas_pool_get_subpool(block % structs, 'state', statePool)
+
+        ! check - BEGIN
+        allocate(firstStageStatePool)
+        call mpas_pool_create_pool(firstStageStatePool)
+        call mpas_pool_clone_pool(statePool, firstStageStatePool, 1)
+
+        call mpas_pool_add_subpool(block % structs, 'first_stage__state', firstStageStatePool)
+
+        !if (order == 3) then
+        
+        !allocate(secondStageStatePool)
+        !call mpas_pool_create_pool(secondStageStatePool)
+        !call mpas_pool_clone_pool(statePool, secondStageStatePool, 1)
+
+        !call mpas_pool_add_subpool(block % structs, 'second_stage_state', secondStageStatePool)
+
+        !end if
+        ! check - END 
+
+        allocate(provisStatePool)
+        call mpas_pool_create_pool(provisStatePool)
+        call mpas_pool_clone_pool(statePool, provisStatePool, 1)
+
+        call mpas_pool_add_subpool(block % structs, 'provis_state', provisStatePool)
+
+        call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+        call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+        call mpas_pool_get_array(statePool, 'u', uOld, 1)
+        call mpas_pool_get_array(statePool, 'u', uNew, 2)
+        call mpas_pool_get_array(statePool, 'h', hOld, 1)
+        call mpas_pool_get_array(statePool, 'h', hNew, 2)
+        call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+        call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
+        ! QUESTION: why do we write the New solutions?
+        uNew(:,:) = uOld(:,:)
+        hNew(:,:) = hOld(:,:)
+        do iCell = 1, nCells  ! couple tracers to h
+          do k = 1, nVertLevels
+            tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell)
+           end do
+        end do
+
+        call mpas_pool_initialize_time_levels(statePool)
+
+        block => block % next
+     end do
+
+     !check - BEGIN (probably I have to make some changes here)
+     block => domain % blocklist
+     do while(associated(block))
+        if (associated(block % prev)) then
+           call mpas_pool_get_subpool(block % prev % structs, 'provis_state', prevProvisPool)
+        else
+           nullify(prevProvisPool)
+        end if
+
+        if (associated(block % next)) then
+           call mpas_pool_get_subpool(block % next % structs, 'provis_state', nextProvisPool)
+        else
+           nullify(nextProvisPool)
+        end if
+
+        call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
+
+        if (associated(prevProvisPool) .and. associated(nextProvisPool)) then
+           call mpas_pool_link_pools(provisStatePool, prevProvisPool, nextProvisPool)
+        else if (associated(prevProvisPool)) then
+           call mpas_pool_link_pools(provisStatePool, prevProvisPool)
+        else if (associated(nextProvisPool)) then
+           call mpas_pool_link_pools(provisStatePool, nextPool=nextProvisPool)
+        else
+           call mpas_pool_link_pools(provisStatePool)
+        end if
+
+        call mpas_pool_link_parinfo(block, provisStatePool)
+
+        block => block % next
+     end do 
+    !check - END 
+
+
+     !BEGIN -  to be removed
+     rk_weights(1) = dt/6.
+     rk_weights(2) = dt/3.
+     rk_weights(3) = dt/3.
+     rk_weights(4) = dt/6.
+
+     rk_substep_weights(1) = dt/2.
+     rk_substep_weights(2) = dt/2.
+     rk_substep_weights(3) = dt
+     rk_substep_weights(4) = 0.
+     !END - to be removed
+
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+     ! BEGIN SSPRK - 1st stage 
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+     
+! --- update halos for diagnostic variables
+     call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+
+     if (config_h_mom_eddy_visc4 > 0.0) then
+         call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
+         call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
+     end if
+
+! --- compute tendencies
+
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+        !check -  BEGIN the next lines are  assuming state = old
+        call mpas_pool_get_subpool(block % structs, 'state', statePool) 
+        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+
+        call sw_compute_tend(tendPool, statePool, meshPool, 1)
+        call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)
+        !check - END
+        call sw_enforce_boundary_edge(tendPool, meshPool)
+        block => block % next
+     end do
+
+! --- update halos for prognostic variables
+
+     call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+     call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+     call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+
+! --- compute first stage state
+
+     block => domain % blocklist
+        do while (associated(block))
+           call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+           !check line below: do I need to get it considering that I just need
+           !to write it?
+           call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStageStatePool) 
+
+           call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+             
+           !check line below: do I need to get them considering that I just need
+           !to write them?
+           call mpas_pool_get_array(provisStatePool, 'u', u1stStage)
+           call mpas_pool_get_array(provisStatePool, 'h', h1stStage)
+           call mpas_pool_get_array(provisStatePool, 'tracers', tracers1stStage)
+
+           call mpas_pool_get_array(statePool, 'u', uOld, 1)
+           call mpas_pool_get_array(statePool, 'h', hOld, 1)
+           call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+           call mpas_pool_get_array(tendPool, 'u', uTend)
+           call mpas_pool_get_array(tendPool, 'h', hTend)
+           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
+
+           u1stStage(:,:) = uOld(:,:) + uTend(:,:) !check - dt should be already in tend
+           h1stStage(:,:) = hOld(:,:) + hTend(:,:)
+             do iCell = 1, nCells
+                do k = 1, nVertLevels
+                tracersNew(:,k,iCell) = tracersNew(:,k,iCell) +  tracersTend(:,k,iCell)
+                !TODO remove the 2 lines below
+                !tracers1stStage(:,k,iCell) = ( hOld(k,iCell) * tracersOld(:,k,iCell) + tracersTend(:,k,iCell) &
+                !                                ) / h1stStage(k,iCell)
+                end do
+             end do
+             if (config_test_case == 1) then    !check: should I remove these 3 lines? (For case 1, wind field should be fixed)
+                u1stStage(:,:) = uOld(:,:)
+             end if
+             ! QUESTION: what does this function do?
+             call sw_compute_solve_diagnostics(dt, firstStageStatePool, meshPool)
+             block => block % next
+          end do
+
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+     ! END SSPRK - 1st stage 
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+
+
+     !
+     !  A little clean up at the end: decouple new scalar fields and compute diagnostics for new state
+     !
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+        call mpas_pool_get_subpool(block % structs, 'state', statePool)
+
+        call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+        call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+        call mpas_pool_get_array(statePool, 'u', uOld, 1)
+        call mpas_pool_get_array(statePool, 'u', uNew, 2)
+        call mpas_pool_get_array(statePool, 'h', hNew, 2)
+        call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
+        call mpas_pool_get_array(statePool, 'uReconstructX', uReconstructX, 2)
+        call mpas_pool_get_array(statePool, 'uReconstructY', uReconstructY, 2)
+        call mpas_pool_get_array(statePool, 'uReconstructZ', uReconstructZ, 2)
+        call mpas_pool_get_array(statePool, 'uReconstructZonal', uReconstructZonal, 2)
+        call mpas_pool_get_array(statePool, 'uReconstructMeridional', uReconstructMeridional, 2)
+
+        do iCell = 1, nCells
+           do k = 1, nVertLevels
+              tracersNew(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
+           end do
+        end do
+
+        if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+           uNew(:,:) = uOld(:,:)
+        end if
+
+        call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+
+        call mpas_reconstruct(meshPool, uNew,          &
+                          uReconstructX, uReconstructY, uReconstructZ, &
+                          uReconstructZonal, uReconstructMeridional )
+        block => block % next
+     end do
+
+     block => domain % blocklist
+     do while(associated(block))
+        call mpas_pool_get_subpool(block % structs, 'first_stage__state', firstStageStatePool)
+
+        call mpas_pool_destroy_pool(firstStageStatePool)
+
+        call mpas_pool_remove_subpool(block % structs, 'first_stage_state')
+            
+        call mpas_pool_get_subpool(block % structs, 'second_stage__state', secondStageStatePool)
+
+        call mpas_pool_destroy_pool(secondStageStatePool)
+
+        call mpas_pool_remove_subpool(block % structs, 'second_stage_state')
+
+        block => block % next
+     end do
+
+   end subroutine sw_ssprk
 
    subroutine sw_compute_tend(tendPool, statePool, meshPool, timeLevelIn)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
