@@ -375,6 +375,8 @@ module sw_time_integration
       real (kind=RKIND), intent(in) :: dt
       !integer, intent(in) :: order !TODO
 
+      integer :: order ! TODO remove
+      order = 2 ! TODO remove
       integer :: iCell, k
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool
@@ -382,19 +384,15 @@ module sw_time_integration
       type (mpas_pool_type), pointer :: tendPool
       type (mpas_pool_type), pointer :: firstStageStatePool !need 1st stage soln
       type (mpas_pool_type), pointer :: secondStageStatePool!need 2nd stage soln
-      type (mpas_pool_type), pointer :: provisStatePool
-      type (mpas_pool_type), pointer :: prevProvisPool, nextProvisPool
-
-      integer :: rk_step
-
-      real (kind=RKIND), dimension(4) :: rk_weights, rk_substep_weights
+      type (mpas_pool_type), pointer :: prevFirstStagePool, nextFirstStagePool
+      type (mpas_pool_type), pointer :: prevSecondStagePool, nextSecondStagePool
 
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels
 
-      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uProvis, uTend, u1stStage, u2ndStage ! check
-      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hProvis, hTend, h1stStage, h2ndStage ! check
+      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend, u1stStage, u2ndStage ! check
+      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend, h1stStage, h2ndStage ! check
       real (kind=RKIND), dimension(:,:), pointer :: uReconstructX, uReconstructY, uReconstructZ, uReconstructZonal, uReconstructMeridional
-      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersProvis, tracersTend, tracers1stStage, tracers2ndStage ! check
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersTend, tracers1stStage, tracers2ndStage ! check
 
       integer, pointer :: config_test_case
       real (kind=RKIND), pointer :: config_h_mom_eddy_visc4
@@ -405,9 +403,7 @@ module sw_time_integration
 
      !
      ! Initialize time_levs(2) with state at current time
-     ! Initialize first RK state
      ! Couple tracers time_levs(2) with h in time-levels
-     ! Initialize RK weights
      !
      block => domain % blocklist
      do while (associated(block))
@@ -421,22 +417,16 @@ module sw_time_integration
 
         call mpas_pool_add_subpool(block % structs, 'first_stage__state', firstStageStatePool)
 
-        !if (order == 3) then
+        if (order == 3) then
         
-        !allocate(secondStageStatePool)
-        !call mpas_pool_create_pool(secondStageStatePool)
-        !call mpas_pool_clone_pool(statePool, secondStageStatePool, 1)
+        allocate(secondStageStatePool)
+        call mpas_pool_create_pool(secondStageStatePool)
+        call mpas_pool_clone_pool(statePool, secondStageStatePool, 1)
 
-        !call mpas_pool_add_subpool(block % structs, 'second_stage_state', secondStageStatePool)
+        call mpas_pool_add_subpool(block % structs, 'second_stage_state', secondStageStatePool)
 
-        !end if
+        end if
         ! check - END 
-
-        allocate(provisStatePool)
-        call mpas_pool_create_pool(provisStatePool)
-        call mpas_pool_clone_pool(statePool, provisStatePool, 1)
-
-        call mpas_pool_add_subpool(block % structs, 'provis_state', provisStatePool)
 
         call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
         call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -462,34 +452,64 @@ module sw_time_integration
         block => block % next
      end do
 
-     !check - BEGIN (probably I have to make some changes here)
+     !check - is this to copy old and new solution? do I need it?
      block => domain % blocklist
      do while(associated(block))
         if (associated(block % prev)) then
-           call mpas_pool_get_subpool(block % prev % structs, 'provis_state', prevProvisPool)
+           call mpas_pool_get_subpool(block % prev % structs, 'first_stage_state', prevFirstStagePool)
         else
-           nullify(prevProvisPool)
+           nullify(prevFirstStagePool)
         end if
 
         if (associated(block % next)) then
-           call mpas_pool_get_subpool(block % next % structs, 'provis_state', nextProvisPool)
+           call mpas_pool_get_subpool(block % next % structs, 'first_stage_state', nextFirstStagePool)
         else
-           nullify(nextProvisPool)
+           nullify(nextFirstStagePool)
         end if
 
-        call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
+        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStageStatePool)
 
-        if (associated(prevProvisPool) .and. associated(nextProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, prevProvisPool, nextProvisPool)
-        else if (associated(prevProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, prevProvisPool)
-        else if (associated(nextProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, nextPool=nextProvisPool)
+        if (associated(prevFirstStagePool) .and. associated(nextFirstStagePool)) then
+           call mpas_pool_link_pools(firstStageStatePool, prevFirstStagePool, nextFirstStagePool)
+        else if (associated(prevFirstStagePool)) then
+           call mpas_pool_link_pools(firstStageStatePool, prevFirstStagePool)
+        else if (associated(nextFirstStagePool)) then
+           call mpas_pool_link_pools(firstStageStatePool, nextPool=nextFirstStagePool)
         else
-           call mpas_pool_link_pools(provisStatePool)
+           call mpas_pool_link_pools(firstStageStatePool)
         end if
 
-        call mpas_pool_link_parinfo(block, provisStatePool)
+        call mpas_pool_link_parinfo(block, firstStageStatePool)
+
+        if (order == 3) then
+
+           if (associated(block % prev)) then
+              call mpas_pool_get_subpool(block % prev % structs, 'second_stage_state', prevSecondStagePool)
+           else
+              nullify(prevSecondStagePool)
+           end if
+
+           if (associated(block % next)) then
+              call mpas_pool_get_subpool(block % next % structs, 'second_stage_state', nextSecondStagePool)
+           else
+              nullify(nextSecondStagePool)
+           end if
+
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStageStatePool)
+
+           if (associated(prevSecondStagePool) .and. associated(nextSecondStagePool)) then
+              call mpas_pool_link_pools(secondStageStatePool, prevSecondStagePool, nextSecondStagePool)
+           else if (associated(prevSecondStagePool)) then
+              call mpas_pool_link_pools(secondStageStatePool, prevSecondStagePool)
+           else if (associated(nextSecondStagePool)) then
+              call mpas_pool_link_pools(secondStageStatePool, nextPool=nextsecondStagePool)
+           else
+              call mpas_pool_link_pools(secondStageStatePool)
+           end if
+
+           call mpas_pool_link_parinfo(block, secondStageStatePool)
+
+        end if
 
         block => block % next
      end do 
