@@ -51,7 +51,7 @@ module sw_time_integration
          call sw_ssprk(domain, dt, 3)
       else
          call mpas_log_write('Unknown time integration option '//trim(config_time_integration), MPAS_LOG_ERR)
-         call mpas_log_write('Currently, only ''RK4'' is supported.', MPAS_LOG_CRIT)
+         call mpas_log_write('Currently, only ''RK4'', ''SSPRK2'', and ''SSPRK3'' are supported.', MPAS_LOG_CRIT)
       end if
 
       block => domain % blocklist
@@ -387,7 +387,7 @@ module sw_time_integration
 
       integer :: ssprk_step
 
-      real (kind=RKIND), dimension(ssprk_order) :: weights_old, weights_provis
+      real (kind=RKIND), dimension(ssprk_order) :: weights_old, weights_tend
 
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels
 
@@ -423,16 +423,10 @@ module sw_time_integration
         call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
         call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
-        call mpas_pool_get_array(statePool, 'u', uOld, 1)
-        call mpas_pool_get_array(statePool, 'u', uNew, 2)
         call mpas_pool_get_array(statePool, 'h', hOld, 1)
-        call mpas_pool_get_array(statePool, 'h', hNew, 2)
         call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
         call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
-        ! QUESTION - why? Also, when is provisStatePool initialized to the old values?
-        uNew(:,:) = uOld(:,:)
-        hNew(:,:) = hOld(:,:)
         do iCell = 1, nCells  ! couple tracers to h
           do k = 1, nVertLevels
             tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell)
@@ -484,11 +478,11 @@ module sw_time_integration
      weights_old(3) = 1./3.
      end if 
 
-     weights_provis(1) = 0.
-     weights_provis(2) = 0.5
+     weights_tend(1) = 0.
+     weights_tend(2) = 0.5
      if (ssprk_order == 3) then 
-     weights_provis(2) = 0.25
-     weights_provis(3) = 2./3.
+     weights_tend(2) = 0.25
+     weights_tend(3) = 2./3.
      end if
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
@@ -548,11 +542,11 @@ module sw_time_integration
           call mpas_pool_get_array(tendPool, 'h', hTend)
           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-          uProvis(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_provis(ssprk_step) * ( uProvis(:,:) + dt * uTend(:,:) )
-          hProvis(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_provis(ssprk_step) * ( hProvis(:,:) + dt * hTend(:,:) )
+          uProvis(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_tend(ssprk_step) * ( uProvis(:,:) + dt * uTend(:,:) )
+          hProvis(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_tend(ssprk_step) * ( hProvis(:,:) + dt * hTend(:,:) )
           do iCell = 1, nCells
-             do k = 1, nVertLevels  ! Qhy are there two ways to advance the tracers in sw_rk4?
-                tracersProvis(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) + weights_provis(ssprk_step) &
+             do k = 1, nVertLevels  ! QUESTION - why are there two ways to advance the tracers in sw_rk4?
+                tracersProvis(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) + weights_tend(ssprk_step) &
                                                                       *  ( tracersProvis(:,k,iCell) + dt * tracersTend(:,k,iCell) )
              end do
           end do
