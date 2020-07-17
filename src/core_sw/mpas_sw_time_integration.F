@@ -569,6 +569,10 @@ module sw_time_integration
       ! provis, but first I have to understand a few things above)
       !
 
+      call mpas_pool_get_array(statePool, 'u', uNew, 2)
+      call mpas_pool_get_array(statePool, 'h', hNew, 2)
+      call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
       uNew(:,:) = uProvis(:,:)
       hNew(:,:) = hProvis(:,:)
         do iCell = 1, nCells 
