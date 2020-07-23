@@ -382,8 +382,6 @@ module sw_time_integration
       type (mpas_pool_type), pointer :: statePool
       type (mpas_pool_type), pointer :: meshPool
       type (mpas_pool_type), pointer :: tendPool
-      type (mpas_pool_type), pointer :: provisStatePool
-      type (mpas_pool_type), pointer :: prevProvisPool, nextProvisPool
 
       integer :: ssprk_step
 
@@ -391,14 +389,13 @@ module sw_time_integration
 
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels
 
-      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uProvis, uTend
-      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hProvis, hTend
+      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend
+      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend
       real (kind=RKIND), dimension(:,:), pointer :: uReconstructX, uReconstructY, uReconstructZ, uReconstructZonal, uReconstructMeridional
-      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersProvis, tracersTend
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersTend
 
       integer, pointer :: config_test_case
       real (kind=RKIND), pointer :: config_h_mom_eddy_visc4
-
 
       call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
       call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
@@ -414,19 +411,18 @@ module sw_time_integration
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'state', statePool)
 
-        allocate(provisStatePool)
-        call mpas_pool_create_pool(provisStatePool)
-        call mpas_pool_clone_pool(statePool, provisStatePool, 1)
-
-        call mpas_pool_add_subpool(block % structs, 'provis_state', provisStatePool)
-
         call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
         call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
         call mpas_pool_get_array(statePool, 'h', hOld, 1)
+        call mpas_pool_get_array(statePool, 'h', hNew, 2)
+        call mpas_pool_get_array(statePool, 'u', uOld, 1)
+        call mpas_pool_get_array(statePool, 'u', uNew, 2)
         call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
         call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
+        uNew(:,:) = uOld(:,:)
+        hNew(:,:) = hOld(:,:)
         do iCell = 1, nCells  ! couple tracers to h
           do k = 1, nVertLevels
             tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell)
@@ -437,39 +433,6 @@ module sw_time_integration
 
         block => block % next
      end do
-
-     ! from here - it is not clear to me
-     block => domain % blocklist
-     do while(associated(block))
-        if (associated(block % prev)) then
-           call mpas_pool_get_subpool(block % prev % structs, 'provis_state', prevProvisPool)
-        else
-           nullify(prevProvisPool)
-        end if
-
-        if (associated(block % next)) then
-           call mpas_pool_get_subpool(block % next % structs, 'provis_state', nextProvisPool)
-        else
-           nullify(nextProvisPool)
-        end if
-
-        call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
-
-        if (associated(prevProvisPool) .and. associated(nextProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, prevProvisPool, nextProvisPool)
-        else if (associated(prevProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, prevProvisPool)
-        else if (associated(nextProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, nextPool=nextProvisPool)
-        else
-           call mpas_pool_link_pools(provisStatePool)
-        end if
-
-        call mpas_pool_link_parinfo(block, provisStatePool)
-
-        block => block % next
-     end do
-     ! to here - it is not clear to me
 
      weights_old(1) = 1.
      weights_old(2) = 0.5
@@ -503,11 +466,10 @@ module sw_time_integration
        block => domain % blocklist
        do while (associated(block))
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-          call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
 
-          call sw_compute_tend(tendPool, provisStatePool, meshPool, 1)
-          call sw_compute_scalar_tend(tendPool, provisStatePool, meshPool, 1)
+          call sw_compute_tend(tendPool, statePool, meshPool, 2)
+          call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
           call sw_enforce_boundary_edge(tendPool, meshPool)
           block => block % next
        end do
@@ -525,14 +487,13 @@ module sw_time_integration
           call mpas_pool_get_subpool(block % structs, 'state', statePool)
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-          call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
 
           call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
-          call mpas_pool_get_array(provisStatePool, 'u', uProvis)
-          call mpas_pool_get_array(provisStatePool, 'h', hProvis)
-          call mpas_pool_get_array(provisStatePool, 'tracers', tracersProvis)
+          call mpas_pool_get_array(statePool, 'u', uNew)
+          call mpas_pool_get_array(statePool, 'h', hNew)
+          call mpas_pool_get_array(statePool, 'tracers', tracersNew)
 
           call mpas_pool_get_array(statePool, 'u', uOld, 1)
           call mpas_pool_get_array(statePool, 'h', hOld, 1)
@@ -542,19 +503,18 @@ module sw_time_integration
           call mpas_pool_get_array(tendPool, 'h', hTend)
           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-          uProvis(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_tend(ssprk_step) * ( uProvis(:,:) + dt * uTend(:,:) )
-          hProvis(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_tend(ssprk_step) * ( hProvis(:,:) + dt * hTend(:,:) )
+          if (config_test_case /= 1) then ! For case 1, wind should be fixed
+          uNew(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_tend(ssprk_step) * ( uNew(:,:) + dt * uTend(:,:) )
+          end if
+          hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_tend(ssprk_step) * ( hNew(:,:) + dt * hTend(:,:) )
           do iCell = 1, nCells
-             do k = 1, nVertLevels  ! QUESTION - why are there two ways to advance the tracers in sw_rk4?
-                tracersProvis(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) + weights_tend(ssprk_step) &
-                                                                      *  ( tracersProvis(:,k,iCell) + dt * tracersTend(:,k,iCell) )
+             do k = 1, nVertLevels 
+                tracersNew(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) + weights_tend(ssprk_step) &
+                                                                      *  ( tracersNew(:,k,iCell) + dt * tracersTend(:,k,iCell) )
              end do
           end do
-          if (config_test_case == 1) then    ! For case 1, wind field should be fixed
-             uProvis(:,:) = uOld(:,:)
-          end if
           ! QUESTION - do I have to keep this call?
-          call sw_compute_solve_diagnostics(dt, provisStatePool, meshPool)
+          call sw_compute_solve_diagnostics(dt, statePool, meshPool)
           block => block % next
        end do
 
@@ -563,23 +523,6 @@ module sw_time_integration
       ! END SSPRK loop 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
 
-
-      !
-      ! Update soln (I think I can avoid this just using new directly instead of
-      ! provis, but first I have to understand a few things above)
-      !
-
-      call mpas_pool_get_array(statePool, 'u', uNew, 2)
-      call mpas_pool_get_array(statePool, 'h', hNew, 2)
-      call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
-
-      uNew(:,:) = uProvis(:,:)
-      hNew(:,:) = hProvis(:,:)
-        do iCell = 1, nCells 
-          do k = 1, nVertLevels
-            tracersNew(:,k,iCell) = tracersProvis(:,k,iCell)
-           end do
-        end do
 
       !
       !  A little clean up at the end: decouple new scalar fields and compute diagnostics for new state
@@ -609,26 +552,12 @@ module sw_time_integration
             end do
          end do
 
-         if (config_test_case == 1) then    ! For case 1, wind field should be fixed
-            uNew(:,:) = uOld(:,:)
-         end if
-
          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 
          call mpas_reconstruct(meshPool, uNew,          &
                           uReconstructX, uReconstructY, uReconstructZ, &
                           uReconstructZonal, uReconstructMeridional )
 
-         block => block % next
-      end do
-
-      block => domain % blocklist
-      do while(associated(block))
-         call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
-
-         call mpas_pool_destroy_pool(provisStatePool)
-
-         call mpas_pool_remove_subpool(block % structs, 'provis_state')
          block => block % next
       end do
 
