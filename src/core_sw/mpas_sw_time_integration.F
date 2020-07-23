@@ -491,9 +491,9 @@ module sw_time_integration
           call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
-          call mpas_pool_get_array(statePool, 'u', uNew)
-          call mpas_pool_get_array(statePool, 'h', hNew)
-          call mpas_pool_get_array(statePool, 'tracers', tracersNew)
+          call mpas_pool_get_array(statePool, 'u', uNew, 2)
+          call mpas_pool_get_array(statePool, 'h', hNew, 2)
+          call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
           call mpas_pool_get_array(statePool, 'u', uOld, 1)
           call mpas_pool_get_array(statePool, 'h', hOld, 1)
@@ -535,8 +535,6 @@ module sw_time_integration
          call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
          call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
-         call mpas_pool_get_array(statePool, 'u', uOld, 1)
-         call mpas_pool_get_array(statePool, 'u', uNew, 2)
          call mpas_pool_get_array(statePool, 'h', hNew, 2)
          call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
