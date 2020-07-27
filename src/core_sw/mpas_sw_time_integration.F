@@ -385,7 +385,7 @@ module sw_time_integration
 
       integer :: ssprk_step
 
-      real (kind=RKIND), dimension(ssprk_order) :: weights_old, weights_tend
+      real (kind=RKIND), dimension(ssprk_order) :: weights_old, weights_new, weights_tend
 
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels
 
@@ -441,11 +441,20 @@ module sw_time_integration
      weights_old(3) = 1./3.
      end if 
 
-     weights_tend(1) = 0.
-     weights_tend(2) = 0.5
+
+     weights_new(1) = 0.
+     weights_new(2) = 0.5
+     if (ssprk_order == 3) then
+     weights_new(2) = 0.25
+     weights_new(3) = 2./3.
+     end if 
+
+
+     weights_tend(1) = dt * 1.
+     weights_tend(2) = dt * 0.5
      if (ssprk_order == 3) then 
-     weights_tend(2) = 0.25
-     weights_tend(3) = 2./3.
+     weights_tend(2) = dt * 0.25
+     weights_tend(3) = dt * 2./3.
      end if
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
@@ -504,13 +513,13 @@ module sw_time_integration
           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
           if (config_test_case /= 1) then ! For case 1, wind should be fixed
-          uNew(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_tend(ssprk_step) * ( uNew(:,:) + dt * uTend(:,:) )
+          uNew(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_new(ssprk_step) * uNew(:,:) + weights_tend(ssprk_step) * uTend(:,:) 
           end if
-          hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_tend(ssprk_step) * ( hNew(:,:) + dt * hTend(:,:) )
+          hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
           do iCell = 1, nCells
              do k = 1, nVertLevels 
-                tracersNew(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) + weights_tend(ssprk_step) &
-                                                                      *  ( tracersNew(:,k,iCell) + dt * tracersTend(:,k,iCell) )
+                tracersNew(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) + weights_new(ssprk_step) &
+                                                                      * tracersNew(:,k,iCell) + weights_tend(ssprk_step) * tracersTend(:,k,iCell)
              end do
           end do
           ! QUESTION - do I have to keep this call?
