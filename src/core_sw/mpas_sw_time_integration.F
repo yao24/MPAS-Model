@@ -518,7 +518,7 @@ module sw_time_integration
           hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
           do iCell = 1, nCells
              do k = 1, nVertLevels 
-                tracersNew(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) + weights_new(ssprk_step) &
+                tracersNew(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) * hOld(k,iCell)  + weights_new(ssprk_step) &
                                                                       * tracersNew(:,k,iCell) + weights_tend(ssprk_step) * tracersTend(:,k,iCell)
              end do
           end do
