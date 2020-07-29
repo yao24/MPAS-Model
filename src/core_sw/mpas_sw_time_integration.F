@@ -49,9 +49,11 @@ module sw_time_integration
          call sw_ssprk(domain, dt, 2)
       else if (trim(config_time_integration) == 'SSPRK3') then
          call sw_ssprk(domain, dt, 3)
+      else if (trim(config_time_integration) == 'FWDEULR') then
+         call sw_ssprk(domain, dt, 1)
       else
          call mpas_log_write('Unknown time integration option '//trim(config_time_integration), MPAS_LOG_ERR)
-         call mpas_log_write('Currently, only ''RK4'', ''SSPRK2'', and ''SSPRK3'' are supported.', MPAS_LOG_CRIT)
+         call mpas_log_write('Currently, only ''RK4'', ''FWDEULR'', ''SSPRK2'', and ''SSPRK3'' are supported.', MPAS_LOG_CRIT)
       end if
 
       block => domain % blocklist
@@ -435,24 +437,27 @@ module sw_time_integration
      end do
 
      weights_old(1) = 1.
-     weights_old(2) = 0.5
-     if (ssprk_order == 3) then
-     weights_old(2) = 0.75
-     weights_old(3) = 1./3.
+     if (ssprk_order == 2) then 
+        weights_old(2) = 0.5
+     else if (ssprk_order == 3) then
+        weights_old(2) = 0.75
+        weights_old(3) = 1./3.
      end if 
 
 
      weights_new(1) = 0.
-     weights_new(2) = 0.5
-     if (ssprk_order == 3) then
-     weights_new(2) = 0.25
-     weights_new(3) = 2./3.
+     if (ssprk_order == 2) then
+        weights_new(2) = 0.5
+     else if (ssprk_order == 3) then
+        weights_new(2) = 0.25
+        weights_new(3) = 2./3.
      end if 
 
 
      weights_tend(1) = dt * 1.
-     weights_tend(2) = dt * 0.5
-     if (ssprk_order == 3) then 
+     if (ssprk_order == 2) then 
+        weights_tend(2) = dt * 0.5
+     else if (ssprk_order == 3) then 
      weights_tend(2) = dt * 0.25
      weights_tend(3) = dt * 2./3.
      end if
