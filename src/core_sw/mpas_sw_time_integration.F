@@ -527,8 +527,7 @@ module sw_time_integration
                                                                       * tracersNew(:,k,iCell) + weights_tend(ssprk_step) * tracersTend(:,k,iCell)
              end do
           end do
-          ! QUESTION - do I have to keep this call?
-          call sw_compute_solve_diagnostics(dt, statePool, meshPool)
+          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
           block => block % next
        end do
 
