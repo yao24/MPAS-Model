@@ -50,8 +50,6 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call mpas_init_LTSRegions(meshPool)
-
             call sw_test_case_1(meshPool, statePool)
 
             call mpas_pool_initialize_time_levels(statePool)
@@ -68,8 +66,6 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call mpas_init_LTSRegions(meshPool)
-            
             call sw_test_case_2(meshPool, statePool)
 
             call mpas_pool_initialize_time_levels(statePool)
@@ -85,8 +81,6 @@ module sw_test_cases
          do while (associated(block_ptr))
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
-
-            call mpas_init_LTSRegions(meshPool)
 
             call sw_test_case_5(meshPool, statePool)
 
@@ -104,8 +98,6 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call mpas_init_LTSRegions(meshPool)
-            
             call sw_test_case_6(meshPool, statePool)
 
             call mpas_pool_initialize_time_levels(statePool)
@@ -116,6 +108,19 @@ module sw_test_cases
       else
          call mpas_log_write('Only test case 1, 2, 5, and 6 are currently supported.')
          stop
+      end if
+
+      if (config_use_local_time_stepping) then
+         call mpas_log_write('Setting up local time step regions and halos')
+
+         block_ptr => domain % blocklist
+         do while (associated(block_ptr))
+            call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
+
+            call mpas_init_LTSRegions(meshPool)
+
+            block_ptr => block_ptr % next
+         end do
       end if
 
    end subroutine setup_sw_test_case
