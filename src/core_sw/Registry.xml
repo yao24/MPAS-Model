@@ -13,6 +13,8 @@
 		<dim name="vertexDegree"/>
 		<dim name="nVertLevels" definition="1"/>
 		<dim name="nTracers" definition="3"/>
+		<dim name="nLTSRegions" definition="2"/>
+
 	</dims>
 	<nml_record name="sw_model" in_defaults="true">
 		<nml_option name="config_test_case"                  type="integer"       default_value="5"/>
@@ -240,6 +242,7 @@
 			<var name="boundaryVertex"/>
 			<var name="boundaryCell"/>
 			<var name="u_src"/>
+                        <var name="LTSRegion"/>
 		</stream>
 	</streams>
 	<var_struct name="state" time_levs="2">
@@ -323,6 +326,8 @@
 		<var name="boundaryVertex"                    type="integer"  dimensions="nVertLevels nVertices"/>
 		<var name="boundaryCell"                      type="integer"  dimensions="nVertLevels nCells"/>
 		<var name="u_src"                             type="real"     dimensions="nVertLevels nEdges"/>
+		<var name="LTSRegion"                        type="integer"  dimensions="nCells"/>
+
 	</var_struct>
 	<var_struct name="tend" time_levs="1">
 		<var name="tend_u"                            type="real"     dimensions="nVertLevels nEdges Time"           name_in_code="u"/>
