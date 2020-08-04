@@ -52,6 +52,9 @@
 	<nml_record name="restart" in_defaults="true">
 		<nml_option name="config_do_restart"                 type="logical"       default_value="false"/>
 	</nml_record>
+	<nml_record name="local_time_stepping" in_defaults="true">
+		<nml_option name="config_use_local_time_stepping"                 type="logical"       default_value="false"/>
+	</nml_record>
 	<streams>
 		<stream name="input" 
 				type="input"
