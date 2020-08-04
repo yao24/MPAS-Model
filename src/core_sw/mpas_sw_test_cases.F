@@ -50,7 +50,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call mpas_set_LTSRegions(meshPool)
+            call mpas_init_LTSRegions(meshPool)
 
             call sw_test_case_1(meshPool, statePool)
 
@@ -68,7 +68,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call mpas_set_LTSRegions(meshPool)
+            call mpas_init_LTSRegions(meshPool)
             
             call sw_test_case_2(meshPool, statePool)
 
@@ -86,7 +86,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call mpas_set_LTSRegions(meshPool)
+            call mpas_init_LTSRegions(meshPool)
 
             call sw_test_case_5(meshPool, statePool)
 
@@ -104,7 +104,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call mpas_set_LTSRegions(meshPool)
+            call mpas_init_LTSRegions(meshPool)
             
             call sw_test_case_6(meshPool, statePool)
 
@@ -655,7 +655,7 @@ module sw_test_cases
 
    end subroutine sw_test_case_6
 
-   subroutine mpas_set_LTSRegions(meshPool)
+   subroutine mpas_init_LTSRegions(meshPool)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Set local time stepping (LTS) regions on the mesh
    !
@@ -721,7 +721,7 @@ module sw_test_cases
       end if
    end do
 
-   end subroutine mpas_set_LTSRegions
+   end subroutine mpas_init_LTSRegions
 
 
    real function sphere_distance(lat1, lon1, lat2, lon2, radius)
