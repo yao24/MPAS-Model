@@ -34,7 +34,7 @@ module sw_test_cases
 
       type (mpas_pool_type), pointer :: statePool, meshPool
 
-      integer, pointer :: config_test_case
+      integer, pointer :: config_test_case      
 
       call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
 
@@ -49,6 +49,8 @@ module sw_test_cases
          do while (associated(block_ptr))
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
+
+            call mpas_set_LTSRegions(meshPool)
 
             call sw_test_case_1(meshPool, statePool)
 
@@ -66,6 +68,8 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
+            call mpas_set_LTSRegions(meshPool)
+            
             call sw_test_case_2(meshPool, statePool)
 
             call mpas_pool_initialize_time_levels(statePool)
@@ -81,6 +85,8 @@ module sw_test_cases
          do while (associated(block_ptr))
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
+
+            call mpas_set_LTSRegions(meshPool)
 
             call sw_test_case_5(meshPool, statePool)
 
@@ -98,6 +104,8 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
+            call mpas_set_LTSRegions(meshPool)
+            
             call sw_test_case_6(meshPool, statePool)
 
             call mpas_pool_initialize_time_levels(statePool)
@@ -647,6 +655,74 @@ module sw_test_cases
 
    end subroutine sw_test_case_6
 
+   subroutine mpas_set_LTSRegions(meshPool)
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   ! Set local time stepping (LTS) regions on the mesh
+   !
+   ! Output: LTSRegions is written
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   implicit none   
+
+   type (mpas_pool_type), intent(inout) :: meshPool
+
+   integer :: iCell, iEdge, cell1, cell2  
+   integer, pointer :: nCells, nEdges
+   real (kind=RKIND), dimension(:), pointer :: latCell
+   integer, dimension(:), pointer :: LTSRegion
+   integer, dimension(:,:), pointer :: cellsOnEdge
+
+   call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+   call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
+
+   call mpas_pool_get_array(meshPool, 'latCell', latCell)
+   call mpas_pool_get_array(meshPool, 'LTSRegion', LTSRegion)
+   call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
+
+   do iCell = 1, nCells
+      if (latCell(iCell) < 0.) then
+         LTSRegion(iCell) = 1 ! fine region
+      else 
+         LTSRegion(iCell) = 2 ! coarse region
+      end if
+   end do
+
+   do iEdge = 1, nEdges
+      cell1 = cellsOnEdge(1,iEdge)
+      cell2 = cellsOnEdge(2,iEdge)
+      if (LTSRegion(cell1) == 1 .and.  LTSRegion(cell2) == 2) then
+         LTSRegion(cell1) = 3 ! interface layer 1
+         LTSRegion(cell2) = 4 ! interface layer 2
+      else if (LTSRegion(cell1) == 2 .and.  LTSRegion(cell2) == 1) then
+            LTSRegion(cell1) = 4
+            LTSRegion(cell2) = 3
+      else if (LTSRegion(cell1) == 1 .and.  LTSRegion(cell2) == 4) then
+            LTSRegion(cell1) = 3
+      else if (LTSRegion(cell1) == 4 .and.  LTSRegion(cell2) == 1) then
+            LTSRegion(cell2) = 3
+      else if (LTSRegion(cell1) == 2 .and.  LTSRegion(cell2) == 3) then
+            LTSRegion(cell1) = 4
+      else if (LTSRegion(cell1) == 3 .and.  LTSRegion(cell2) == 2) then
+            LTSRegion(cell2) = 4
+      end if
+   end do
+
+   ! the flags set there are needed for the third order LTS scheme
+   do iEdge = 1, nEdges
+      cell1 = cellsOnEdge(1,iEdge)
+      cell2 = cellsOnEdge(2,iEdge)
+      if (LTSRegion(cell1) == 1 .and.  LTSRegion(cell2) == 3) then
+         LTSRegion(cell1) = 5 ! fine cells that share an edge with interface layer 1
+      else if (LTSRegion(cell1) == 3 .and.  LTSRegion(cell2) == 1) then
+         LTSRegion(cell2) = 5
+      else if (LTSRegion(cell1) == 2 .and.  LTSRegion(cell2) == 4) then
+         LTSRegion(cell1) = 6 ! coarse cells that share and edge with interface layer 2
+      else if (LTSRegion(cell1) == 4 .and.  LTSRegion(cell2) == 2) then
+         LTSRegion(cell2) = 6
+      end if
+   end do
+
+   end subroutine mpas_set_LTSRegions
+
 
    real function sphere_distance(lat1, lon1, lat2, lon2, radius)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -721,4 +797,4 @@ module sw_test_cases
 
    end function cc
 
-end module sw_test_cases
+end module sw_test_cases 
