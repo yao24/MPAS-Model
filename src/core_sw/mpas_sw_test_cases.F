@@ -673,7 +673,8 @@ module sw_test_cases
 
    type (mpas_pool_type), intent(inout) :: meshPool, LTSPool
 
-   integer :: nLTSRegions, nLTSHalos, fineFlag, coarseFlag  
+   integer :: fineFlag, coarseFlag  
+   integer, pointer :: nLTSRegions, nLTSHalos
    integer :: i, iCell, iEdge, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges
    real (kind=RKIND), dimension(:), pointer :: latCell
