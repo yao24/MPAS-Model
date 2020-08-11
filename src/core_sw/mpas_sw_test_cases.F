@@ -120,7 +120,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'LTS', LTSPool)
 
-            call mpas_init_LTSRegions(meshPool, LTSPool)
+            call mpas_init_LTS(meshPool, LTSPool)
 
             block_ptr => block_ptr % next
          end do
@@ -663,7 +663,7 @@ module sw_test_cases
 
    end subroutine sw_test_case_6
 
-   subroutine mpas_init_LTSRegions(meshPool, LTSPool)
+   subroutine mpas_init_LTS(meshPool, LTSPool)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Set local time stepping (LTS) regions and lists
    !
@@ -805,7 +805,7 @@ module sw_test_cases
 
    !TODO take care of the flags for the edges
 
-   end subroutine mpas_init_LTSRegions
+   end subroutine mpas_init_LTS
 
    real function sphere_distance(lat1, lon1, lat2, lon2, radius)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
