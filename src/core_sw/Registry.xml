@@ -338,11 +338,11 @@
 		<var name="LTSRegion"                         type="integer"  dimensions="nCells"/>
                 <var name="cellsInLTSRegion"                  type="integer"  dimensions="nLTSRegions nCells"/>
                 <var name="nCellsInLTSRegion"                 type="integer"  dimensions="nLTSRegions"/>
-                <var name="cellsInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalo nCells"/>
-                <var name="nCellsInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalo"/>
+                <var name="cellsInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalos nCells"/>
+                <var name="nCellsInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalos"/>
                 <var name="edgesInLTSRegion"                  type="integer"  dimensions="nLTSRegions nEdges"/>
                 <var name="nEdgesInLTSRegion"                 type="integer"  dimensions="nLTSRegions"/>
-                <var name="edgesInLTSHalo"                    type="integer"  dimensions="nLTSHalo nEdges"/>
-                <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="nLTSHalo"/>
+                <var name="edgesInLTSHalo"                    type="integer"  dimensions="nLTSHalos nEdges"/>
+                <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="nLTSHalos"/>
         </var_struct>
 </registry>
