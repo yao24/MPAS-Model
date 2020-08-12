@@ -713,7 +713,7 @@ module sw_test_cases
    ! the following code is assuming that for each processor we have only two regions, a coarse and a fine
 
    fineIsFound = .FALSE.
-   nCellsInLTSHalo(:,:) = 1
+   nCellsInLTSHalo(:,:) = 0
    LTSRegionLocal(:) = LTSRegion(:) 
 
    !fineFlag = minval(LTSRegionLocal)
@@ -738,36 +738,36 @@ module sw_test_cases
       if (LTSRegionLocal(cell1) == fineFlag .and. LTSRegionLocal(cell2) == coarseFlag) then
          LTSRegionLocal(cell1) = fineFlag + 2
          LTSRegionLocal(cell2) = coarseFlag + 2
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
          nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
+         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
       else if (LTSRegionLocal(cell2) == fineFlag .and. LTSRegionLocal(cell1) == coarseFlag) then
          LTSRegionLocal(cell2) = fineFlag + 2
          LTSRegionLocal(cell1) = coarseFlag + 2
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
          nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
+         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
       ! the next if statements are there because we are changing two elements at the
       ! time above so we have to take into consideration the fact that an edge
       ! might be shared by two elements, one of which had its flag already  changed
       else if (LTSRegionLocal(cell1) == fineFlag + 2 .and. LTSRegionLocal(cell2) == coarseFlag) then
          LTSRegionLocal(cell2) = coarseFlag + 2
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
          nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
+         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
       else if (LTSRegionLocal(cell2) == fineFlag + 2 .and. LTSRegionLocal(cell1) == coarseFlag) then
          LTSRegionLocal(cell1) = coarseFlag + 2
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
          nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1 
+         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
      else if (LTSRegionLocal(cell1) == fineFlag .and. LTSRegionLocal(cell2) == coarseFlag + 2) then
          LTSRegionLocal(cell1) = fineFlag + 2
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
      else if (LTSRegionLocal(cell2) == fineFlag .and. LTSRegionLocal(cell1) == coarseFlag + 2) then
          LTSRegionLocal(cell2) = fineFlag + 2
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
      end if
   end do   
 
@@ -786,12 +786,12 @@ module sw_test_cases
                cell2 = cellsOnEdge(2,iEdge)
                if (LTSRegionLocal(cell1) - fineFlag + 1 == iRegion) then
                   LTSRegionLocal(cell1) = LTSRegionLocal(cell1) +  2 * iHaloP1
-                  cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell1
                   nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1
+                  cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell1
                else if (LTSRegionLocal(cell2) - fineFlag + 1 == iRegion) then
                   LTSRegionLocal(cell2) = LTSRegionLocal(cell2) +  2 * (iHaloP1)
-                  cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell2
                   nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1 
+                  cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell2
                end if
             end do              
          end do   
