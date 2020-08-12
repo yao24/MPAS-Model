@@ -673,15 +673,13 @@ module sw_test_cases
 
    type (mpas_pool_type), intent(inout) :: meshPool, LTSPool
 
-   integer :: fineFlag, coarseFlag  
    integer, pointer :: nLTSRegions, nLTSHalos
    integer :: i, iCell, iEdge, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges
    real (kind=RKIND), dimension(:), pointer :: latCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, nCellsInLTSRegion
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, nCellsInLTSRegion, minMaxLTSRegion
    integer, dimension(:,:), pointer :: cellsOnEdge, edgesOnCell, nCellsInLTSHalo, cellsInLTSRegion
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo
-   logical :: fineIsFound
 
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
    call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
@@ -695,6 +693,7 @@ module sw_test_cases
    call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
    call mpas_pool_get_array(LTSPool, 'LTSRegion', LTSRegion)
    call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
+   call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSRegion', cellsInLTSRegion)
@@ -712,7 +711,6 @@ module sw_test_cases
 
    ! the following code is assuming that for each processor we have only two regions, a coarse and a fine
 
-   fineIsFound = .FALSE.
    nCellsInLTSHalo(:,:) = 0
    LTSRegionLocal(:) = LTSRegion(:) 
 
@@ -723,95 +721,105 @@ module sw_test_cases
    do iEdge = 1, nEdges
       cell1 = cellsOnEdge(1,iEdge)
       cell2 = cellsOnEdge(2,iEdge)
-     
       ! here we find the flag of the fine region (which is initially unknown)
-      if ((LTSRegionLocal(cell1) <  LTSRegionLocal(cell2)) .and. (fineIsFound .eqv. .FALSE.)) then
-         fineFlag = LTSRegionLocal(cell1)
-         coarseFlag = fineFlag + 1
-         fineIsFound = .TRUE.
-      else if ((LTSRegionLocal(cell2) <  LTSRegionLocal(cell1)) .and. (fineIsFound .eqv. .FALSE.)) then
-         fineFlag = LTSRegionLocal(cell2)
-         coarseFlag = fineFlag + 1
-         fineIsFound = .TRUE.
+      if (LTSRegionLocal(cell1) <  LTSRegionLocal(cell2)) then
+         minMaxLTSRegion(1) = LTSRegionLocal(cell1) !this is the fine flag
+         minMaxLTSRegion(2) = LTSRegionLocal(cell2) !this is the coarse flag
+         exit
+      else if (LTSRegionLocal(cell2) <  LTSRegionLocal(cell1)) then
+         minMaxLTSRegion(1) = LTSRegionLocal(cell2)
+         minMaxLTSRegion(2) = LTSRegionLocal(cell1)
+         exit
       end if 
-      ! here we write the first layers of the halo (interface 1 and interface 2)
-      if (LTSRegionLocal(cell1) == fineFlag .and. LTSRegionLocal(cell2) == coarseFlag) then
-         LTSRegionLocal(cell1) = fineFlag + 2
-         LTSRegionLocal(cell2) = coarseFlag + 2
-         nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
-         nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
-      else if (LTSRegionLocal(cell2) == fineFlag .and. LTSRegionLocal(cell1) == coarseFlag) then
-         LTSRegionLocal(cell2) = fineFlag + 2
-         LTSRegionLocal(cell1) = coarseFlag + 2
-         nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
-         nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
-      ! the next if statements are there because we are changing two elements at the
-      ! time above so we have to take into consideration the fact that an edge
-      ! might be shared by two elements, one of which had its flag already  changed
-      else if (LTSRegionLocal(cell1) == fineFlag + 2 .and. LTSRegionLocal(cell2) == coarseFlag) then
-         LTSRegionLocal(cell2) = coarseFlag + 2
-         nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
-      else if (LTSRegionLocal(cell2) == fineFlag + 2 .and. LTSRegionLocal(cell1) == coarseFlag) then
-         LTSRegionLocal(cell1) = coarseFlag + 2
-         nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1 
-         cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
-     else if (LTSRegionLocal(cell1) == fineFlag .and. LTSRegionLocal(cell2) == coarseFlag + 2) then
-         LTSRegionLocal(cell1) = fineFlag + 2
-         nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
-     else if (LTSRegionLocal(cell2) == fineFlag .and. LTSRegionLocal(cell1) == coarseFlag + 2) then
-         LTSRegionLocal(cell2) = fineFlag + 2
-         nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-         cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
-     end if
-  end do   
+   end do
 
+   if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 1) then  
 
-   ! this is a loop to change the flags of the extra halo regions that might be
-   ! needed for higher order LTS schemes
+      do iEdge = 1, nEdges
+         cell1 = cellsOnEdge(1,iEdge)
+         cell2 = cellsOnEdge(2,iEdge)
+         ! here we write the first layers of the halo (interface 1 and interface 2)
+         if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
+            LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
+            LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
+            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
+            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
+            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
+         else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2)) then
+            LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
+            LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
+            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
+            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
+            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
+         ! the next if statements are there because we are changing two elements at the
+         ! time above so we have to take into consideration the fact that an edge
+         ! might be shared by two elements, one of which had its flag already  changed
+         else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
+            LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
+            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
+            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
+         else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2)) then
+            LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
+            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1 
+            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
+         else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2) + 2) then
+            LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
+            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
+         else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2) + 2) then
+            LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
+            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
+         end if
+      end do   
 
-   do iRegion = 1,2
-      do iHalo = 1, nLTSHalos-1
-         iHaloP1 = iHalo + 1
-         do iCellHalo = 1, nCellsInLTSHalo(iRegion,iHalo)
-            iCell = cellsInLTSHalo(iRegion,iHalo,iCellHalo)
-            do i = 1, nEdgesOnCell(iCell)
-               iEdge = edgesOnCell(i, iCell)  
-               cell1 = cellsOnEdge(1,iEdge)
-               cell2 = cellsOnEdge(2,iEdge)
-               if (LTSRegionLocal(cell1) - fineFlag + 1 == iRegion) then
-                  LTSRegionLocal(cell1) = LTSRegionLocal(cell1) +  2 * iHaloP1
-                  nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1
-                  cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell1
-               else if (LTSRegionLocal(cell2) - fineFlag + 1 == iRegion) then
-                  LTSRegionLocal(cell2) = LTSRegionLocal(cell2) +  2 * (iHaloP1)
-                  nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1 
-                  cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell2
-               end if
-            end do              
-         end do   
+      ! this is a loop to change the flags of the extra halo regions that might be
+      ! needed for higher order LTS schemes
+
+      do iRegion = 1,2
+         do iHalo = 1, nLTSHalos-1
+            iHaloP1 = iHalo + 1
+            do iCellHalo = 1, nCellsInLTSHalo(iRegion,iHalo)
+               iCell = cellsInLTSHalo(iRegion,iHalo,iCellHalo)
+               do i = 1, nEdgesOnCell(iCell)
+                  iEdge = edgesOnCell(i, iCell)  
+                  cell1 = cellsOnEdge(1,iEdge)
+                  cell2 = cellsOnEdge(2,iEdge)
+                  if (LTSRegionLocal(cell1) - minMaxLTSRegion(1) + 1 == iRegion) then
+                     LTSRegionLocal(cell1) = LTSRegionLocal(cell1) +  2 * iHaloP1
+                     nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1
+                     cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell1
+                  else if (LTSRegionLocal(cell2) - minMaxLTSRegion(1) + 1 == iRegion) then
+                     LTSRegionLocal(cell2) = LTSRegionLocal(cell2) +  2 * (iHaloP1)
+                     nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1 
+                     cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell2
+                  end if
+               end do              
+            end do   
+         end do
       end do
-   end do
-
+ 
+      ! this is a loop to build the lists of elements in the fine and coarse regions
+      nCellsInLTSRegion(:) = 1
+      do iCell = 1, nCells
+         if(LTSRegionLocal(iCell) == minMaxLTSRegion(1)) then
+           nCellsInLTSRegion(1) = nCellsInLTSRegion(1) + 1
+           cellsInLTSRegion(1,nCellsInLTSRegion(1)) = iCell
+         else if (LTSRegionLocal(iCell) == minMaxLTSRegion(2)) then
+            nCellsInLTSRegion(2) = nCellsInLTSRegion(2) + 1
+            cellsInLTSRegion(2,nCellsInLTSRegion(2)) = iCell
+         end if 
+      end do
    
-   ! this is a loop to build the lists of elements in the fine and coarse regions
-   nCellsInLTSRegion(:) = 1
-   do iCell = 1, nCells
-      if(LTSRegionLocal(iCell) == fineFlag) then
-         cellsInLTSRegion(1,nCellsInLTSRegion(1)) = iCell
-         nCellsInLTSRegion(1) = nCellsInLTSRegion(1) + 1
-      else if (LTSRegionLocal(iCell) == coarseFlag) then
-         cellsInLTSRegion(2,nCellsInLTSRegion(2)) = iCell
-         nCellsInLTSRegion(2) = nCellsInLTSRegion(2) + 1
-      end if 
-   end do
-
    !TODO take care of the flags for the edges
+    
+   else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
+      call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) cannot be greater than one.')
+      stop
+   end if
+
 
    end subroutine mpas_init_LTS
 
