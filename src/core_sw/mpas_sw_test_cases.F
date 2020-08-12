@@ -678,7 +678,7 @@ module sw_test_cases
    integer :: i, iCell, iEdge, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges
    real (kind=RKIND), dimension(:), pointer :: latCell
-   integer, dimension(:), pointer :: LTSRegion, nEdgesOnCell, nCellsInLTSRegion
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, nCellsInLTSRegion
    integer, dimension(:,:), pointer :: cellsOnEdge, edgesOnCell, nCellsInLTSHalo, cellsInLTSRegion
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo
    logical :: fineIsFound
@@ -694,6 +694,7 @@ module sw_test_cases
    call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
    call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
    call mpas_pool_get_array(LTSPool, 'LTSRegion', LTSRegion)
+   call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSRegion', cellsInLTSRegion)
@@ -712,32 +713,38 @@ module sw_test_cases
    ! the following code is assuming that for each processor we have only two regions, a coarse and a fine
 
    fineIsFound = .FALSE.
-   nCellsInLTSHalo(:,:) = 1 
+   nCellsInLTSHalo(:,:) = 1
+   LTSRegionLocal(:) = LTSRegion(:) 
+
+   !fineFlag = minval(LTSRegionLocal)
+   !print*, 'fineFlaaaaaaaaaaaaaaaaaaaaaaaaag =', fineFlag
+   !coarseFlag = fineFlag + 1
 
    do iEdge = 1, nEdges
       cell1 = cellsOnEdge(1,iEdge)
       cell2 = cellsOnEdge(2,iEdge)
+     
       ! here we find the flag of the fine region (which is initially unknown)
-      if ((LTSRegion(cell1) <  LTSRegion(cell2)) .and. (fineIsFound .eqv. .FALSE.)) then
-         fineFlag = LTSRegion(cell1)
+      if ((LTSRegionLocal(cell1) <  LTSRegionLocal(cell2)) .and. (fineIsFound .eqv. .FALSE.)) then
+         fineFlag = LTSRegionLocal(cell1)
          coarseFlag = fineFlag + 1
          fineIsFound = .TRUE.
-      else if ((LTSRegion(cell2) <  LTSRegion(cell1)) .and. (fineIsFound .eqv. .FALSE.)) then
-         fineFlag = LTSRegion(cell2)
+      else if ((LTSRegionLocal(cell2) <  LTSRegionLocal(cell1)) .and. (fineIsFound .eqv. .FALSE.)) then
+         fineFlag = LTSRegionLocal(cell2)
          coarseFlag = fineFlag + 1
          fineIsFound = .TRUE.
       end if 
       ! here we write the first layers of the halo (interface 1 and interface 2)
-      if (LTSRegion(cell1) == fineFlag .and. LTSRegion(cell2) == coarseFlag) then
-         LTSRegion(cell1) = fineFlag + 2
-         LTSRegion(cell2) = coarseFlag + 2
+      if (LTSRegionLocal(cell1) == fineFlag .and. LTSRegionLocal(cell2) == coarseFlag) then
+         LTSRegionLocal(cell1) = fineFlag + 2
+         LTSRegionLocal(cell2) = coarseFlag + 2
          cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
          cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
          nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-      else if (LTSRegion(cell2) == fineFlag .and. LTSRegion(cell1) == coarseFlag) then
-         LTSRegion(cell2) = fineFlag + 2
-         LTSRegion(cell1) = coarseFlag + 2
+      else if (LTSRegionLocal(cell2) == fineFlag .and. LTSRegionLocal(cell1) == coarseFlag) then
+         LTSRegionLocal(cell2) = fineFlag + 2
+         LTSRegionLocal(cell1) = coarseFlag + 2
          cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
          cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
@@ -745,24 +752,24 @@ module sw_test_cases
       ! the next if statements are there because we are changing two elements at the
       ! time above so we have to take into consideration the fact that an edge
       ! might be shared by two elements, one of which had its flag already  changed
-      else if (LTSRegion(cell1) == fineFlag + 2 .and. LTSRegion(cell2) == coarseFlag) then
-         LTSRegion(cell2) = coarseFlag + 2
+      else if (LTSRegionLocal(cell1) == fineFlag + 2 .and. LTSRegionLocal(cell2) == coarseFlag) then
+         LTSRegionLocal(cell2) = coarseFlag + 2
          cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
          nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-      else if (LTSRegion(cell2) == fineFlag + 2 .and. LTSRegion(cell1) == coarseFlag) then
-         LTSRegion(cell1) = coarseFlag + 2
+      else if (LTSRegionLocal(cell2) == fineFlag + 2 .and. LTSRegionLocal(cell1) == coarseFlag) then
+         LTSRegionLocal(cell1) = coarseFlag + 2
          cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
          nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1 
-     else if (LTSRegion(cell1) == fineFlag .and. LTSRegion(cell2) == coarseFlag + 2) then
-         LTSRegion(cell1) = fineFlag + 2
+     else if (LTSRegionLocal(cell1) == fineFlag .and. LTSRegionLocal(cell2) == coarseFlag + 2) then
+         LTSRegionLocal(cell1) = fineFlag + 2
          cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-     else if (LTSRegion(cell2) == fineFlag .and. LTSRegion(cell1) == coarseFlag + 2) then
-         LTSRegion(cell2) = fineFlag + 2
+     else if (LTSRegionLocal(cell2) == fineFlag .and. LTSRegionLocal(cell1) == coarseFlag + 2) then
+         LTSRegionLocal(cell2) = fineFlag + 2
          cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
          nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-       end if
-   end do   
+     end if
+  end do   
 
 
    ! this is a loop to change the flags of the extra halo regions that might be
@@ -777,12 +784,12 @@ module sw_test_cases
                iEdge = edgesOnCell(i, iCell)  
                cell1 = cellsOnEdge(1,iEdge)
                cell2 = cellsOnEdge(2,iEdge)
-               if (LTSRegion(cell1) - fineFlag + 1 == iRegion) then
-                  LTSRegion(cell1) = LTSRegion(cell1) +  2 * iHaloP1
+               if (LTSRegionLocal(cell1) - fineFlag + 1 == iRegion) then
+                  LTSRegionLocal(cell1) = LTSRegionLocal(cell1) +  2 * iHaloP1
                   cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell1
                   nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1
-               else if (LTSRegion(cell2) - fineFlag + 1 == iRegion) then
-                  LTSRegion(cell2) = LTSRegion(cell2) +  2 * (iHaloP1)
+               else if (LTSRegionLocal(cell2) - fineFlag + 1 == iRegion) then
+                  LTSRegionLocal(cell2) = LTSRegionLocal(cell2) +  2 * (iHaloP1)
                   cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell2
                   nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1 
                end if
@@ -795,10 +802,10 @@ module sw_test_cases
    ! this is a loop to build the lists of elements in the fine and coarse regions
    nCellsInLTSRegion(:) = 1
    do iCell = 1, nCells
-      if(LTSRegion(iCell) == fineFlag) then
+      if(LTSRegionLocal(iCell) == fineFlag) then
          cellsInLTSRegion(1,nCellsInLTSRegion(1)) = iCell
          nCellsInLTSRegion(1) = nCellsInLTSRegion(1) + 1
-      else if (LTSRegion(iCell) == coarseFlag) then
+      else if (LTSRegionLocal(iCell) == coarseFlag) then
          cellsInLTSRegion(2,nCellsInLTSRegion(2)) = iCell
          nCellsInLTSRegion(2) = nCellsInLTSRegion(2) + 1
       end if 
