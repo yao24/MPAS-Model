@@ -345,8 +345,8 @@
                 <var name="nCellsInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalos"/>
                 <var name="edgesInLTSRegion"                  type="integer"  dimensions="nLTSRegions nEdges"/>
                 <var name="nEdgesInLTSRegion"                 type="integer"  dimensions="nLTSRegions"/>
-                <var name="edgesInLTSHalo"                    type="integer"  dimensions="nLTSHalos nEdges"/>
-                <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="nLTSHalos"/>
+                <var name="edgesInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalos nEdges"/>
+                <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalos"/>
                 <var name="minMaxLTSRegion"                   type="integer"  dimensions="TWO"/>
         </var_struct>
 </registry>
