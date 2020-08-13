@@ -673,13 +673,14 @@ module sw_test_cases
 
    type (mpas_pool_type), intent(inout) :: meshPool, LTSPool
 
+   integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
    integer, pointer :: nLTSRegions, nLTSHalos
    integer :: i, iCell, iEdge, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges
    real (kind=RKIND), dimension(:), pointer :: latCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, nCellsInLTSRegion, minMaxLTSRegion
-   integer, dimension(:,:), pointer :: cellsOnEdge, edgesOnCell, nCellsInLTSHalo, cellsInLTSRegion
-   integer, dimension(:,:,:), pointer :: cellsInLTSHalo
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, nCellsInLTSRegion, nEdgesInLTSRegion,  minMaxLTSRegion
+   integer, dimension(:,:), pointer :: cellsOnEdge, edgesOnCell, nCellsInLTSHalo, cellsInLTSRegion, nEdgesInLTSHalo, edgesInLTSRegion
+   integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
 
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
    call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
@@ -698,6 +699,14 @@ module sw_test_cases
    call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSRegion', cellsInLTSRegion)
    call mpas_pool_get_array(LTSPool, 'nCellsInLTSRegion', nCellsInLTSRegion)
+   call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+   call mpas_pool_get_array(LTSPool, 'edgesInLTSRegion', edgesInLTSRegion)
+   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSRegion', nEdgesInLTSRegion)
+
+   allocate(isLTSRegionEdgeAssigned(nCells))
+
+   isLTSRegionEdgeAssigned(:) = 0
 
    ! the loop below initializes the LTS regions for the current processor
    ! 1 = highest resolution possible
@@ -786,7 +795,7 @@ module sw_test_cases
       end do
  
       ! this is a loop to build the lists of elements in the fine and coarse regions
-      nCellsInLTSRegion(:) = 1
+      nCellsInLTSRegion(:) = 0
       do iCell = 1, nCells
          if(LTSRegionLocal(iCell) == minMaxLTSRegion(1)) then
            nCellsInLTSRegion(1) = nCellsInLTSRegion(1) + 1
@@ -796,9 +805,62 @@ module sw_test_cases
             cellsInLTSRegion(2,nCellsInLTSRegion(2)) = iCell
          end if 
       end do
-   
-   !TODO take care of the flags for the edges
-    
+ 
+      ! below we fill in the lists for the edges, according to the LTSRegionLocal that have been assigned to the cells.
+      ! we move from the fine to the coarse (i.e. from the fine to the nearest halo
+      ! layer, until the coarse is reached). Note that edges shared between cells of different LTS regions are
+      ! owned by the cell in the LTS region closest to the fine region, see Figure 3 in "Conservative explicit
+      ! local time-stepping schemes for the shallow water equations" by Hoang et al.
+      nEdgesInLTSRegion(1) = 0
+      do iCell = 1, nCellsInLTSRegion(1)
+         do i = 1, nEdgesOnCell(iCell)
+            if (isLTSRegionEdgeAssigned(i) == 0) then
+               nEdgesInLTSRegion(1) = nEdgesInLTSRegion(1) + 1
+               edgesInLTSRegion(1, nEdgesInLTSRegion(1)) = i
+               isLTSRegionEdgeAssigned(i) = 1
+            end if
+         end do
+      end do
+
+      nEdgesInLTSHalo(1,:) = 0
+      do iHalo = 1, nLTSHalos
+         do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 1)
+          do i = 1, nEdgesOnCell(iCell)
+             if (isLTSRegionEdgeAssigned(i) == 0) then
+                nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1) + 1
+                edgesInLTSHalo(1, nLTSHalos - iHalo + 1,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1)) = i
+                isLTSRegionEdgeAssigned(i) = 1
+             end if
+          end do
+       end do
+      end do
+
+      nEdgesInLTSHalo(2,:) = 0
+      do iHalo = 1, nLTSHalos
+         do iCell = 1, nCellsInLTSHalo(2, iHalo)
+          do i = 1, nEdgesOnCell(iCell)
+             if (isLTSRegionEdgeAssigned(i) == 0) then
+                nEdgesInLTSHalo(2, iHalo) = nEdgesInLTSHalo(2, iHalo) + 1
+                edgesInLTSHalo(2, iHalo,  nEdgesInLTSHalo(2, iHalo)) = i
+                isLTSRegionEdgeAssigned(i) = 1
+             end if
+          end do
+       end do
+      end do
+ 
+      nEdgesInLTSRegion(2) = 0
+      do iCell = 1, nCellsInLTSRegion(2)
+         do i = 1, nEdgesOnCell(iCell)
+            if(isLTSRegionEdgeAssigned(i) == 0) then
+               nEdgesInLTSRegion(2) = nEdgesInLTSRegion(2) + 1
+               edgesInLTSRegion(2, nEdgesInLTSRegion(2)) = i
+               isLTSRegionEdgeAssigned(i) = 1
+            end if
+         end do
+      end do
+
+      deallocate(isLTSRegionEdgeAssigned)  
+      
    else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
       call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) cannot be greater than one.')
       stop
