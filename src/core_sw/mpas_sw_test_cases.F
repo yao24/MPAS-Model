@@ -667,7 +667,7 @@ module sw_test_cases
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Set local time stepping (LTS) regions and lists
    !
-   ! Output: LTS variables are written
+   ! Output: LTS instances are written
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    implicit none   
 
@@ -709,36 +709,20 @@ module sw_test_cases
       end if
    end do
 
-   ! the following code is assuming that for each processor we have only two regions, a coarse and a fine
+   ! the following code is assuming that for each processor we have only two regions, a fine and a coarse
 
    nCellsInLTSHalo(:,:) = 0
    LTSRegionLocal(:) = LTSRegion(:) 
 
-   !fineFlag = minval(LTSRegionLocal)
-   !print*, 'fineFlaaaaaaaaaaaaaaaaaaaaaaaaag =', fineFlag
-   !coarseFlag = fineFlag + 1
-
-   do iEdge = 1, nEdges
-      cell1 = cellsOnEdge(1,iEdge)
-      cell2 = cellsOnEdge(2,iEdge)
-      ! here we find the flag of the fine region (which is initially unknown)
-      if (LTSRegionLocal(cell1) <  LTSRegionLocal(cell2)) then
-         minMaxLTSRegion(1) = LTSRegionLocal(cell1) !this is the fine flag
-         minMaxLTSRegion(2) = LTSRegionLocal(cell2) !this is the coarse flag
-         exit
-      else if (LTSRegionLocal(cell2) <  LTSRegionLocal(cell1)) then
-         minMaxLTSRegion(1) = LTSRegionLocal(cell2)
-         minMaxLTSRegion(2) = LTSRegionLocal(cell1)
-         exit
-      end if 
-   end do
+   minMaxLTSRegion(1) = minval(LTSRegionLocal(1:nCells))  !this is the fine
+   minMaxLTSRegion(2) = maxval(LTSRegionLocal(1:nCells))  !this is the coarse
 
    if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 1) then  
 
       do iEdge = 1, nEdges
          cell1 = cellsOnEdge(1,iEdge)
          cell2 = cellsOnEdge(2,iEdge)
-         ! here we write the first layers of the halo (interface 1 and interface 2)
+         ! here we write the first layers of the halo (interface layer 1 and interface layer 2)
          if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
             LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
             LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
@@ -755,7 +739,7 @@ module sw_test_cases
             cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
          ! the next if statements are there because we are changing two elements at the
          ! time above so we have to take into consideration the fact that an edge
-         ! might be shared by two elements, one of which had its flag already  changed
+         ! might be shared by two elements, one of which had its LTSRegionLocal already  changed
          else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
             LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
             nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
@@ -775,8 +759,8 @@ module sw_test_cases
          end if
       end do   
 
-      ! this is a loop to change the flags of the extra halo regions that might be
-      ! needed for higher order LTS schemes
+      ! this is a loop to change LTSRegionLocal for the extra halo regions that might be
+      ! needed for higher order LTS schemes (for instance the 3rd order LTS (scheme)
 
       do iRegion = 1,2
          do iHalo = 1, nLTSHalos-1
