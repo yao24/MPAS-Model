@@ -330,6 +330,8 @@
 		<var name="boundaryVertex"                    type="integer"  dimensions="nVertLevels nVertices"/>
 		<var name="boundaryCell"                      type="integer"  dimensions="nVertLevels nCells"/>
 		<var name="u_src"                             type="real"     dimensions="nVertLevels nEdges"/>
+		<var name="mpiRankCell"                       type="integer"  dimensions="nCells"/>
+		<var name="mpiRankEdge"                       type="integer"  dimensions="nEdges"/>
 	</var_struct>
 	<var_struct name="tend" time_levs="1">
 		<var name="tend_u"                            type="real"     dimensions="nVertLevels nEdges Time"           name_in_code="u"/>
