@@ -688,7 +688,7 @@ module sw_test_cases
 
    !BEGIN: TO REMOVE (only for debugging)
    integer, dimension(:), pointer :: mpiRankCell, mpiRankEdge, indexToCellID, indexToEdgeID
-   integer :: nCellsCheck, nEdgesCheck
+   integer :: nCellsCheck, nEdgesCheck, procID
    !END
 
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
@@ -826,41 +826,45 @@ module sw_test_cases
       end do
 
       ! BEGIN:  PRINT TO BE REMOVED
-      print*, 'processor ID=', domain % dminfo % my_proc_id       
-      do iRegion=1, 2
-          print*, 'iRegion = ', iRegion, '---------------'
-          do iCell=1, nCellsInLTSRegion(iRegion)
-             print*, indexToCellID(cellsInLTSRegion(iRegion, iCell))
-          end do
-      end do
-      
-      print*, 'processor ID=', domain % dminfo % my_proc_id 
-      do iRegion=1, 2
-        print*, 'iRegion = ', iRegion, '---------------'
-        do iHalo = 1, nLTSHalos
-           print*, 'iHalo = ', iHalo, '--------------'
-           do iCell=1, nCellsInLTSHalo(iRegion,iHalo)
-              print*, indexToCellID(cellsInLTSHalo(iRegion, iHalo, iCell))
-           end do
-        end do
-      end do
-
-      nCellsCheck = 0
-      do iRegion=1,2
-         do iCell=1, nCellsInLTSRegion(iRegion)
-            nCellsCheck = nCellsCheck + 1
-         end do
-      end do
-      do iRegion=1,2
-         do iHalo=1, nLTSHalos
-            do iCell=1, nCellsInLTSHalo(iRegion, iHalo)
-                nCellsCheck = nCellsCheck + 1
+      procID = domain % dminfo % my_proc_id
+      if (procID == 1) then
+         print*, 'processor ID=', procID       
+         do iRegion=1, 2
+            print*, 'iRegion = ', iRegion, '---------------'
+            do iCell=1, nCellsInLTSRegion(iRegion)
+               print*, indexToCellID(cellsInLTSRegion(iRegion, iCell))
             end do
          end do
-      end do
+      
+         do iRegion=1, 2
+            print*, 'iRegion = ', iRegion, '---------------'
+            do iHalo = 1, nLTSHalos
+               print*, 'iHalo = ', iHalo, '--------------'
+               do iCell=1, nCellsInLTSHalo(iRegion,iHalo)
+                  print*, indexToCellID(cellsInLTSHalo(iRegion, iHalo, iCell))
+               end do
+            end do
+         end do
 
-      print*, 'processor ID=', domain % dminfo % my_proc_id 
-      print*, 'nCellsCheck =', nCellsCheck, 'nCells =', nCells
+         nCellsCheck = 0
+         do iRegion=1,2
+            do iCell=1, nCellsInLTSRegion(iRegion)
+               nCellsCheck = nCellsCheck + 1
+            end do
+         end do
+         do iRegion=1,2
+            do iHalo=1, nLTSHalos
+               do iCell=1, nCellsInLTSHalo(iRegion, iHalo)
+                  nCellsCheck = nCellsCheck + 1
+               end do
+            end do
+         end do
+         print*, 'nCellsCheck =', nCellsCheck, 'nCells =', nCells
+         print*, 'cells in proc', procID 
+         do iCell = 1, nCells
+            print*, indexToCellID(iCell)
+         end do
+      end if
       ! END: PRINT TO BE REMOVED
       
       ! below we fill in the lists for the edges, according to the LTSRegionLocal that have been assigned to the cells.
@@ -870,9 +874,8 @@ module sw_test_cases
       ! local time-stepping schemes for the shallow water equations" by Hoang et al.
       nEdgesInLTSRegion(1) = 0
       do iCell = 1, nCellsInLTSRegion(1)
-         do i = 1, nEdgesOnCell(iCell)
-            iEdge = edgesOnCell(i,iCell)
-            print*, 'cell = ', iCell, '  edge=', iEdge
+         do i = 1, nEdgesOnCell(cellsInLTSRegion(1,iCell))
+            iEdge = edgesOnCell(i,cellsInLTSRegion(1,iCell))
             if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                nEdgesInLTSRegion(1) = nEdgesInLTSRegion(1) + 1
                edgesInLTSRegion(1, nEdgesInLTSRegion(1)) = iEdge
@@ -880,20 +883,12 @@ module sw_test_cases
             end if
          end do
       end do
-
-      !BEGIN: PRINT TO BE REMOVED
-      print*, 'PRINTING EDGES'
-      print*, 'processor ID=', domain % dminfo % my_proc_id 
-      do iEdge = 1, nEdgesInLTSRegion(1)
-         print*, 'local=', edgesInLTSRegion(1,iEdge), 'global=',indexToEdgeID(edgesInLTSRegion(1,iEdge))
-      end do
-      !END: PRINT TO BE REMOVED
-
+   
       nEdgesInLTSHalo(1,:) = 0
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 1)
-            do i = 1, nEdgesOnCell(iCell)
-               iEdge = edgesOnCell(i,iCell)
+            do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 1, iCell))
+               iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 1, iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                   nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1) + 1
                   edgesInLTSHalo(1, nLTSHalos - iHalo + 1,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1)) = iEdge
@@ -906,8 +901,8 @@ module sw_test_cases
       nEdgesInLTSHalo(2,:) = 0
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(2, iHalo)
-            do i = 1, nEdgesOnCell(iCell)
-               iEdge = edgesOnCell(i,iCell)
+            do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo,iCell))
+               iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo,iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                   nEdgesInLTSHalo(2, iHalo) = nEdgesInLTSHalo(2, iHalo) + 1
                   edgesInLTSHalo(2, iHalo,  nEdgesInLTSHalo(2, iHalo)) = iEdge
@@ -919,8 +914,8 @@ module sw_test_cases
  
       nEdgesInLTSRegion(2) = 0
       do iCell = 1, nCellsInLTSRegion(2)
-         do i = 1, nEdgesOnCell(iCell)
-            iEdge = edgesOnCell(i,iCell)
+         do i = 1, nEdgesOnCell(cellsInLTSRegion(2,iCell))
+            iEdge = edgesOnCell(i,cellsInLTSRegion(2,iCell))
             if(isLTSRegionEdgeAssigned(iEdge) == 0) then
                nEdgesInLTSRegion(2) = nEdgesInLTSRegion(2) + 1
                edgesInLTSRegion(2, nEdgesInLTSRegion(2)) = iEdge
@@ -928,6 +923,36 @@ module sw_test_cases
             end if
          end do
       end do
+
+      !BEGIN: PRINT TO  BE REMOVED
+      if (procID == 1) then
+         print*, 'PRINTING EDGES for coarse LTS region'
+         print*, 'edges in coarse LTS region=', nEdgesInLTSRegion(2)
+         print*, 'processor ID=', procID
+         do iEdge = 1, nEdgesInLTSRegion(2)
+            print*, 'local=', edgesInLTSRegion(2,iEdge), 'global=',indexToEdgeID(edgesInLTSRegion(2,iEdge))
+         end do
+         nEdgesCheck = 0
+         do iRegion=1,2
+            do iEdge=1, nEdgesInLTSRegion(iRegion)
+               nEdgesCheck = nEdgesCheck + 1
+            end do
+         end do
+         do iRegion=1,2
+            do iHalo=1, nLTSHalos
+               do iEdge=1, nEdgesInLTSHalo(iRegion, iHalo)
+                  nEdgesCheck = nEdgesCheck + 1
+               end do
+            end do
+         end do
+
+         iRegion = 0
+         do iEdge=1,nEdges
+            iRegion = iRegion + isLTSRegionEdgeAssigned(iEdge)
+         end do
+         print*, 'nEdgesCheck =', nEdgesCheck, 'nEdges =', nEdges, 'check assignation=', iRegion, '(should be equal to nEdges)'
+      end if
+      !END: PRINT TO BE REMOVED
 
       deallocate(isLTSRegionEdgeAssigned)  
       
