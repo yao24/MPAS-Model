@@ -120,7 +120,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'LTS', LTSPool)
 
-            call mpas_init_LTS(domain, meshPool, LTSPool)
+            call mpas_init_LTS(meshPool, LTSPool)
 
             block_ptr => block_ptr % next
          end do
@@ -663,7 +663,7 @@ module sw_test_cases
 
    end subroutine sw_test_case_6
 
-   subroutine mpas_init_LTS(domain, meshPool, LTSPool)
+   subroutine mpas_init_LTS(meshPool, LTSPool)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Set local time stepping (LTS) regions and lists
    !
@@ -671,10 +671,6 @@ module sw_test_cases
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    implicit none   
 
-   !BEGIN: TO REMOVE (only for debugging)
-   type (domain_type), intent(inout) :: domain
-   !END
-   
    type (mpas_pool_type), intent(inout) :: meshPool, LTSPool
 
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
@@ -686,16 +682,10 @@ module sw_test_cases
    integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, nCellsInLTSHalo, cellsInLTSRegion, nEdgesInLTSHalo, edgesInLTSRegion
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
 
-   !BEGIN: TO REMOVE (only for debugging)
-   integer, dimension(:), pointer :: mpiRankCell, mpiRankEdge, indexToCellID, indexToEdgeID
-   integer :: nCellsCheck, nEdgesCheck, procID
-   !END
-
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
    call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
    call mpas_pool_get_dimension(LTSPool, 'nLTSRegions', nLTSRegions)
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
-
 
    call mpas_pool_get_array(meshPool, 'latCell', latCell)
    call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
@@ -713,16 +703,6 @@ module sw_test_cases
    call mpas_pool_get_array(LTSPool, 'edgesInLTSRegion', edgesInLTSRegion)
    call mpas_pool_get_array(LTSPool, 'nEdgesInLTSRegion', nEdgesInLTSRegion)
 
-   !BEGIN: TO REMOVE (only for debugging)
-   call mpas_pool_get_array(meshPool, 'mpiRankCell', mpiRankCell)
-   call mpas_pool_get_array(meshPool, 'mpiRankEdge', mpiRankEdge)
-   call mpas_pool_get_array(meshPool, 'indexToCellID', indexToCellID)
-   call mpas_pool_get_array(meshPool, 'indexToEdgeID', indexToEdgeID)
-
-   mpiRankCell(1:nCells) = domain % dminfo % my_proc_id
-   mpiRankEdge(1:nEdges) = domain % dminfo % my_proc_id
-   !END
-   
    allocate(isLTSRegionEdgeAssigned(nEdges))
 
    isLTSRegionEdgeAssigned(:) = 0
@@ -767,7 +747,7 @@ module sw_test_cases
             cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
          ! the next if statements are there because we are changing two elements at the
          ! time above so we have to take into consideration the fact that an edge
-         ! might be shared by two elements, one of which had its LTSRegionLocal already  changed
+         ! might be shared by two elements, one of which had its LTSRegionLocal already changed
          else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
             LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
             nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
@@ -788,8 +768,7 @@ module sw_test_cases
       end do   
 
       ! this is a loop to change LTSRegionLocal for the extra halo regions that might be
-      ! needed for higher order LTS schemes (for instance the 3rd order LTS (scheme)
-
+      ! needed for higher order LTS schemes (for instance the 3rd order LTS (scheme))
       do iRegion = 1,2
          do iHalo = 1, nLTSHalos-1
             iHaloP1 = iHalo + 1
@@ -825,48 +804,6 @@ module sw_test_cases
          end if 
       end do
 
-      ! BEGIN:  PRINT TO BE REMOVED
-      procID = domain % dminfo % my_proc_id
-      if (procID == 1) then
-         print*, 'processor ID=', procID       
-         do iRegion=1, 2
-            print*, 'iRegion = ', iRegion, '---------------'
-            do iCell=1, nCellsInLTSRegion(iRegion)
-               print*, indexToCellID(cellsInLTSRegion(iRegion, iCell))
-            end do
-         end do
-      
-         do iRegion=1, 2
-            print*, 'iRegion = ', iRegion, '---------------'
-            do iHalo = 1, nLTSHalos
-               print*, 'iHalo = ', iHalo, '--------------'
-               do iCell=1, nCellsInLTSHalo(iRegion,iHalo)
-                  print*, indexToCellID(cellsInLTSHalo(iRegion, iHalo, iCell))
-               end do
-            end do
-         end do
-
-         nCellsCheck = 0
-         do iRegion=1,2
-            do iCell=1, nCellsInLTSRegion(iRegion)
-               nCellsCheck = nCellsCheck + 1
-            end do
-         end do
-         do iRegion=1,2
-            do iHalo=1, nLTSHalos
-               do iCell=1, nCellsInLTSHalo(iRegion, iHalo)
-                  nCellsCheck = nCellsCheck + 1
-               end do
-            end do
-         end do
-         print*, 'nCellsCheck =', nCellsCheck, 'nCells =', nCells
-         print*, 'cells in proc', procID 
-         do iCell = 1, nCells
-            print*, indexToCellID(iCell)
-         end do
-      end if
-      ! END: PRINT TO BE REMOVED
-      
       ! below we fill in the lists for the edges, according to the LTSRegionLocal that have been assigned to the cells.
       ! we move from the fine to the coarse (i.e. from the fine to the nearest halo
       ! layer, until the coarse is reached). Note that edges shared between cells of different LTS regions are
@@ -924,43 +861,12 @@ module sw_test_cases
          end do
       end do
 
-      !BEGIN: PRINT TO  BE REMOVED
-      if (procID == 1) then
-         print*, 'PRINTING EDGES for coarse LTS region'
-         print*, 'edges in coarse LTS region=', nEdgesInLTSRegion(2)
-         print*, 'processor ID=', procID
-         do iEdge = 1, nEdgesInLTSRegion(2)
-            print*, 'local=', edgesInLTSRegion(2,iEdge), 'global=',indexToEdgeID(edgesInLTSRegion(2,iEdge))
-         end do
-         nEdgesCheck = 0
-         do iRegion=1,2
-            do iEdge=1, nEdgesInLTSRegion(iRegion)
-               nEdgesCheck = nEdgesCheck + 1
-            end do
-         end do
-         do iRegion=1,2
-            do iHalo=1, nLTSHalos
-               do iEdge=1, nEdgesInLTSHalo(iRegion, iHalo)
-                  nEdgesCheck = nEdgesCheck + 1
-               end do
-            end do
-         end do
-
-         iRegion = 0
-         do iEdge=1,nEdges
-            iRegion = iRegion + isLTSRegionEdgeAssigned(iEdge)
-         end do
-         print*, 'nEdgesCheck =', nEdgesCheck, 'nEdges =', nEdges, 'check assignation=', iRegion, '(should be equal to nEdges)'
-      end if
-      !END: PRINT TO BE REMOVED
-
       deallocate(isLTSRegionEdgeAssigned)  
       
    else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
       call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) cannot be greater than one.')
       stop
    end if
-
 
    end subroutine mpas_init_LTS
 
