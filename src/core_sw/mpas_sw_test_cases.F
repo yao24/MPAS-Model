@@ -678,8 +678,8 @@ module sw_test_cases
    integer :: i, iCell, iEdge, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges
    real (kind=RKIND), dimension(:), pointer :: latCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, nCellsInLTSRegion, nEdgesInLTSRegion,  minMaxLTSRegion
-   integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, nCellsInLTSHalo, cellsInLTSRegion, nEdgesInLTSHalo, edgesInLTSRegion
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell,  minMaxLTSRegion
+   integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
 
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
@@ -696,12 +696,8 @@ module sw_test_cases
    call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-   call mpas_pool_get_array(LTSPool, 'cellsInLTSRegion', cellsInLTSRegion)
-   call mpas_pool_get_array(LTSPool, 'nCellsInLTSRegion', nCellsInLTSRegion)
    call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-   call mpas_pool_get_array(LTSPool, 'edgesInLTSRegion', edgesInLTSRegion)
-   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSRegion', nEdgesInLTSRegion)
 
    allocate(isLTSRegionEdgeAssigned(nEdges))
 
@@ -734,36 +730,36 @@ module sw_test_cases
          if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
             LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
             LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
-            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
+            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell1
+            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
+            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell2
          else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2)) then
             LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
             LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
-            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
+            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell2
+            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
+            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell1
          ! the next if statements are there because we are changing two elements at the
          ! time above so we have to take into consideration the fact that an edge
          ! might be shared by two elements, one of which had its LTSRegionLocal already changed
          else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
             LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
-            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell2
+            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
+            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell2
          else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2)) then
             LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1 
-            cellsInLTSHalo(2,1, nCellsInLTSHalo(2,1)) = cell1
+            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1 
+            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell1
          else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2) + 2) then
             LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
-            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell1
+            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell1
          else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2) + 2) then
             LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
-            nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
-            cellsInLTSHalo(1,1, nCellsInLTSHalo(1,1)) = cell2
+            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell2
          end if
       end do   
 
@@ -772,20 +768,20 @@ module sw_test_cases
       do iRegion = 1,2
          do iHalo = 1, nLTSHalos-1
             iHaloP1 = iHalo + 1
-            do iCellHalo = 1, nCellsInLTSHalo(iRegion,iHalo)
-               iCell = cellsInLTSHalo(iRegion,iHalo,iCellHalo)
+            do iCellHalo = 1, nCellsInLTSHalo(iRegion,iHaloP1)
+               iCell = cellsInLTSHalo(iRegion,iHaloP1,iCellHalo)
                do i = 1, nEdgesOnCell(iCell)
                   iEdge = edgesOnCell(i, iCell)  
                   cell1 = cellsOnEdge(1,iEdge)
                   cell2 = cellsOnEdge(2,iEdge)
                   if (LTSRegionLocal(cell1) - minMaxLTSRegion(1) + 1 == iRegion) then
                      LTSRegionLocal(cell1) = LTSRegionLocal(cell1) +  2 * iHaloP1
-                     nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1
-                     cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell1
+                     nCellsInLTSHalo(iRegion,iHaloP1+1) = nCellsInLTsHalo(iRegion,iHaloP1+1) + 1
+                     cellsInLTSHalo(iRegion,iHaloP1+1,nCellsInLTSHalo(iRegion,iHaloP1+1)) = cell1
                   else if (LTSRegionLocal(cell2) - minMaxLTSRegion(1) + 1 == iRegion) then
                      LTSRegionLocal(cell2) = LTSRegionLocal(cell2) +  2 * (iHaloP1)
-                     nCellsInLTSHalo(iRegion,iHaloP1) = nCellsInLTsHalo(iRegion,iHaloP1) + 1 
-                     cellsInLTSHalo(iRegion,iHaloP1,nCellsInLTSHalo(iRegion,iHaloP1)) = cell2
+                     nCellsInLTSHalo(iRegion,iHaloP1+1) = nCellsInLTsHalo(iRegion,iHaloP1+1) + 1 
+                     cellsInLTSHalo(iRegion,iHaloP1+1,nCellsInLTSHalo(iRegion,iHaloP1+1)) = cell2
                   end if
                end do              
             end do   
@@ -793,14 +789,13 @@ module sw_test_cases
       end do
  
       ! this is a loop to build the lists of elements in the fine and coarse regions
-      nCellsInLTSRegion(:) = 0
       do iCell = 1, nCells
          if(LTSRegionLocal(iCell) == minMaxLTSRegion(1)) then
-           nCellsInLTSRegion(1) = nCellsInLTSRegion(1) + 1
-           cellsInLTSRegion(1,nCellsInLTSRegion(1)) = iCell
+           nCellsInLTSHalo(1,1) = nCellsInLTSHalo(1,1) + 1
+           cellsInLTSHalo(1,1,nCellsInLTSHalo(1,1)) = iCell
          else if (LTSRegionLocal(iCell) == minMaxLTSRegion(2)) then
-            nCellsInLTSRegion(2) = nCellsInLTSRegion(2) + 1
-            cellsInLTSRegion(2,nCellsInLTSRegion(2)) = iCell
+            nCellsInLTSHalo(2,1) = nCellsInLTSHalo(2,1) + 1
+            cellsInLTSHalo(2,1,nCellsInLTSHalo(2,1)) = iCell
          end if 
       end do
 
@@ -809,58 +804,56 @@ module sw_test_cases
       ! layer, until the coarse is reached). Note that edges shared between cells of different LTS regions are
       ! owned by the cell in the LTS region closest to the fine region, see Figure 3 in "Conservative explicit
       ! local time-stepping schemes for the shallow water equations" by Hoang et al.
-      nEdgesInLTSRegion(1) = 0
-      do iCell = 1, nCellsInLTSRegion(1)
-         do i = 1, nEdgesOnCell(cellsInLTSRegion(1,iCell))
-            iEdge = edgesOnCell(i,cellsInLTSRegion(1,iCell))
+      nEdgesInLTSHalo(:,:)=0  
+    
+      do iCell = 1, nCellsInLTSHalo(1,1)
+         do i = 1, nEdgesOnCell(cellsInLTSHalo(1,1,iCell))
+            iEdge = edgesOnCell(i,cellsInLTSHalo(1,1,iCell))
             if (isLTSRegionEdgeAssigned(iEdge) == 0) then
-               nEdgesInLTSRegion(1) = nEdgesInLTSRegion(1) + 1
-               edgesInLTSRegion(1, nEdgesInLTSRegion(1)) = iEdge
+               nEdgesInLTSHalo(1,1) = nEdgesInLTSHalo(1,1) + 1
+               edgesInLTSHalo(1,1, nEdgesInLTSHalo(1,1)) = iEdge
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
          end do
       end do
    
-      nEdgesInLTSHalo(1,:) = 0
       do iHalo = 1, nLTSHalos
-         do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 1)
-            do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 1, iCell))
-               iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 1, iCell))
+         do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 2)
+            do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
+               iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
-                  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1) + 1
-                  edgesInLTSHalo(1, nLTSHalos - iHalo + 1,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 1)) = iEdge
+                  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) + 1
+                  edgesInLTSHalo(1, nLTSHalos - iHalo + 2,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2)) = iEdge
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
             end do
          end do
       end do
 
-      nEdgesInLTSHalo(2,:) = 0
       do iHalo = 1, nLTSHalos
-         do iCell = 1, nCellsInLTSHalo(2, iHalo)
-            do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo,iCell))
-               iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo,iCell))
+         do iCell = 1, nCellsInLTSHalo(2, iHalo+1)
+            do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
+               iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
-                  nEdgesInLTSHalo(2, iHalo) = nEdgesInLTSHalo(2, iHalo) + 1
-                  edgesInLTSHalo(2, iHalo,  nEdgesInLTSHalo(2, iHalo)) = iEdge
+                  nEdgesInLTSHalo(2, iHalo+1) = nEdgesInLTSHalo(2, iHalo+1) + 1
+                  edgesInLTSHalo(2, iHalo+1,  nEdgesInLTSHalo(2, iHalo+1)) = iEdge
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
             end do
          end do
       end do
  
-      nEdgesInLTSRegion(2) = 0
-      do iCell = 1, nCellsInLTSRegion(2)
-         do i = 1, nEdgesOnCell(cellsInLTSRegion(2,iCell))
-            iEdge = edgesOnCell(i,cellsInLTSRegion(2,iCell))
+      do iCell = 1, nCellsInLTSHalo(2,1)
+         do i = 1, nEdgesOnCell(cellsInLTSHalo(2,1,iCell))
+            iEdge = edgesOnCell(i,cellsInLTSHalo(2,1,iCell))
             if(isLTSRegionEdgeAssigned(iEdge) == 0) then
-               nEdgesInLTSRegion(2) = nEdgesInLTSRegion(2) + 1
-               edgesInLTSRegion(2, nEdgesInLTSRegion(2)) = iEdge
+               nEdgesInLTSHalo(2,1) = nEdgesInLTSHalo(2,1) + 1
+               edgesInLTSHalo(2,1,nEdgesInLTSHalo(2,1)) = iEdge
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
          end do
       end do
-
+        
       deallocate(isLTSRegionEdgeAssigned)  
       
    else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 

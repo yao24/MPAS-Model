@@ -51,9 +51,11 @@ module sw_time_integration
          call sw_ssprk(domain, dt, 3)
       else if (trim(config_time_integration) == 'FWDEULR') then
          call sw_ssprk(domain, dt, 1)
+      else if (trim(config_time_integration) == 'LTS2') then
+         call sw_lts2(domain, dt)
       else
          call mpas_log_write('Unknown time integration option '//trim(config_time_integration), MPAS_LOG_ERR)
-         call mpas_log_write('Currently, only ''RK4'', ''FWDEULR'', ''SSPRK2'', and ''SSPRK3'' are supported.', MPAS_LOG_CRIT)
+         call mpas_log_write('Currently, only ''RK4'', ''FWDEULR'', ''SSPRK2'', ''SSPRK3'' and ''LTS2'' are supported.', MPAS_LOG_CRIT)
       end if
 
       block => domain % blocklist
@@ -573,6 +575,156 @@ module sw_time_integration
       end do
 
    end subroutine sw_ssprk
+
+   subroutine sw_lts2(domain, dt)
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   ! Advance model state forward in time by the specified time step using
+   !   the local time stepping (LTS) scheme of order 2 from Hoang et al. (2019)
+   !
+   ! Input: domain - current model state in time level 1 (e.g.,
+   ! time_levs(1)state%h(:,:))
+   !                 plus grid meta-data
+   ! Output: domain - upon exit, time level 2 (e.g., time_levs(2)%state%h(:,:))
+   ! contains
+   !                  model state advanced forward in time by dt seconds
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      implicit none
+
+      type (domain_type), intent(inout) :: domain
+      real (kind=RKIND), intent(in) :: dt
+
+      integer :: iCell, k, fineRegion, coarseRegion, interFace1Region, interFace2Region
+      type (block_type), pointer :: block
+      type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
+      type (mpas_pool_type), pointer :: FirstStagePool
+      type (mpas_pool_type), pointer :: prevFirstStagePool, nextFirstStagePool
+
+ 
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, dtScalingLTS
+      integer, dimension(:), pointer :: minMaxLTSRegion
+
+      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend
+      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend
+      real (kind=RKIND), dimension(:,:), pointer :: uReconstructX, uReconstructY, uReconstructZ, uReconstructZonal, uReconstructMeridional
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersTend
+      real (kind=RKIND) :: dtFine
+      
+      integer, pointer :: config_test_case
+      real (kind=RKIND), pointer :: config_h_mom_eddy_visc4
+
+      call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
+      call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
+
+      call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
+      call mpas_pool_get_dimension(meshPool, 'dtScalingLTS', dtScalingLTS)
+
+      fineRegion = minMaxLTSRegion(1)
+      coarseRegion = minMaxLTSRegion(2)
+      interFace1Region = minMaxLTSRegion(1) + 2
+      interFace2Region = minMaxLTSRegion(2) + 2    
+  
+      dtFine = dt / dtScalingLTS
+
+      block => domain % blocklist
+      do while (associated(block))
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+
+         allocate(firstStagePool)
+         call mpas_pool_create_pool(firstStagePool)
+         call mpas_pool_clone_pool(statePool, firstStagePool, 1)
+
+         call mpas_pool_add_subpool(block % structs, 'first_stage_state', firstStagePool)
+
+         call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+         call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+         call mpas_pool_get_array(statePool, 'u', uOld, 1)
+         call mpas_pool_get_array(statePool, 'u', uNew, 2)
+         call mpas_pool_get_array(statePool, 'h', hOld, 1)
+         call mpas_pool_get_array(statePool, 'h', hNew, 2)
+         call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+         call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
+         uNew(:,:) = uOld(:,:)
+         hNew(:,:) = hOld(:,:)
+         do iCell = 1, nCells  ! couple tracers to h
+            do k = 1, nVertLevels
+               tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell)
+            end do
+         end do
+
+         call mpas_pool_initialize_time_levels(statePool)
+
+         block => block % next
+      end do
+
+      block => domain % blocklist
+      do while(associated(block))
+         if (associated(block % prev)) then
+            call mpas_pool_get_subpool(block % prev % structs, 'first_stage_state', prevFirstStagePool)
+         else
+            nullify(prevFirstStagePool)
+         end if
+
+         if (associated(block % next)) then
+            call mpas_pool_get_subpool(block % next % structs, 'first_stage_state', nextFirstStagePool)
+         else
+            nullify(nextFirstStagePool)
+         end if
+
+         call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+
+         if (associated(prevFirstStagePool) .and. associated(nextFirstStagePool)) then
+            call mpas_pool_link_pools(firstStagePool, prevFirstStagePool, nextFirstStagePool)
+         else if (associated(prevFirstStagePool)) then
+            call mpas_pool_link_pools(firstStagePool, prevFirstStagePool)
+         else if (associated(nextFirstStagePool)) then
+            call mpas_pool_link_pools(firstStagePool, nextPool=nextFirstStagePool)
+         else
+            call mpas_pool_link_pools(firstStagePool)
+         end if
+
+         call mpas_pool_link_parinfo(block, firstStagePool)
+
+         block => block % next
+     end do
+
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     ! BEGIN SECOND ORDER LTS SCHEME
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+! --- update halos for diagnostic variables
+     call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+
+     if (config_h_mom_eddy_visc4 > 0.0) then
+        call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
+        call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
+     end if
+
+! --- INTERFACE PREDICTION STEP: compute the first stage of SSPRK for interface layer 1 and 2
+! --- compute tendencies
+     block => domain % blocklist
+        do while (associated(block))
+           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+           call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+
+           call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool,  1, fineRegion, interFace1Region)
+           call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool, 1, coarseRegion, interFace2Region)
+           call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, fineRegion, interFace1Region)
+           call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, coarseRegion, interFace2Region)
+           call sw_enforce_boundary_edge(tendPool, meshPool)
+           block => block % next
+        end do
+
+! --- update halos for prognostic variables
+       call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+       call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+       call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+
+   end subroutine sw_lts2
 
    subroutine sw_compute_tend(tendPool, statePool, meshPool, timeLevelIn)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
@@ -1651,5 +1803,603 @@ module sw_time_integration
 
    end subroutine sw_enforce_boundary_edge
 
+   subroutine sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, timeLevelIn, LTSRegion, LTSHalo)
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+   ! Compute height and normal wind tendencies, as well as diagnostic variables
+   !
+   ! Input: s - current model state
+   !        grid - grid metadata
+   !
+   ! Output: tend - computed tendencies for prognostic variables
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+
+      implicit none
+
+      type (mpas_pool_type), intent(inout) :: tendPool
+      type (mpas_pool_type), intent(in) :: statePool, meshPool, LTSPool
+      integer, intent(in), optional :: timeLevelIn
+      integer, intent(in) :: LTSRegion, LTSHalo
+
+      integer :: iEdge, iCell, iVertex, k, cell1, cell2, vertex1, vertex2, eoe, i, j, timeLevel
+      real (kind=RKIND) :: flux, vorticity_abs, workpv, q, upstream_bias
+
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, nCellsSolve, nEdgesSolve, nVerticesSolve
+      real (kind=RKIND), dimension(:), pointer :: h_s, fVertex, fEdge, dvEdge, dcEdge, areaCell, areaTriangle, &
+                                                  meshScalingDel2, meshScalingDel4
+      real (kind=RKIND), dimension(:,:), pointer :: vh, weightsOnEdge, kiteAreasOnVertex, h_edge, h, u, v, tend_h, tend_u, &
+                                                    circulation, vorticity, ke, pv_edge, divergence, h_vertex
+      integer, dimension(:,:), pointer :: cellsOnEdge, cellsOnVertex, verticesOnEdge, edgesOnCell, edgesOnEdge, edgesOnVertex
+      integer, dimension(:), pointer :: nEdgesOnCell, nEdgesOnEdge
+      real (kind=RKIND) :: r, u_diffusion
+
+      real (kind=RKIND), allocatable, dimension(:,:) :: delsq_divergence
+      real (kind=RKIND), allocatable, dimension(:,:) :: delsq_u
+      real (kind=RKIND), allocatable, dimension(:,:) :: delsq_circulation, delsq_vorticity
+
+      real (kind=RKIND), dimension(:,:), pointer :: u_src
+      real (kind=RKIND), parameter :: rho_ref = 1000.0
+      real (kind=RKIND) :: ke_edge
+      
+      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
+      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
+
+      logical, pointer :: config_wind_stress, config_bottom_drag
+      real (kind=RKIND), pointer :: config_h_mom_eddy_visc2, config_h_mom_eddy_visc4
+
+      if (present(timeLevelIn)) then
+         timeLevel = timeLevelIn
+      else
+         timeLevel = 1
+      end if
+
+      call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+ 
+      call mpas_pool_get_config(swConfigs, 'config_bottom_drag', config_bottom_drag)
+      call mpas_pool_get_config(swConfigs, 'config_wind_stress', config_wind_stress)
+      call mpas_pool_get_config(swConfigs, 'config_h_mom_eddy_visc2', config_h_mom_eddy_visc2)
+      call mpas_pool_get_config(swConfigs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
+
+      call mpas_pool_get_array(statePool, 'h', h, timeLevel)
+      call mpas_pool_get_array(statePool, 'u', u, timeLevel)
+      call mpas_pool_get_array(statePool, 'v', v, timeLevel)
+      call mpas_pool_get_array(statePool, 'h_edge', h_edge, timeLevel)
+      call mpas_pool_get_array(statePool, 'circulation', circulation, timeLevel)
+      call mpas_pool_get_array(statePool, 'vorticity', vorticity, timeLevel)
+      call mpas_pool_get_array(statePool, 'divergence', divergence, timeLevel)
+      call mpas_pool_get_array(statePool, 'ke', ke, timeLevel)
+      call mpas_pool_get_array(statePool, 'pv_edge', pv_edge, timeLevel)
+      call mpas_pool_get_array(statePool, 'vh', vh, timeLevel)
+
+      call mpas_pool_get_array(meshPool, 'weightsOnEdge', weightsOnEdge)
+      call mpas_pool_get_array(meshPool, 'kiteAreasOnVertex', kiteAreasOnVertex)
+      call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
+      call mpas_pool_get_array(meshPool, 'cellsOnVertex', cellsOnVertex)
+      call mpas_pool_get_array(meshPool, 'verticesOnEdge', verticesOnEdge)
+      call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
+      call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
+      call mpas_pool_get_array(meshPool, 'nEdgesOnEdge', nEdgesOnEdge)
+      call mpas_pool_get_array(meshPool, 'edgesOnEdge', edgesOnEdge)
+      call mpas_pool_get_array(meshPool, 'edgesOnVertex', edgesOnVertex)
+      call mpas_pool_get_array(meshPool, 'dcEdge', dcEdge)
+      call mpas_pool_get_array(meshPool, 'dvEdge', dvEdge)
+      call mpas_pool_get_array(meshPool, 'areaCell', areaCell)
+      call mpas_pool_get_array(meshPool, 'areaTriangle', areaTriangle)
+      call mpas_pool_get_array(meshPool, 'h_s', h_s)
+      call mpas_pool_get_array(meshPool, 'fVertex', fVertex)
+      call mpas_pool_get_array(meshPool, 'fEdge', fEdge)
+      call mpas_pool_get_array(meshPool, 'u_src', u_src)
+      call mpas_pool_get_array(meshPool, 'meshScalingDel2', meshScalingDel2)
+      call mpas_pool_get_array(meshPool, 'meshScalingDel4', meshScalingDel4)
+
+      call mpas_pool_get_array(tendPool, 'h', tend_h)
+      call mpas_pool_get_array(tendPool, 'u', tend_u)
+                  
+      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+      call mpas_pool_get_dimension(meshPool, 'nCellsSolve', nCellsSolve)
+      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
+      call mpas_pool_get_dimension(meshPool, 'nEdgesSolve', nEdgesSolve)
+      call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
+      call mpas_pool_get_dimension(meshPool, 'nVerticesSolve', nVerticesSolve)
+      call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+      !
+      ! Compute height tendency for each cell
+      !
+      tend_h(:,:) = 0.0
+      do iEdge = 1, nEdges
+         cell1 = cellsOnEdge(1,iEdge)
+         cell2 = cellsOnEdge(2,iEdge)
+         do k = 1, nVertLevels
+            flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge)
+            tend_h(k,cell1) = tend_h(k,cell1) - flux
+            tend_h(k,cell2) = tend_h(k,cell2) + flux
+         end do
+      end do 
+      do iCell = 1, nCellsSolve
+         do k = 1, nVertLevels
+            tend_h(k,iCell) = tend_h(k,iCell) / areaCell(iCell)
+         end do
+      end do
+
+
+      !
+      ! Compute u (normal) velocity tendency for each edge (cell face)
+      !
+      tend_u(:,:) = 0.0
+      do iEdge = 1, nEdgesSolve
+         cell1 = cellsOnEdge(1,iEdge)
+         cell2 = cellsOnEdge(2,iEdge)
+         vertex1 = verticesOnEdge(1,iEdge)
+         vertex2 = verticesOnEdge(2,iEdge)
+         
+         do k = 1, nVertLevels
+            q = 0.0
+            do j = 1, nEdgesOnEdge(iEdge)
+               eoe = edgesOnEdge(j,iEdge)
+               workpv = 0.5 * (pv_edge(k,iEdge) + pv_edge(k,eoe))
+               q = q + weightsOnEdge(j,iEdge) * u(k,eoe) * workpv * h_edge(k,eoe) 
+            end do
+
+            tend_u(k,iEdge) =       &
+                              q     &
+                              - (   ke(k,cell2) - ke(k,cell1) + &
+                                    gravity * (h(k,cell2) + h_s(cell2) - h(k,cell1) - h_s(cell1)) &
+                                  ) / dcEdge(iEdge)
+         end do
+      end do
+
+
+     ! Compute diffusion, computed as \nabla divergence - k \times \nabla vorticity
+     !                    only valid for visc == constant
+     if (config_h_mom_eddy_visc2 > 0.0) then
+        do iEdge = 1, nEdgesSolve
+           cell1 = cellsOnEdge(1,iEdge)
+           cell2 = cellsOnEdge(2,iEdge)
+           vertex1 = verticesOnEdge(1,iEdge)
+           vertex2 = verticesOnEdge(2,iEdge)
+
+           do k = 1, nVertLevels
+              u_diffusion =   ( divergence(k,cell2)  -  divergence(k,cell1) ) / dcEdge(iEdge) &
+                   -(vorticity(k,vertex2)  - vorticity(k,vertex1) ) / dvEdge(iEdge)
+              u_diffusion = meshScalingDel2(iEdge) * config_h_mom_eddy_visc2 * u_diffusion
+              tend_u(k,iEdge) = tend_u(k,iEdge) + u_diffusion
+           end do
+        end do
+     end if
+
+     !
+     ! velocity tendency: del4 dissipation, -\nu_4 \nabla^4 u
+     !   computed as \nabla^2 u = \nabla divergence + k \times \nabla vorticity
+     !   applied recursively.
+     !   strictly only valid for h_mom_eddy_visc4 == constant
+     !
+     if (config_h_mom_eddy_visc4 > 0.0) then
+        allocate(delsq_divergence(nVertLevels, nCells+1))
+        allocate(delsq_u(nVertLevels, nEdges+1))
+        allocate(delsq_circulation(nVertLevels, nVertices+1))
+        allocate(delsq_vorticity(nVertLevels, nVertices+1))
+
+        delsq_u(:,:) = 0.0
+
+        ! Compute \nabla^2 u = \nabla divergence + k \times \nabla vorticity
+        do iEdge = 1, nEdges
+           cell1 = cellsOnEdge(1,iEdge)
+           cell2 = cellsOnEdge(2,iEdge)
+           vertex1 = verticesOnEdge(1,iEdge)
+           vertex2 = verticesOnEdge(2,iEdge)
+
+           do k = 1, nVertLevels
+
+              delsq_u(k,iEdge) = ( divergence(k,cell2)  - divergence(k,cell1) ) / dcEdge(iEdge)  &
+                   -( vorticity(k,vertex2) - vorticity(k,vertex1)) / dvEdge(iEdge)
+
+           end do
+        end do
+
+        ! vorticity using \nabla^2 u
+        delsq_circulation(:,:) = 0.0
+        do iEdge = 1, nEdges
+           vertex1 = verticesOnEdge(1,iEdge)
+           vertex2 = verticesOnEdge(2,iEdge)
+           do k=1,nVertLevels
+              delsq_circulation(k,vertex1) = delsq_circulation(k,vertex1) &
+                   - dcEdge(iEdge) * delsq_u(k,iEdge)
+              delsq_circulation(k,vertex2) = delsq_circulation(k,vertex2) &
+                   + dcEdge(iEdge) * delsq_u(k,iEdge)
+           end do
+        end do
+        do iVertex = 1, nVertices
+           r = 1.0 / areaTriangle(iVertex)
+           do k = 1, nVertLevels
+              delsq_vorticity(k,iVertex) = delsq_circulation(k,iVertex) * r
+           end do
+        end do
+
+        ! Divergence using \nabla^2 u
+        delsq_divergence(:,:) = 0.0
+        do iEdge = 1, nEdges
+           cell1 = cellsOnEdge(1,iEdge)
+           cell2 = cellsOnEdge(2,iEdge)
+           do k=1,nVertLevels
+              delsq_divergence(k,cell1) = delsq_divergence(k,cell1) &
+                   + delsq_u(k,iEdge)*dvEdge(iEdge)
+              delsq_divergence(k,cell2) = delsq_divergence(k,cell2) &
+                   - delsq_u(k,iEdge)*dvEdge(iEdge)
+           end do
+        end do
+        do iCell = 1,nCells
+           r = 1.0 / areaCell(iCell)
+           do k = 1, nVertLevels
+              delsq_divergence(k,iCell) = delsq_divergence(k,iCell) * r
+           end do
+        end do
+
+        ! Compute - \kappa \nabla^4 u 
+        ! as  \nabla div(\nabla^2 u) + k \times \nabla ( k \cross curl(\nabla^2 u) )
+        do iEdge = 1, nEdgesSolve
+           cell1 = cellsOnEdge(1,iEdge)
+           cell2 = cellsOnEdge(2,iEdge)
+           vertex1 = verticesOnEdge(1,iEdge)
+           vertex2 = verticesOnEdge(2,iEdge)
+
+           do k = 1, nVertLevels
+
+              u_diffusion = (  delsq_divergence(k,cell2) &
+                   - delsq_divergence(k,cell1) ) / dcEdge(iEdge)  &
+                   -(  delsq_vorticity(k,vertex2) &
+                   - delsq_vorticity(k,vertex1) ) / dvEdge(iEdge)
+
+              u_diffusion = meshScalingDel4(iEdge) * config_h_mom_eddy_visc4 * u_diffusion
+              tend_u(k,iEdge) = tend_u(k,iEdge) - u_diffusion
+
+           end do
+        end do
+
+        deallocate(delsq_divergence)
+        deallocate(delsq_u)
+        deallocate(delsq_circulation)
+        deallocate(delsq_vorticity)
+
+     end if
+
+     ! Compute u (velocity) tendency from wind stress (u_src)
+     if(config_wind_stress) then
+         do iEdge = 1, nEdges
+            tend_u(1,iEdge) =  tend_u(1,iEdge) &
+                  + u_src(1,iEdge) / rho_ref / h_edge(1,iEdge)
+         end do
+     endif
+
+     if (config_bottom_drag) then
+         do iEdge = 1,  nEdges
+             ! bottom drag is the same as POP:
+             ! -c |u| u  where c is unitless and 1.0e-3.
+             ! see POP Reference guide, section 3.4.4.
+             ke_edge = 0.5 * ( ke(1,cellsOnEdge(1,iEdge)) &
+                   + ke(1,cellsOnEdge(2,iEdge)))
+
+             tend_u(1,iEdge) = tend_u(1,iEdge)  &
+                  - 1.0e-3*u(1,iEdge) &
+                  *sqrt(2.0*ke_edge)/h_edge(1,iEdge)
+         end do
+     endif
+ 
+   end subroutine sw_compute_tend_lts
+
+   subroutine sw_compute_scalar_tend_lts(tendPool, statePool, meshPool, LTSPool, timeLevelIn, LTSRegion, LTSHalo)
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+   !
+   ! Input: s - current model state
+   !        grid - grid metadata
+   !
+   ! Output: tend - computed scalar tendencies
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+
+      implicit none
+
+      type (mpas_pool_type), intent(inout) :: tendPool
+      type (mpas_pool_type), intent(in) :: statePool, meshPool, LTSPool
+      integer, intent(in), optional :: timeLevelIn
+      integer, intent(in) :: LTSRegion, LTSHalo
+
+      integer :: iCell, iEdge, k, iTracer, cell1, cell2, i
+      real (kind=RKIND) :: flux, tracer_edge, r
+      real (kind=RKIND) :: invAreaCell1, invAreaCell2, tracer_turb_flux
+      integer, dimension(:,:), pointer :: boundaryEdge
+      real (kind=RKIND), dimension(:,:), allocatable :: boundaryMask
+      real (kind=RKIND), dimension(:,:,:), allocatable:: delsq_tracer
+      
+      real (kind=RKIND) :: d2fdx2_cell1, d2fdx2_cell2
+      real (kind=RKIND), dimension(:), pointer :: dvEdge, dcEdge, areaCell
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracers, tracer_tend
+      integer, dimension(:,:), pointer :: cellsOnEdge, boundaryCell
+      real (kind=RKIND), dimension(:,:,:), pointer :: deriv_two
+      real (kind=RKIND) :: coef_3rd_order
+      real (kind=RKIND), dimension(:,:), pointer :: u, h_edge
+
+      integer, pointer :: config_tracer_adv_order
+      logical, pointer :: config_monotonic
+
+      integer, dimension(:), pointer :: nEdgesOnCell
+      integer, dimension(:,:), pointer :: cellsOnCell
+
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, nCellsSolve, nEdgesSolve, nVerticesSolve, nTracers
+      integer :: timeLevel
+
+      real (kind=RKIND), pointer :: config_h_tracer_eddy_diff2, config_h_tracer_eddy_diff4
+
+      if (present(timeLevelIn)) then
+         timeLevel = timeLevelIn
+      else
+         timeLevel = 1
+      endif
+
+      call mpas_pool_get_config(swConfigs, 'config_tracer_adv_order', config_tracer_adv_order)
+      call mpas_pool_get_config(swConfigs, 'config_monotonic', config_monotonic)
+      call mpas_pool_get_config(swConfigs, 'config_h_tracer_eddy_diff2', config_h_tracer_eddy_diff2)
+      call mpas_pool_get_config(swConfigs, 'config_h_tracer_eddy_diff4', config_h_tracer_eddy_diff4)
+
+      call mpas_pool_get_array(statePool, 'u', u, timeLevel)
+      call mpas_pool_get_array(statePool, 'h_edge', h_edge, timeLevel)
+      call mpas_pool_get_array(statePool, 'tracers', tracers, timeLevel)
+
+      call mpas_pool_get_array(meshPool, 'dcEdge', dcEdge)
+      call mpas_pool_get_array(meshPool, 'deriv_two', deriv_two)
+      call mpas_pool_get_array(meshPool, 'dvEdge', dvEdge)
+      call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
+      call mpas_pool_get_array(meshPool, 'boundaryCell', boundaryCell)
+      call mpas_pool_get_array(meshPool, 'boundaryEdge', boundaryEdge)
+      call mpas_pool_get_array(meshPool, 'areaCell', areaCell)
+      call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
+      call mpas_pool_get_array(meshPool, 'cellsOnCell', cellsOnCell)
+
+      call mpas_pool_get_array(tendPool, 'tracers', tracer_tend)
+
+      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
+      call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
+      call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+      call mpas_pool_get_dimension(meshPool, 'nCellsSolve', nCellsSolve)
+      call mpas_pool_get_dimension(meshPool, 'nEdgesSolve', nEdgesSolve)
+      call mpas_pool_get_dimension(meshPool, 'nVerticesSolve', nVerticesSolve)
+      call mpas_pool_get_dimension(meshPool, 'nTracers', nTracers)
+
+      coef_3rd_order = 0.
+      if (config_tracer_adv_order == 3) coef_3rd_order = 1.0
+      if (config_tracer_adv_order == 3 .and. config_monotonic) coef_3rd_order = 0.25
+
+      tracer_tend(:,:,:) = 0.0
+
+      if (config_tracer_adv_order == 2) then
+
+      do iEdge = 1, nEdges
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+            if (cell1 <= nCells .and. cell2 <= nCells) then
+               do k = 1, nVertLevels
+                  do iTracer = 1, nTracers
+                     tracer_edge = 0.5 * (tracers(iTracer,k,cell1) + tracers(iTracer,k,cell2))
+                     flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge) * tracer_edge
+                     tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux / areaCell(cell1)
+                     tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) + flux / areaCell(cell2)
+                  end do 
+               end do 
+            end if
+      end do 
+
+      else if (config_tracer_adv_order == 3) then
+
+         do iEdge = 1, nEdges
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+
+            !-- if a cell not on the most outside ring of the halo
+            if (cell1 <= nCells .and. cell2 <= nCells) then
+
+               do k = 1, nVertLevels
+
+                  d2fdx2_cell1 = 0.0
+                  d2fdx2_cell2 = 0.0
+
+                  do iTracer = 1, nTracers
+ 
+                     !-- if not a boundary cell
+                     if(boundaryCell(k,cell1) .eq. 0 .and. boundaryCell(k,cell2) .eq. 0) then
+
+                        d2fdx2_cell1 = deriv_two(1,1,iEdge) * tracers(iTracer,k,cell1)
+                        d2fdx2_cell2 = deriv_two(1,2,iEdge) * tracers(iTracer,k,cell2)
+
+                        !-- all edges of cell 1
+                        do i = 1, nEdgesOnCell(cell1)
+                                d2fdx2_cell1 = d2fdx2_cell1 + &
+                                deriv_two(i+1,1,iEdge) * tracers(iTracer,k, CellsOnCell(i,cell1))
+                        end do
+
+                        !-- all edges of cell 2
+                        do i = 1, nEdgesOnCell(cell2)
+                                d2fdx2_cell2 = d2fdx2_cell2 + &
+                                deriv_two(i+1,2,iEdge) * tracers(iTracer,k,CellsOnCell(i,cell2))
+                        end do
+
+                     endif
+
+                     !-- if u > 0:
+                     if (u(k,iEdge) > 0) then
+                        flux = dvEdge(iEdge) * u(k,iEdge) * h_edge(k,iEdge) * (          &
+                             0.5*(tracers(iTracer,k,cell1) + tracers(iTracer,k,cell2))      &
+                             -(dcEdge(iEdge) **2) * (d2fdx2_cell1 + d2fdx2_cell2) / 12.          &
+                             -(dcEdge(iEdge) **2) * coef_3rd_order*(d2fdx2_cell1 - d2fdx2_cell2) / 12. )
+                     !-- else u <= 0:
+                     else
+                        flux = dvEdge(iEdge) *  u(k,iEdge) * h_edge(k,iEdge) * (          &
+                             0.5*(tracers(iTracer,k,cell1) + tracers(iTracer,k,cell2))      &
+                             -(dcEdge(iEdge) **2) * (d2fdx2_cell1 + d2fdx2_cell2) / 12.          &
+                             +(dcEdge(iEdge) **2) * coef_3rd_order*(d2fdx2_cell1 - d2fdx2_cell2) / 12. )
+                     end if
+
+                     !-- update tendency
+                     tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux / areaCell(cell1)
+                     tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) + flux / areaCell(cell2)
+                  enddo
+               end do
+            end if
+         end do
+
+      else  if (config_tracer_adv_order == 4) then
+
+         do iEdge = 1, nEdges
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+
+            !-- if an edge is not on the outer-most ring of the halo
+            if (cell1 <= nCells .and. cell2 <= nCells) then
+
+               do k = 1, nVertLevels
+
+                  d2fdx2_cell1 = 0.0
+                  d2fdx2_cell2 = 0.0
+
+                  do iTracer = 1, nTracers
+
+                     !-- if not a boundary cell
+                     if(boundaryCell(k,cell1) .eq. 0 .and. boundaryCell(k,cell2) .eq. 0) then
+
+                        d2fdx2_cell1 = deriv_two(1,1,iEdge) * tracers(iTracer,k,cell1)
+                        d2fdx2_cell2 = deriv_two(1,2,iEdge) * tracers(iTracer,k,cell2)
+
+                        !-- all edges of cell 1
+                        do i = 1, nEdgesOnCell(cell1)
+                                d2fdx2_cell1 = d2fdx2_cell1 + &
+                                deriv_two(i+1,1,iEdge) * tracers(iTracer,k, cellsOnCell(i,cell1))
+                        end do
+
+                        !-- all edges of cell 2
+                        do i = 1, nEdgesOnCell(cell2)
+                                d2fdx2_cell2 = d2fdx2_cell2 + &
+                                deriv_two(i+1,2,iEdge) * tracers(iTracer,k, cellsOnCell(i,cell2))
+                        end do
+
+                     endif
+
+                     flux = dvEdge(iEdge) *  u(k,iEdge) * h_edge(k,iEdge) * (          &
+                          0.5*(tracers(iTracer,k,cell1) + tracers(iTracer,k,cell2))      &
+                             -(dcEdge(iEdge) **2) * (d2fdx2_cell1 + d2fdx2_cell2) / 12. )
+
+                     !-- update tendency
+                     tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux / areaCell(cell1)
+                     tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) + flux / areaCell(cell2)
+                  enddo
+               end do
+            end if
+         end do
+
+      endif   ! if (config_tracer_adv_order == 2 )
+
+      !
+      ! tracer tendency: del2 horizontal tracer diffusion, div(h \kappa_2 \nabla \phi)
+      !
+      if ( config_h_tracer_eddy_diff2 > 0.0 ) then
+
+         !
+         ! compute a boundary mask to enforce insulating boundary conditions in the horizontal
+         !
+         allocate(boundaryMask(nVertLevels, nEdges+1))
+         boundaryMask = 1.0
+         where(boundaryEdge.eq.1) boundaryMask=0.0
+
+         do iEdge = 1, nEdges
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+            invAreaCell1 = 1.0/areaCell(cell1)
+            invAreaCell2 = 1.0/areaCell(cell2)
+
+            do k = 1, nVertLevels
+              do iTracer = 1,  nTracers
+                 ! \kappa_2 \nabla \phi on edge
+                 tracer_turb_flux = config_h_tracer_eddy_diff2 &
+                    *( tracers(iTracer,k,cell2) - tracers(iTracer,k,cell1)) / dcEdge(iEdge)
+
+                 ! div(h \kappa_2 \nabla \phi) at cell center
+                 flux = dvEdge(iEdge) * h_edge(k,iEdge) * tracer_turb_flux * boundaryMask(k, iEdge)
+                 tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) + flux * invAreaCell1
+                 tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) - flux * invAreaCell2
+              end do
+            end do
+
+         end do
+
+        deallocate(boundaryMask)
+
+      end if
+
+      !
+      ! tracer tendency: del4 horizontal tracer diffusion, &
+      !    div(h \kappa_4 \nabla [div(h \nabla \phi)])
+      !
+      if ( config_h_tracer_eddy_diff4 > 0.0 ) then
+
+         !
+         ! compute a boundary mask to enforce insulating boundary conditions in the horizontal
+         !
+         allocate(boundaryMask(nVertLevels, nEdges+1))
+         boundaryMask = 1.0
+         where(boundaryEdge.eq.1) boundaryMask=0.0
+
+         allocate(delsq_tracer(nTracers, nVertLevels, nCells+1))
+
+         delsq_tracer(:,:,:) = 0.
+
+         ! first del2: div(h \nabla \phi) at cell center
+         do iEdge = 1, nEdges
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+
+            do k = 1, nVertLevels
+              do iTracer = 1, nTracers
+                 delsq_tracer(iTracer,k,cell1) = delsq_tracer(iTracer,k,cell1) &
+                    + dvEdge(iEdge) * h_edge(k,iEdge) * (tracers(iTracer,k,cell2) - tracers(iTracer,k,cell1)) / dcEdge(iEdge) * boundaryMask(k,iEdge)
+                 delsq_tracer(iTracer,k,cell2) = delsq_tracer(iTracer,k,cell2) &
+                    - dvEdge(iEdge) * h_edge(k,iEdge) * (tracers(iTracer,k,cell2) - tracers(iTracer,k,cell1)) / dcEdge(iEdge) * boundaryMask(k,iEdge)
+              end do
+            end do
+
+         end do
+
+         do iCell = 1, nCells
+            r = 1.0 / areaCell(iCell)
+            do k = 1, nVertLevels
+            do iTracer = 1, nTracers
+               delsq_tracer(iTracer,k,iCell) = delsq_tracer(iTracer,k,iCell) * r
+            end do
+            end do
+         end do
+
+         ! second del2: div(h \nabla [delsq_tracer]) at cell center
+         do iEdge = 1, nEdges
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+            invAreaCell1 = 1.0 / areaCell(cell1)
+            invAreaCell2 = 1.0 / areaCell(cell2)
+
+            do k = 1, nVertLevels
+            do iTracer = 1, nTracers
+               tracer_turb_flux = config_h_tracer_eddy_diff4 * (delsq_tracer(iTracer,k,cell2) - delsq_tracer(iTracer,k,cell1)) / dcEdge(iEdge)
+               flux = dvEdge(iEdge) * tracer_turb_flux
+               tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux * invAreaCell1 * boundaryMask(k,iEdge)
+               tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) + flux * invAreaCell2 * boundaryMask(k,iEdge)
+            end do
+            enddo
+
+         end do
+
+         deallocate(delsq_tracer)
+         deallocate(boundaryMask)
+
+      end if
+
+   end subroutine sw_compute_scalar_tend_lts
 
 end module sw_time_integration
