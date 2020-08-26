@@ -2197,7 +2197,7 @@ module sw_time_integration
          iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, j)
          cell1 = cellsOnEdge(1,iEdge)
          cell2 = cellsOnEdge(2,iEdge)
-         if (cell1 <= nCells .and. cell2 <= nCells) then
+         if (cell1 <= nCellsInLTSHalo(LTSRegion,LTSHalo) .and. cell2 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
             do k = 1, nVertLevels
                do iTracer = 1, nTracers
                   tracer_edge = 0.5 * (tracers(iTracer,k,cell1) + tracers(iTracer,k,cell2))
@@ -2217,7 +2217,7 @@ module sw_time_integration
             cell2 = cellsOnEdge(2,iEdge)
 
             !-- if a cell not on the most outside ring of the halo
-            if (cell1 <= nCells .and. cell2 <= nCells) then
+            if (cell1 <= nCellsInLTSHalo(LTSRegion,LTSHalo) .and. cell2 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
 
                do k = 1, nVertLevels
 
@@ -2276,7 +2276,7 @@ module sw_time_integration
             cell2 = cellsOnEdge(2,iEdge)
 
             !-- if an edge is not on the outer-most ring of the halo
-            if (cell1 <= nCells .and. cell2 <= nCells) then
+            if (cell1 <= nCellsInLTSHalo(LTSRegion,LTSHalo) .and. cell2 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
 
                do k = 1, nVertLevels
 
@@ -2327,7 +2327,7 @@ module sw_time_integration
          !
          ! compute a boundary mask to enforce insulating boundary conditions in the horizontal
          !
-         allocate(boundaryMask(nVertLevels, nEdges+1))
+         allocate(boundaryMask(nVertLevels, nEdgesInLTSHalo(LTSRegion,LTSHalo)+1))
          boundaryMask = 1.0
          where(boundaryEdge.eq.1) boundaryMask=0.0
 
@@ -2366,7 +2366,7 @@ module sw_time_integration
          !
          ! compute a boundary mask to enforce insulating boundary conditions in the horizontal
          !
-         allocate(boundaryMask(nVertLevels, nEdges+1))
+         allocate(boundaryMask(nVertLevels, nEdgesInLTSHalo(LTSRegion,LTSHalo)+1))
          boundaryMask = 1.0
          where(boundaryEdge.eq.1) boundaryMask=0.0
 
@@ -2410,7 +2410,7 @@ module sw_time_integration
             invAreaCell2 = 1.0 / areaCell(cell2)
 
             do k = 1, nVertLevels
-            do iTracer = 1, nTracers
+               do iTracer = 1, nTracers
                tracer_turb_flux = config_h_tracer_eddy_diff4 * (delsq_tracer(iTracer,k,cell2) - delsq_tracer(iTracer,k,cell1)) / dcEdge(iEdge)
                flux = dvEdge(iEdge) * tracer_turb_flux
                tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux * invAreaCell1 * boundaryMask(k,iEdge)
@@ -2426,5 +2426,525 @@ module sw_time_integration
       end if
 
    end subroutine sw_compute_scalar_tend_lts
+
+
+   subroutine sw_compute_solve_diagnostics_lts(dt, statePool, meshPool, LTSPool, timeLevelIn, LTSRegion, LTSHalo)
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+   ! Compute diagnostic fields used in the tendency computations
+   !
+   ! Input: grid - grid metadata
+   !
+   ! Output: s - computed diagnostics
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
+
+      implicit none
+
+      real (kind=RKIND), intent(in) :: dt
+      type (mpas_pool_type), intent(inout) :: statePool, meshPool, LTSPool
+      integer, intent(in), optional :: timeLevelIn
+      integer, intent(in) :: LTSRegion, LTSHalo
+
+      integer :: iEdge, iCell, iVertex, k, cell1, cell2, vertex1, vertex2, eoe, i, j, cov, ii
+      real (kind=RKIND) :: flux, vorticity_abs, workpv
+
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, vertexDegree
+      real (kind=RKIND), dimension(:), pointer :: h_s, fVertex, fEdge, dvEdge, dcEdge, areaCell, areaTriangle
+      real (kind=RKIND), dimension(:,:), pointer :: vh, weightsOnEdge, kiteAreasOnVertex, h_edge, h, u, v, tend_h, tend_u, &
+                                                    circulation, vorticity, ke, pv_edge, pv_vertex, pv_cell, gradPVn, gradPVt, divergence, &
+                                                    h_vertex, vorticity_cell
+      integer, dimension(:,:), pointer :: cellsOnEdge, cellsOnVertex, verticesOnEdge, edgesOnCell, edgesOnEdge, edgesOnVertex, boundaryEdge, boundaryCell, cellsOnCell
+      integer, dimension(:), pointer :: nEdgesOnCell, nEdgesOnEdge
+      real (kind=RKIND) :: r, h1, h2
+      real (kind=RKIND) :: d2fdx2_cell1, d2fdx2_cell2
+      real (kind=RKIND), dimension(:,:,:), pointer :: deriv_two
+      real (kind=RKIND) :: coef_3rd_order
+
+      integer :: timeLevel
+
+      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo, nVerticesInLTSHalo
+      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo, verticesInLTSHalo
+
+      logical, pointer :: config_monotonic
+      integer, pointer :: config_thickness_adv_order
+      real (kind=RKIND), pointer :: config_apvm_upwinding
+
+      if (present(timeLevelIn)) then
+         timeLevel = timeLevelIn
+      else
+         timeLevel = 1
+      end if          
+
+      call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'verticesInLTSHalo', verticesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nVerticesInLTSHalo',nVerticesInLTSHalo)
+
+      call mpas_pool_get_config(swConfigs, 'config_monotonic', config_monotonic)
+      call mpas_pool_get_config(swConfigs, 'config_thickness_adv_order', config_thickness_adv_order)
+      call mpas_pool_get_config(swConfigs, 'config_apvm_upwinding', config_apvm_upwinding)
+
+      call mpas_pool_get_array(statePool, 'h', h, timeLevel)
+      call mpas_pool_get_array(statePool, 'u', u, timeLevel)
+      call mpas_pool_get_array(statePool, 'v', v, timeLevel)
+      call mpas_pool_get_array(statePool, 'vh', vh, timeLevel)
+      call mpas_pool_get_array(statePool, 'h_edge', h_edge, timeLevel)
+      call mpas_pool_get_array(statePool, 'h_vertex', h_vertex, timeLevel)
+      call mpas_pool_get_array(statePool, 'h', tend_h, timeLevel)
+      call mpas_pool_get_array(statePool, 'u', tend_u, timeLevel)
+      call mpas_pool_get_array(statePool, 'circulation', circulation, timeLevel)
+      call mpas_pool_get_array(statePool, 'vorticity', vorticity, timeLevel)
+      call mpas_pool_get_array(statePool, 'divergence', divergence, timeLevel)
+      call mpas_pool_get_array(statePool, 'ke', ke, timeLevel)
+      call mpas_pool_get_array(statePool, 'pv_edge', pv_edge, timeLevel)
+      call mpas_pool_get_array(statePool, 'pv_vertex', pv_vertex, timeLevel)
+      call mpas_pool_get_array(statePool, 'pv_cell', pv_cell, timeLevel)
+      call mpas_pool_get_array(statePool, 'vorticity_cell', vorticity_cell, timeLevel)
+      call mpas_pool_get_array(statePool, 'gradPVn', gradPVn, timeLevel)
+      call mpas_pool_get_array(statePool, 'gradPVt', gradPVt, timeLevel)
+
+      call mpas_pool_get_array(meshPool, 'weightsOnEdge', weightsOnEdge)
+      call mpas_pool_get_array(meshPool, 'kiteAreasOnVertex', kiteAreasOnVertex)
+      call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
+      call mpas_pool_get_array(meshPool, 'cellsOnVertex', cellsOnVertex)
+      call mpas_pool_get_array(meshPool, 'cellsOnCell', cellsOnCell)
+      call mpas_pool_get_array(meshPool, 'verticesOnEdge', verticesOnEdge)
+      call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
+      call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
+      call mpas_pool_get_array(meshPool, 'nEdgesOnEdge', nEdgesOnEdge)
+      call mpas_pool_get_array(meshPool, 'edgesOnEdge', edgesOnEdge)
+      call mpas_pool_get_array(meshPool, 'edgesOnVertex', edgesOnVertex)
+      call mpas_pool_get_array(meshPool, 'dcEdge', dcEdge)
+      call mpas_pool_get_array(meshPool, 'dvEdge', dvEdge)
+      call mpas_pool_get_array(meshPool, 'areaCell', areaCell)
+      call mpas_pool_get_array(meshPool, 'areaTriangle', areaTriangle)
+      call mpas_pool_get_array(meshPool, 'h_s', h_s)
+      call mpas_pool_get_array(meshPool, 'fVertex', fVertex)
+      call mpas_pool_get_array(meshPool, 'fEdge', fEdge)
+      call mpas_pool_get_array(meshPool, 'deriv_two', deriv_two)
+                  
+      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
+      call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
+      call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+      call mpas_pool_get_dimension(meshPool, 'vertexDegree', vertexDegree)
+
+      call mpas_pool_get_array(meshPool, 'boundaryEdge', boundaryEdge)
+      call mpas_pool_get_array(meshPool, 'boundaryCell', boundaryCell)
+
+      !
+      ! Find those cells that have an edge on the boundary
+      !
+      boundaryCell(:,:) = 0
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do k = 1, nVertLevels
+            if(boundaryEdge(k,iEdge).eq.1) then
+               cell1 = cellsOnEdge(1,iEdge)
+               cell2 = cellsOnEdge(2,iEdge)
+               boundaryCell(k,cell1) = 1
+               boundaryCell(k,cell2) = 1
+            end if 
+          end do
+      end do
+
+      !
+      ! Compute height on cell edges at velocity locations
+      !   Namelist options control the order of accuracy of the reconstructed h_edge value
+      !
+
+      coef_3rd_order = 0.
+      if (config_thickness_adv_order == 3) coef_3rd_order = 1.0
+      if (config_thickness_adv_order == 3 .and. config_monotonic) coef_3rd_order = 0.25
+
+      if (config_thickness_adv_order == 2) then
+
+         do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+            if (cell1 <= nCellsInLTSHalo(LTSRegion, LTSHalo) .and. cell2 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
+               do k = 1, nVertLevels
+                  h_edge(k,iEdge) = 0.5 * (h(k,cell1) + h(k,cell2))
+               end do 
+            end if
+         end do 
+
+      else if (config_thickness_adv_order == 3) then
+
+         do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+
+            !-- if a cell not on the most outside ring of the halo
+            if (cell1 <= nCellsInLTSHalo(LTSRegion,LTSHalo) .and. cell2 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
+
+               do k = 1, nVertLevels
+
+                  d2fdx2_cell1 = 0.0
+                  d2fdx2_cell2 = 0.0
+
+                  !-- if not a boundary cell
+                  if(boundaryCell(k,cell1) .eq. 0 .and. boundaryCell(k,cell2) .eq. 0) then
+
+                     d2fdx2_cell1 = deriv_two(1,1,iEdge) * h(k,cell1)
+                     d2fdx2_cell2 = deriv_two(1,2,iEdge) * h(k,cell2)
+
+                     !-- all edges of cell 1
+                     do i = 1, nEdgesOnCell(cell1)
+                             d2fdx2_cell1 = d2fdx2_cell1 + &
+                             deriv_two(i+1,1,iEdge) * h(k, cellsOnCell(i,cell1))
+                     end do
+
+                     !-- all edges of cell 2
+                     do i = 1, nEdgesOnCell(cell2)
+                             d2fdx2_cell2 = d2fdx2_cell2 + &
+                             deriv_two(i+1,2,iEdge) * h(k, cellsOnCell(i,cell2))
+                     end do
+
+                  end if
+
+                  !-- if u > 0:
+                  if (u(k,iEdge) > 0) then
+                     h_edge(k,iEdge) =     &
+                          0.5*(h(k,cell1) + h(k,cell2))      &
+                          -(dcEdge(iEdge) **2) * (d2fdx2_cell1 + d2fdx2_cell2) / 12.          &
+                          -(dcEdge(iEdge) **2) * coef_3rd_order*(d2fdx2_cell1 - d2fdx2_cell2) / 12.
+                  !-- else u <= 0:
+                  else
+                     h_edge(k,iEdge) =     &
+                          0.5*(h(k,cell1) + h(k,cell2))      &
+                          -(dcEdge(iEdge) **2) * (d2fdx2_cell1 + d2fdx2_cell2) / 12.          &
+                          +(dcEdge(iEdge) **2) * coef_3rd_order*(d2fdx2_cell1 - d2fdx2_cell2) / 12.
+                  end if
+
+               end do   ! do k
+            end if      ! if (cell1 <=
+         end do         ! do iEdge
+
+      else  if (config_thickness_adv_order == 4) then
+
+         do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+            cell1 = cellsOnEdge(1,iEdge)
+            cell2 = cellsOnEdge(2,iEdge)
+
+            !-- if a cell not on the most outside ring of the halo
+            if (cell1 <= nCellsInLTSHalo(LTSRegion,LTSHalo) .and. cell2 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
+
+               do k = 1, nVertLevels
+
+                  d2fdx2_cell1 = 0.0
+                  d2fdx2_cell2 = 0.0
+
+                  !-- if not a boundary cell
+                  if(boundaryCell(k,cell1) .eq. 0 .and. boundaryCell(k,cell2) .eq. 0) then
+
+                     d2fdx2_cell1 = deriv_two(1,1,iEdge) * h(k,cell1)
+                     d2fdx2_cell2 = deriv_two(1,2,iEdge) * h(k,cell2)
+
+                     !-- all edges of cell 1
+                     do i = 1, nEdgesOnCell(cell1)
+                             d2fdx2_cell1 = d2fdx2_cell1 + &
+                             deriv_two(i+1,1,iEdge) * h(k, cellsOnCell(i,cell1))
+                     end do
+
+                     !-- all edges of cell 2
+                     do i = 1, nEdgesOnCell(cell2)
+                             d2fdx2_cell2 = d2fdx2_cell2 + &
+                             deriv_two(i+1,2,iEdge) * h(k, cellsOnCell(i,cell2))
+                     end do
+
+                  endif
+
+                  h_edge(k,iEdge) =   &
+                       0.5*(h(k,cell1) + h(k,cell2))      &
+                          -(dcEdge(iEdge) **2) * (d2fdx2_cell1 + d2fdx2_cell2) / 12.
+
+               end do   ! do k
+            end if      ! if (cell1 <=
+         end do         ! do iEdge
+
+      endif   ! if(config_thickness_adv_order == 2)
+
+      !
+      ! set the velocity in the nEdges+1 slot to zero, this is a dummy address
+      !    used to when reading for edges that do not exist
+      !
+      u(:,nEdges+1) = 0.0
+
+      !
+      ! Compute circulation and relative vorticity at each vertex
+      !
+      circulation(:,:) = 0.0
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do k = 1, nVertLevels
+            circulation(k,verticesOnEdge(1,iEdge)) = circulation(k,verticesOnEdge(1,iEdge)) - dcEdge(iEdge) * u(k,iEdge)
+            circulation(k,verticesOnEdge(2,iEdge)) = circulation(k,verticesOnEdge(2,iEdge)) + dcEdge(iEdge) * u(k,iEdge)
+         end do
+      end do
+      do iVertex = 1, nVertices
+         do k = 1, nVertLevels
+            vorticity(k,iVertex) = circulation(k,iVertex) / areaTriangle(iVertex)
+         end do
+      end do
+
+
+      !
+      ! Compute the divergence at each cell center
+      !
+      divergence(:,:) = 0.0
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         cell1 = cellsOnEdge(1,iEdge)
+         cell2 = cellsOnEdge(2,iEdge)
+         if (cell1 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
+            do k = 1, nVertLevels
+              divergence(k,cell1) = divergence(k,cell1) + u(k,iEdge)*dvEdge(iEdge)
+            end do
+         end if
+         if(cell2 <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
+            do k = 1, nVertLevels
+              divergence(k,cell2) = divergence(k,cell2) - u(k,iEdge)*dvEdge(iEdge)
+            end do
+         end if
+      end do
+      do ii = 1, nCellsInLTSHalo(LTSRegion,LTSHalo)
+         iCell = cellsInLTSHalo(LTSRegion,LTSHalo, ii)
+         r = 1.0 / areaCell(iCell)
+         do k = 1, nVertLevels
+            divergence(k,iCell) = divergence(k,iCell) * r
+         end do
+      end do
+
+      !
+      ! Compute kinetic energy in each cell
+      !
+      ke(:,:) = 0.0
+      do ii = 1, nCellsInLTSHalo(LTSRegion,LTSHalo)
+         iCell = cellsInLTSHalo(LTSRegion,LTSHalo, ii)
+         do i = 1, nEdgesOnCell(iCell)
+            iEdge = edgesOnCell(i,iCell)
+            do k = 1, nVertLevels
+               ke(k,iCell) = ke(k,iCell) + 0.25 * dcEdge(iEdge) * dvEdge(iEdge) * u(k,iEdge)**2.0
+            end do
+         end do
+         do k = 1, nVertLevels
+            ke(k,iCell) = ke(k,iCell) / areaCell(iCell)
+         end do
+      end do
+
+      !
+      ! Compute v (tangential) velocities
+      !
+      v(:,:) = 0.0
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do i = 1, nEdgesOnEdge(iEdge)
+            eoe = edgesOnEdge(i,iEdge)
+            do k = 1,nVertLevels
+               v(k,iEdge) = v(k,iEdge) + weightsOnEdge(i,iEdge) * u(k, eoe)
+            end do
+         end do
+      end do
+
+#ifdef NCAR_FORMULATION
+      !
+      ! Compute mass fluxes tangential to each edge (i.e., through the faces of dual grid cells)
+      !
+      vh(:,:) = 0.0
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do j = 1, nEdgesOnEdge(iEdge)
+            eoe = edgesOnEdge(j,iEdge)
+            do k = 1, nVertLevels
+               vh(k,iEdge) = vh(k,iEdge) + weightsOnEdge(j,iEdge) * u(k,eoe) * h_edge(k,eoe)
+            end do
+         end do
+      end do
+#endif
+
+
+      !
+      ! Compute height at vertices, pv at vertices, and average pv to edge locations
+      !  ( this computes pv_vertex at all vertices bounding real cells and distance-1 ghost cells )
+      !
+      do ii = 1, nVerticesInLTSHalo(LTSRegion,LTSHalo)
+         iVertex = verticesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do k = 1, nVertLevels
+            h_vertex(k,iVertex) = 0.0
+            do i = 1, vertexDegree
+               h_vertex(k,iVertex) = h_vertex(k,iVertex) + h(k,cellsOnVertex(i,iVertex)) * kiteAreasOnVertex(i,iVertex)
+            end do
+            h_vertex(k,iVertex) = h_vertex(k,iVertex) / areaTriangle(iVertex)
+
+            pv_vertex(k,iVertex) = (fVertex(iVertex) + vorticity(k,iVertex)) / h_vertex(k,iVertex)
+         end do
+      end do
+
+
+      !
+      ! Compute gradient of PV in the tangent direction
+      !   ( this computes gradPVt at all edges bounding real cells and distance-1 ghost cells )
+      !
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do k = 1, nVertLevels
+           gradPVt(k,iEdge) = (pv_vertex(k,verticesOnEdge(2,iEdge)) - pv_vertex(k,verticesOnEdge(1,iEdge))) / &
+                              dvEdge(iEdge)
+         end do
+      end do
+
+      !
+      ! Compute pv at the edges
+      !   ( this computes pv_edge at all edges bounding real cells )
+      !
+      pv_edge(:,:) = 0.0
+      do ii = 1, nVerticesInLTSHalo(LTSRegion,LTSHalo)
+         iVertex = verticesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do i = 1, vertexDegree
+            iEdge = edgesOnVertex(i,iVertex)
+            do k = 1, nVertLevels
+               pv_edge(k,iEdge) =  pv_edge(k,iEdge)  + 0.5 * pv_vertex(k,iVertex)
+            end do
+         end do
+      end do
+
+
+      !
+      ! Modify PV edge with upstream bias. 
+      !
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do k = 1, nVertLevels
+           pv_edge(k,iEdge) = pv_edge(k,iEdge) - config_apvm_upwinding * v(k,iEdge) * dt * gradPVt(k,iEdge)
+         enddo
+      enddo
+
+
+      !
+      ! Compute pv at cell centers
+      !    ( this computes pv_cell for all real cells and distance-1 ghost cells )
+      !
+      pv_cell(:,:) = 0.0
+      vorticity_cell(:,:) = 0.0
+      do ii = 1, nVerticesInLTSHalo(LTSRegion,LTSHalo)
+         iVertex = verticesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do i = 1, vertexDegree
+            iCell = cellsOnVertex(i,iVertex)
+            if (iCell <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
+               do k = 1, nVertLevels
+                  pv_cell(k,iCell) = pv_cell(k,iCell) + kiteAreasOnVertex(i, iVertex) * pv_vertex(k, iVertex) / areaCell(iCell)
+                 vorticity_cell(k,iCell) = vorticity_cell(k,iCell) + kiteAreasOnVertex(i, iVertex) * vorticity(k, iVertex) / areaCell(iCell)
+               end do
+            end if
+         end do
+      end do
+
+
+      !
+      ! Compute gradient of PV in normal direction
+      !   ( this computes gradPVn for all edges bounding real cells )
+      !
+      gradPVn(:,:) = 0.0
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         if( cellsOnEdge(1,iEdge) <= nCellsInLTSHalo(LTSRegion,LTSHalo) .and. cellsOnEdge(2,iEdge) <= nCellsInLTSHalo(LTSRegion,LTSHalo)) then
+            do k = 1, nVertLevels
+               gradPVn(k,iEdge) = (pv_cell(k,cellsOnEdge(2,iEdge)) - pv_cell(k,cellsOnEdge(1,iEdge))) / &
+                                 dcEdge(iEdge)
+            end do
+         end if
+      end do
+
+      ! Modify PV edge with upstream bias.
+      !
+      do ii = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
+         do k = 1, nVertLevels
+           pv_edge(k,iEdge) = pv_edge(k,iEdge) - config_apvm_upwinding * u(k,iEdge) * dt * gradPVn(k,iEdge)
+         enddo
+      enddo
+
+      !
+      ! set pv_edge = fEdge / h_edge at boundary points
+      !
+   !  if (maxval(boundaryEdge).ge.0) then
+   !  do iEdge = 1,nEdges
+   !     cell1 = cellsOnEdge(1,iEdge)
+   !     cell2 = cellsOnEdge(2,iEdge)
+   !     do k = 1,nVertLevels
+   !       if(boundaryEdge(k,iEdge).eq.1) then
+   !         v(k,iEdge) = 0.0
+   !         if(cell1.gt.0) then
+   !            h1 = h(k,cell1)
+   !            pv_edge(k,iEdge) = fEdge(iEdge) / h1
+   !            h_edge(k,iEdge) = h1
+   !         else
+   !            h2 = h(k,cell2)
+   !            pv_edge(k,iEdge) = fEdge(iEdge) / h2
+   !            h_edge(k,iEdge) = h2
+   !         endif
+   !       endif
+   !     enddo
+   !  enddo
+   !  endif
+
+
+   end subroutine sw_compute_solve_diagnostics_lts
+
+
+   subroutine sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, LTSRegion, LTSHalo)
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   ! Enforce any boundary conditions on the normal velocity at each edge
+   !
+   ! Input: grid - grid metadata
+   !
+   ! Output: tend_u set to zero at boundaryEdge == 1 locations
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+      implicit none
+
+      type (mpas_pool_type), intent(inout) :: tendPool
+      type (mpas_pool_type), intent(in) :: meshPool, LTSPool
+      type (integer), intent(in) :: LTSRegion, LTSHalo
+
+      integer, dimension(:,:), pointer :: boundaryEdge
+      real (kind=RKIND), dimension(:,:), pointer :: tend_u
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels
+      integer :: iEdge, k, i
+
+            integer, dimension(:,:), pointer :: nEdgesInLTSHalo
+      integer, dimension(:,:,:), pointer :: edgesInLTSHalo
+  
+      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
+      call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
+      call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+      call mpas_pool_get_array(meshPool, 'boundaryEdge', boundaryEdge)
+      call mpas_pool_get_array(tendPool, 'u', tend_u)
+
+      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+      if(maxval(boundaryEdge).le.0) return
+
+      do i = 1, nEdgesInLTSHalo(LTSRegion,LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion,LTSHalo,i)
+         do k = 1, nVertLevels
+
+            if(boundaryEdge(k,iEdge).eq.1) then
+               tend_u(k,iEdge) = 0.0
+            end if
+
+         end do
+      end do
+
+   end subroutine sw_enforce_boundary_edge_lts
 
 end module sw_time_integration
