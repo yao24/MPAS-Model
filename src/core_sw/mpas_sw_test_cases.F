@@ -674,16 +674,18 @@ module sw_test_cases
    type (mpas_pool_type), intent(inout) :: meshPool, LTSPool
 
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
+   integer, dimension(:), allocatable :: isLTSRegionVertexAssigned
    integer, pointer :: nLTSRegions, nLTSHalos
-   integer :: i, iCell, iEdge, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
-   integer, pointer :: nCells, nEdges
+   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
+   integer, pointer :: nCells, nEdges, nVertices
    real (kind=RKIND), dimension(:), pointer :: latCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell,  minMaxLTSRegion
-   integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo
-   integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell,  nVerticesOnCell, minMaxLTSRegion
+   integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo, nVerticesInLTSHalo
+   integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo, verticesInLTSHalo
 
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
    call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
+   call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
    call mpas_pool_get_dimension(LTSPool, 'nLTSRegions', nLTSRegions)
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
@@ -691,17 +693,23 @@ module sw_test_cases
    call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
    call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
    call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
+   call mpas_pool_get_array(meshPool, 'verticesOnCell', edgesOnCell)
+   call mpas_pool_get_array(meshPool, 'nVerticesOnCell', nEdgesOnCell)
    call mpas_pool_get_array(LTSPool, 'LTSRegion', LTSRegion)
    call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
    call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
-   call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+   call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
+   call mpas_pool_get_array(LTSPool, 'verticesInLTSHalo', verticesInLTSHalo)
+   call mpas_pool_get_array(LTSPool, 'nVerticesInLTSHalo', nVerticesInLTSHalo)
 
    allocate(isLTSRegionEdgeAssigned(nEdges))
+   allocate(isLTSRegionVertexAssigned(nVertices))
 
    isLTSRegionEdgeAssigned(:) = 0
+   isLTSRegionVertexAssigned(:) = 0
 
    ! the loop below initializes the LTS regions for the current processor
    ! 1 = highest resolution possible
@@ -799,14 +807,16 @@ module sw_test_cases
          end if 
       end do
 
-      ! below we fill in the lists for the edges, according to the LTSRegionLocal that have been assigned to the cells.
+      ! below we fill in the lists for the edges and vertices, according to the LTSRegionLocal that have been assigned to the cells.
       ! we move from the fine to the coarse (i.e. from the fine to the nearest halo
-      ! layer, until the coarse is reached). Note that edges shared between cells of different LTS regions are
+      ! layer, until the coarse is reached). Note that edges and vertices shared between cells of different LTS regions are
       ! owned by the cell in the LTS region closest to the fine region, see Figure 3 in "Conservative explicit
       ! local time-stepping schemes for the shallow water equations" by Hoang et al.
       nEdgesInLTSHalo(:,:)=0  
+      nVerticesInLTSHalo(:,:) = 0
     
       do iCell = 1, nCellsInLTSHalo(1,1)
+         !edges
          do i = 1, nEdgesOnCell(cellsInLTSHalo(1,1,iCell))
             iEdge = edgesOnCell(i,cellsInLTSHalo(1,1,iCell))
             if (isLTSRegionEdgeAssigned(iEdge) == 0) then
@@ -815,10 +825,20 @@ module sw_test_cases
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
          end do
+         !vertices
+         do i = 1, nVerticesOnCell(cellsInLTSHalo(1,1,iCell))
+            iVertex = verticesOnCell(i,cellsInLTSHalo(1,1,iCell))
+            if (isLTSRegionVertexAssigned(iVertex) == 0) then
+               nVerticesInLTSHalo(1,1) = nVerticesInLTSHalo(1,1) + 1
+               verticesInLTSHalo(1,1, nVerticesInLTSHalo(1,1)) = iVertex
+               isLTSRegionVertexAssigned(iVertex) = 1
+            end if
+         end do
       end do
    
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 2)
+            !edges
             do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
                iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
@@ -827,11 +847,21 @@ module sw_test_cases
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
             end do
+            !vertices
+            do i = 1, nVerticesOnCell(cellsInLTSHalo(1, nLTSHalos-iHalo + 2,iCell))
+               iVertex = verticesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo +2,iCell))
+               if (isLTSRegionVertexAssigned(iVertex) == 0) then
+                  nVerticesInLTSHalo(1, nLTSHalos - iHalo + 2) = nVerticesInLTSHalo(1,nLTSHalos - iHalo + 2) + 1
+                  verticesInLTSHalo(1, nLTSHalos - iHalo + 2, nVerticesInLTSHalo(1,nLTSHalos - iHalo + 2)) = iVertex
+                  isLTSRegionVertexAssigned(iVertex) = 1
+               end if
+            end do
          end do
       end do
 
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(2, iHalo+1)
+            !edges
             do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
                iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
@@ -840,10 +870,20 @@ module sw_test_cases
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
             end do
+            !vertices
+            do i = 1, nVerticesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
+               iVertex = verticesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
+               if (isLTSRegionVertexAssigned(iVertex) == 0) then
+                  nVerticesInLTSHalo(2, iHalo+1) = nVerticesInLTSHalo(2, iHalo+1) + 1
+                  verticesInLTSHalo(2, iHalo+1,  nVerticesInLTSHalo(2, iHalo+1)) = iVertex
+                  isLTSRegionVertexAssigned(iVertex) = 1
+               end if
+            end do
          end do
       end do
  
       do iCell = 1, nCellsInLTSHalo(2,1)
+         !edges
          do i = 1, nEdgesOnCell(cellsInLTSHalo(2,1,iCell))
             iEdge = edgesOnCell(i,cellsInLTSHalo(2,1,iCell))
             if(isLTSRegionEdgeAssigned(iEdge) == 0) then
@@ -852,10 +892,21 @@ module sw_test_cases
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
          end do
+         !vertices
+         do i = 1, nVerticesOnCell(cellsInLTSHalo(2,1,iCell))
+            iVertex = verticesOnCell(i,cellsInLTSHalo(2,1,iCell))
+            if(isLTSRegionVertexAssigned(iVertex) == 0) then
+               nVerticesInLTSHalo(2,1) = nVerticesInLTSHalo(2,1) + 1
+               verticesInLTSHalo(2,1,nVerticesInLTSHalo(2,1)) = iVertex
+               isLTSRegionVertexAssigned(iVertex) = 1
+            end if
+         end do
       end do
         
-      deallocate(isLTSRegionEdgeAssigned)  
-      
+      deallocate(isLTSRegionEdgeAssigned) 
+      deallocate(isLTSRegionVertexAssigned)
+
+
    else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
       call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) cannot be greater than one.')
       stop
