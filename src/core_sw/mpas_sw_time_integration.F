@@ -594,7 +594,7 @@ module sw_time_integration
       type (domain_type), intent(inout) :: domain
       real (kind=RKIND), intent(in) :: dt
 
-      integer :: iCell, k, fineRegion, coarseRegion, interFace1Region, interFace2Region
+      integer :: iCell, k
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: FirstStagePool
@@ -619,11 +619,6 @@ module sw_time_integration
       call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
       call mpas_pool_get_dimension(meshPool, 'dtScalingLTS', dtScalingLTS)
 
-      fineRegion = minMaxLTSRegion(1)
-      coarseRegion = minMaxLTSRegion(2)
-      interFace1Region = minMaxLTSRegion(1) + 2
-      interFace2Region = minMaxLTSRegion(2) + 2    
-  
       dtFine = dt / dtScalingLTS
 
       block => domain % blocklist
@@ -711,10 +706,10 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
 
-           call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool,  1, fineRegion, interFace1Region)
-           call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool, 1, coarseRegion, interFace2Region)
-           call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, fineRegion, interFace1Region)
-           call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, coarseRegion, interFace2Region)
+           call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool,  1, 1, 2)
+           call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool, 1, 2, 2)
+           call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, 1, 2)
+           call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, 2, 2)
            call sw_enforce_boundary_edge(tendPool, meshPool)
            block => block % next
         end do
@@ -1840,8 +1835,8 @@ module sw_time_integration
       real (kind=RKIND), parameter :: rho_ref = 1000.0
       real (kind=RKIND) :: ke_edge
       
-      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
-      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
+      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo, nVerticesInLTSHalo
+      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo, verticesInLTSHalo
 
       logical, pointer :: config_wind_stress, config_bottom_drag
       real (kind=RKIND), pointer :: config_h_mom_eddy_visc2, config_h_mom_eddy_visc4
@@ -1856,6 +1851,8 @@ module sw_time_integration
       call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'verticesInLTSHalo', verticesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nVerticesInLTSHalo',nVerticesInLTSHalo)
  
       call mpas_pool_get_config(swConfigs, 'config_bottom_drag', config_bottom_drag)
       call mpas_pool_get_config(swConfigs, 'config_wind_stress', config_wind_stress)
@@ -1909,7 +1906,8 @@ module sw_time_integration
       ! Compute height tendency for each cell
       !
       tend_h(:,:) = 0.0
-      do iEdge = 1, nEdges
+      do i = 1, nEdgesInLTSHalo(LTSRegion,LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion,LTSHalo,i)
          cell1 = cellsOnEdge(1,iEdge)
          cell2 = cellsOnEdge(2,iEdge)
          do k = 1, nVertLevels
@@ -1918,7 +1916,8 @@ module sw_time_integration
             tend_h(k,cell2) = tend_h(k,cell2) + flux
          end do
       end do 
-      do iCell = 1, nCellsSolve
+      do j = 1, nCellsInLTSHalo(LTSRegion,LTSHalo)
+         iCell = cellsInLTSHalo(LTSRegion,LTSHalo,j)
          do k = 1, nVertLevels
             tend_h(k,iCell) = tend_h(k,iCell) / areaCell(iCell)
          end do
@@ -1929,7 +1928,8 @@ module sw_time_integration
       ! Compute u (normal) velocity tendency for each edge (cell face)
       !
       tend_u(:,:) = 0.0
-      do iEdge = 1, nEdgesSolve
+      do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
          cell1 = cellsOnEdge(1,iEdge)
          cell2 = cellsOnEdge(2,iEdge)
          vertex1 = verticesOnEdge(1,iEdge)
@@ -1955,7 +1955,8 @@ module sw_time_integration
      ! Compute diffusion, computed as \nabla divergence - k \times \nabla vorticity
      !                    only valid for visc == constant
      if (config_h_mom_eddy_visc2 > 0.0) then
-        do iEdge = 1, nEdgesSolve
+        do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+           iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
            cell1 = cellsOnEdge(1,iEdge)
            cell2 = cellsOnEdge(2,iEdge)
            vertex1 = verticesOnEdge(1,iEdge)
@@ -1977,15 +1978,16 @@ module sw_time_integration
      !   strictly only valid for h_mom_eddy_visc4 == constant
      !
      if (config_h_mom_eddy_visc4 > 0.0) then
-        allocate(delsq_divergence(nVertLevels, nCells+1))
-        allocate(delsq_u(nVertLevels, nEdges+1))
-        allocate(delsq_circulation(nVertLevels, nVertices+1))
-        allocate(delsq_vorticity(nVertLevels, nVertices+1))
+        allocate(delsq_divergence(nVertLevels, nCellsInLTSHalo(LTSRegion,LTSHalo)+1)) 
+        allocate(delsq_u(nVertLevels, nEdgesInLTSHalo(LTSRegion,LTSHalo)+1))
+        allocate(delsq_circulation(nVertLevels, nVerticesInLTSHalo(LTSRegion,LTSHalo)+1)) 
+        allocate(delsq_vorticity(nVertLevels, nVerticesInLTSHalo(LTSRegion,LTSHalo)+1))
 
         delsq_u(:,:) = 0.0
 
         ! Compute \nabla^2 u = \nabla divergence + k \times \nabla vorticity
-        do iEdge = 1, nEdges
+        do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+           iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
            cell1 = cellsOnEdge(1,iEdge)
            cell2 = cellsOnEdge(2,iEdge)
            vertex1 = verticesOnEdge(1,iEdge)
@@ -2001,7 +2003,8 @@ module sw_time_integration
 
         ! vorticity using \nabla^2 u
         delsq_circulation(:,:) = 0.0
-        do iEdge = 1, nEdges
+        do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+           iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
            vertex1 = verticesOnEdge(1,iEdge)
            vertex2 = verticesOnEdge(2,iEdge)
            do k=1,nVertLevels
@@ -2011,7 +2014,8 @@ module sw_time_integration
                    + dcEdge(iEdge) * delsq_u(k,iEdge)
            end do
         end do
-        do iVertex = 1, nVertices
+        do j = 1, nVerticesInLTSHalo(LTSRegion, LTSHalo)
+           iVertex = verticesInLTSHalo(LTSRegion, LTSHalo, j)
            r = 1.0 / areaTriangle(iVertex)
            do k = 1, nVertLevels
               delsq_vorticity(k,iVertex) = delsq_circulation(k,iVertex) * r
@@ -2020,7 +2024,8 @@ module sw_time_integration
 
         ! Divergence using \nabla^2 u
         delsq_divergence(:,:) = 0.0
-        do iEdge = 1, nEdges
+        do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+           iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
            cell1 = cellsOnEdge(1,iEdge)
            cell2 = cellsOnEdge(2,iEdge)
            do k=1,nVertLevels
@@ -2030,7 +2035,8 @@ module sw_time_integration
                    - delsq_u(k,iEdge)*dvEdge(iEdge)
            end do
         end do
-        do iCell = 1,nCells
+        do j = 1, nCellsInLTSHalo(LTSRegion,LTSHalo)
+         iCell = cellsInLTSHalo(LTSRegion,LTSHalo,j)
            r = 1.0 / areaCell(iCell)
            do k = 1, nVertLevels
               delsq_divergence(k,iCell) = delsq_divergence(k,iCell) * r
@@ -2039,7 +2045,9 @@ module sw_time_integration
 
         ! Compute - \kappa \nabla^4 u 
         ! as  \nabla div(\nabla^2 u) + k \times \nabla ( k \cross curl(\nabla^2 u) )
-        do iEdge = 1, nEdgesSolve
+        !do iEdge = 1, nEdgesSolve !WHO IS nEdgesSolve?
+        do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+           iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
            cell1 = cellsOnEdge(1,iEdge)
            cell2 = cellsOnEdge(2,iEdge)
            vertex1 = verticesOnEdge(1,iEdge)
@@ -2067,25 +2075,27 @@ module sw_time_integration
 
      ! Compute u (velocity) tendency from wind stress (u_src)
      if(config_wind_stress) then
-         do iEdge = 1, nEdges
-            tend_u(1,iEdge) =  tend_u(1,iEdge) &
+        do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+           iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
+           tend_u(1,iEdge) =  tend_u(1,iEdge) &
                   + u_src(1,iEdge) / rho_ref / h_edge(1,iEdge)
-         end do
-     endif
+        end do
+     end if
 
      if (config_bottom_drag) then
-         do iEdge = 1,  nEdges
-             ! bottom drag is the same as POP:
-             ! -c |u| u  where c is unitless and 1.0e-3.
-             ! see POP Reference guide, section 3.4.4.
-             ke_edge = 0.5 * ( ke(1,cellsOnEdge(1,iEdge)) &
+        do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+           iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
+           ! bottom drag is the same as POP:
+           ! -c |u| u  where c is unitless and 1.0e-3.
+           ! see POP Reference guide, section 3.4.4.
+           ke_edge = 0.5 * ( ke(1,cellsOnEdge(1,iEdge)) &
                    + ke(1,cellsOnEdge(2,iEdge)))
 
              tend_u(1,iEdge) = tend_u(1,iEdge)  &
                   - 1.0e-3*u(1,iEdge) &
                   *sqrt(2.0*ke_edge)/h_edge(1,iEdge)
          end do
-     endif
+     end if
  
    end subroutine sw_compute_tend_lts
 
