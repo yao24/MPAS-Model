@@ -2115,7 +2115,7 @@ module sw_time_integration
       integer, intent(in), optional :: timeLevelIn
       integer, intent(in) :: LTSRegion, LTSHalo
 
-      integer :: iCell, iEdge, k, iTracer, cell1, cell2, i
+      integer :: iCell, iEdge, k, iTracer, cell1, cell2, i, j
       real (kind=RKIND) :: flux, tracer_edge, r
       real (kind=RKIND) :: invAreaCell1, invAreaCell2, tracer_turb_flux
       integer, dimension(:,:), pointer :: boundaryEdge
@@ -2139,6 +2139,9 @@ module sw_time_integration
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels, nCellsSolve, nEdgesSolve, nVerticesSolve, nTracers
       integer :: timeLevel
 
+      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
+      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
+
       real (kind=RKIND), pointer :: config_h_tracer_eddy_diff2, config_h_tracer_eddy_diff4
 
       if (present(timeLevelIn)) then
@@ -2146,6 +2149,11 @@ module sw_time_integration
       else
          timeLevel = 1
       endif
+
+      call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
 
       call mpas_pool_get_config(swConfigs, 'config_tracer_adv_order', config_tracer_adv_order)
       call mpas_pool_get_config(swConfigs, 'config_monotonic', config_monotonic)
@@ -2185,24 +2193,26 @@ module sw_time_integration
 
       if (config_tracer_adv_order == 2) then
 
-      do iEdge = 1, nEdges
-            cell1 = cellsOnEdge(1,iEdge)
-            cell2 = cellsOnEdge(2,iEdge)
-            if (cell1 <= nCells .and. cell2 <= nCells) then
-               do k = 1, nVertLevels
-                  do iTracer = 1, nTracers
-                     tracer_edge = 0.5 * (tracers(iTracer,k,cell1) + tracers(iTracer,k,cell2))
-                     flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge) * tracer_edge
-                     tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux / areaCell(cell1)
-                     tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) + flux / areaCell(cell2)
-                  end do 
+      do j = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+         iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, j)
+         cell1 = cellsOnEdge(1,iEdge)
+         cell2 = cellsOnEdge(2,iEdge)
+         if (cell1 <= nCells .and. cell2 <= nCells) then
+            do k = 1, nVertLevels
+               do iTracer = 1, nTracers
+                  tracer_edge = 0.5 * (tracers(iTracer,k,cell1) + tracers(iTracer,k,cell2))
+                  flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge) * tracer_edge
+                  tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux / areaCell(cell1)
+                  tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) + flux / areaCell(cell2)
                end do 
-            end if
+            end do 
+         end if
       end do 
 
       else if (config_tracer_adv_order == 3) then
 
-         do iEdge = 1, nEdges
+         do j = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, j)
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
 
@@ -2260,7 +2270,8 @@ module sw_time_integration
 
       else  if (config_tracer_adv_order == 4) then
 
-         do iEdge = 1, nEdges
+         do j = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, j)
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
 
@@ -2320,7 +2331,8 @@ module sw_time_integration
          boundaryMask = 1.0
          where(boundaryEdge.eq.1) boundaryMask=0.0
 
-         do iEdge = 1, nEdges
+         do j = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, j)
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
             invAreaCell1 = 1.0/areaCell(cell1)
@@ -2363,7 +2375,8 @@ module sw_time_integration
          delsq_tracer(:,:,:) = 0.
 
          ! first del2: div(h \nabla \phi) at cell center
-         do iEdge = 1, nEdges
+         do j = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, j)
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
 
@@ -2378,7 +2391,8 @@ module sw_time_integration
 
          end do
 
-         do iCell = 1, nCells
+         do j = 1, nCellsInLTSHalo(LTSRegion,LTSHalo)
+            iCell = cellsInLTSHalo(LTSRegion,LTSHalo,j)
             r = 1.0 / areaCell(iCell)
             do k = 1, nVertLevels
             do iTracer = 1, nTracers
@@ -2388,7 +2402,8 @@ module sw_time_integration
          end do
 
          ! second del2: div(h \nabla [delsq_tracer]) at cell center
-         do iEdge = 1, nEdges
+         do j = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
+            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, j)
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
             invAreaCell1 = 1.0 / areaCell(cell1)
