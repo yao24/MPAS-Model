@@ -1818,7 +1818,7 @@ module sw_time_integration
       integer :: iEdge, iCell, iVertex, k, cell1, cell2, vertex1, vertex2, eoe, i, j, timeLevel
       real (kind=RKIND) :: flux, vorticity_abs, workpv, q, upstream_bias
 
-      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, nCellsSolve, nEdgesSolve, nVerticesSolve
+      integer, pointer ::  nVertLevels
       real (kind=RKIND), dimension(:), pointer :: h_s, fVertex, fEdge, dvEdge, dcEdge, areaCell, areaTriangle, &
                                                   meshScalingDel2, meshScalingDel4
       real (kind=RKIND), dimension(:,:), pointer :: vh, weightsOnEdge, kiteAreasOnVertex, h_edge, h, u, v, tend_h, tend_u, &
@@ -1894,12 +1894,6 @@ module sw_time_integration
       call mpas_pool_get_array(tendPool, 'h', tend_h)
       call mpas_pool_get_array(tendPool, 'u', tend_u)
                   
-      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
-      call mpas_pool_get_dimension(meshPool, 'nCellsSolve', nCellsSolve)
-      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
-      call mpas_pool_get_dimension(meshPool, 'nEdgesSolve', nEdgesSolve)
-      call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
-      call mpas_pool_get_dimension(meshPool, 'nVerticesSolve', nVerticesSolve)
       call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
       !
@@ -2045,7 +2039,6 @@ module sw_time_integration
 
         ! Compute - \kappa \nabla^4 u 
         ! as  \nabla div(\nabla^2 u) + k \times \nabla ( k \cross curl(\nabla^2 u) )
-        !do iEdge = 1, nEdgesSolve !WHO IS nEdgesSolve?
         do i = 1, nEdgesInLTSHalo(LTSRegion, LTSHalo)
            iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, i)
            cell1 = cellsOnEdge(1,iEdge)
@@ -2136,7 +2129,7 @@ module sw_time_integration
       integer, dimension(:), pointer :: nEdgesOnCell
       integer, dimension(:,:), pointer :: cellsOnCell
 
-      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, nCellsSolve, nEdgesSolve, nVerticesSolve, nTracers
+      integer, pointer :: nVertLevels, nTracers
       integer :: timeLevel
 
       integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
@@ -2176,13 +2169,7 @@ module sw_time_integration
 
       call mpas_pool_get_array(tendPool, 'tracers', tracer_tend)
 
-      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
-      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
-      call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
       call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
-      call mpas_pool_get_dimension(meshPool, 'nCellsSolve', nCellsSolve)
-      call mpas_pool_get_dimension(meshPool, 'nEdgesSolve', nEdgesSolve)
-      call mpas_pool_get_dimension(meshPool, 'nVerticesSolve', nVerticesSolve)
       call mpas_pool_get_dimension(meshPool, 'nTracers', nTracers)
 
       coef_3rd_order = 0.
@@ -2370,7 +2357,7 @@ module sw_time_integration
          boundaryMask = 1.0
          where(boundaryEdge.eq.1) boundaryMask=0.0
 
-         allocate(delsq_tracer(nTracers, nVertLevels, nCells+1))
+         allocate(delsq_tracer(nTracers, nVertLevels, nCellsInLTSHalo(LTSRegion,LTSHalo)+1))
 
          delsq_tracer(:,:,:) = 0.
 
@@ -2415,8 +2402,8 @@ module sw_time_integration
                flux = dvEdge(iEdge) * tracer_turb_flux
                tracer_tend(iTracer,k,cell1) = tracer_tend(iTracer,k,cell1) - flux * invAreaCell1 * boundaryMask(k,iEdge)
                tracer_tend(iTracer,k,cell2) = tracer_tend(iTracer,k,cell2) + flux * invAreaCell2 * boundaryMask(k,iEdge)
+               end do
             end do
-            enddo
 
          end do
 
@@ -2447,7 +2434,7 @@ module sw_time_integration
       integer :: iEdge, iCell, iVertex, k, cell1, cell2, vertex1, vertex2, eoe, i, j, cov, ii
       real (kind=RKIND) :: flux, vorticity_abs, workpv
 
-      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, vertexDegree
+      integer, pointer :: nVertLevels, vertexDegree
       real (kind=RKIND), dimension(:), pointer :: h_s, fVertex, fEdge, dvEdge, dcEdge, areaCell, areaTriangle
       real (kind=RKIND), dimension(:,:), pointer :: vh, weightsOnEdge, kiteAreasOnVertex, h_edge, h, u, v, tend_h, tend_u, &
                                                     circulation, vorticity, ke, pv_edge, pv_vertex, pv_cell, gradPVn, gradPVt, divergence, &
@@ -2524,9 +2511,6 @@ module sw_time_integration
       call mpas_pool_get_array(meshPool, 'fEdge', fEdge)
       call mpas_pool_get_array(meshPool, 'deriv_two', deriv_two)
                   
-      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
-      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
-      call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
       call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
       call mpas_pool_get_dimension(meshPool, 'vertexDegree', vertexDegree)
 
@@ -2673,7 +2657,7 @@ module sw_time_integration
       ! set the velocity in the nEdges+1 slot to zero, this is a dummy address
       !    used to when reading for edges that do not exist
       !
-      u(:,nEdges+1) = 0.0
+      u(:,nEdgesInLTSHalo(LTSRegion,LTSHalo)+1) = 0.0
 
       !
       ! Compute circulation and relative vorticity at each vertex
@@ -2686,7 +2670,8 @@ module sw_time_integration
             circulation(k,verticesOnEdge(2,iEdge)) = circulation(k,verticesOnEdge(2,iEdge)) + dcEdge(iEdge) * u(k,iEdge)
          end do
       end do
-      do iVertex = 1, nVertices
+      do i = 1, nVerticesInLTSHalo(LTSRegion,LTSHalo)
+         iVertex = verticesInLTSHalo(LTSRegion,LTSHalo,i)
          do k = 1, nVertLevels
             vorticity(k,iVertex) = circulation(k,iVertex) / areaTriangle(iVertex)
          end do
@@ -2821,8 +2806,8 @@ module sw_time_integration
          iEdge = edgesInLTSHalo(LTSRegion, LTSHalo, ii)
          do k = 1, nVertLevels
            pv_edge(k,iEdge) = pv_edge(k,iEdge) - config_apvm_upwinding * v(k,iEdge) * dt * gradPVt(k,iEdge)
-         enddo
-      enddo
+         end do
+      end do
 
 
       !
@@ -2915,14 +2900,12 @@ module sw_time_integration
 
       integer, dimension(:,:), pointer :: boundaryEdge
       real (kind=RKIND), dimension(:,:), pointer :: tend_u
-      integer, pointer :: nCells, nEdges, nVertices, nVertLevels
+      integer, pointer :: nVertices, nVertLevels
       integer :: iEdge, k, i
 
             integer, dimension(:,:), pointer :: nEdgesInLTSHalo
       integer, dimension(:,:,:), pointer :: edgesInLTSHalo
   
-      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
-      call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
       call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
       call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
