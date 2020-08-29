@@ -597,8 +597,8 @@ module sw_time_integration
       integer :: iCell, iEdge, iRegion, k, ic, ie
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
-      type (mpas_pool_type), pointer :: firstStagePool, tendSumPool
-      type (mpas_pool_type), pointer :: prevFirstStagePool, nextFirstStagePool, prevTendSumPool, nextTendSumPool
+      type (mpas_pool_type), pointer :: firstStagePool, tendSum1stPool, tendSum2ndPool
+      type (mpas_pool_type), pointer :: prevFirstStagePool, nextFirstStagePool, prevTendSum1stPool, nextTendSum1stPool, prevTendSum2ndPool, nextTendSum2ndPool
 
  
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels, dtScalingLTS
@@ -630,15 +630,21 @@ module sw_time_integration
          call mpas_pool_get_subpool(block % structs, 'state', statePool)
 
          allocate(firstStagePool)
-         allocate(tendSumPool)
+         allocate(tendSum1stPool)
+         allocate(tendSum2ndPool)
+
          call mpas_pool_create_pool(firstStagePool)
          call mpas_pool_clone_pool(statePool, firstStagePool, 1)
 
-         call mpas_pool_create_pool(tendSumPool)
-         call mpas_pool_clone_pool(tendPool, tendSumPool, 1)
+         call mpas_pool_create_pool(tendSum1stPool)
+         call mpas_pool_clone_pool(tendPool, tendSum1stPool, 1)
+         
+         call mpas_pool_create_pool(tendSum2ndPool)
+         call mpas_pool_clone_pool(tendPool, tendSum2ndPool, 1)
 
          call mpas_pool_add_subpool(block % structs, 'first_stage_state', firstStagePool)
-         call mpas_pool_add_subpool(block % structs, 'tend_sum', tendSumPool)
+         call mpas_pool_add_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
+         call mpas_pool_add_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
 
          call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
          call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -662,22 +668,27 @@ module sw_time_integration
       do while(associated(block))
          if (associated(block % prev)) then
             call mpas_pool_get_subpool(block % prev % structs, 'first_stage_state', prevFirstStagePool)
-            call mpas_pool_get_subpool(block % prev % structs, 'tend_sum', tendSumPool)
+            call mpas_pool_get_subpool(block % prev % structs, 'tend_sum_1st', tendSum1stPool)
+            call mpas_pool_get_subpool(block % prev % structs, 'tend_sum_2nd', tendSum2ndPool)
          else
             nullify(prevFirstStagePool)
-            nullify(prevTendSumPool)
+            nullify(prevTendSum1stPool)
+            nullify(prevTendSum2ndPool)
          end if
 
          if (associated(block % next)) then
             call mpas_pool_get_subpool(block % next % structs, 'first_stage_state', nextFirstStagePool)
-            call mpas_pool_get_subpool(block % next % structs, 'tend_sum', nextTendSumPool)
+            call mpas_pool_get_subpool(block % next % structs, 'tend_sum_1st', nextTendSum1stPool)
+            call mpas_pool_get_subpool(block % next % structs, 'tend_sum_2nd', nextTendSum2ndPool)
          else
             nullify(nextFirstStagePool)
-            nullify(nextTendSumPool)
+            nullify(nextTendSum1stPool)
+            nullify(nextTendSum2ndPool)
          end if
 
          call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
-         call mpas_pool_get_subpool(block % structs, 'tend_sum', tendSumPool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
 
          if (associated(prevFirstStagePool) .and. associated(nextFirstStagePool)) then
             call mpas_pool_link_pools(firstStagePool, prevFirstStagePool, nextFirstStagePool)
@@ -689,18 +700,29 @@ module sw_time_integration
             call mpas_pool_link_pools(firstStagePool)
          end if
 
-         if (associated(prevTendSumPool) .and. associated(nextTendSumPool)) then
-            call mpas_pool_link_pools(tendSumPool, prevTendSumPool, nextTendSumPool)
-         else if (associated(prevTendSumPool)) then
-            call mpas_pool_link_pools(tendSumPool, prevTendSumPool)
-         else if (associated(nextTendSumPool)) then
-            call mpas_pool_link_pools(tendSumPool,nextPool=nextTendSumPool)
+         if (associated(prevTendSum1stPool) .and. associated(nextTendSum1stPool)) then
+            call mpas_pool_link_pools(tendSum1stPool, prevTendSum1stPool, nextTendSum1stPool)
+         else if (associated(prevTendSum1stPool)) then
+            call mpas_pool_link_pools(tendSum1stPool, prevTendSum1stPool)
+         else if (associated(nextTendSum1stPool)) then
+            call mpas_pool_link_pools(tendSum1stPool,nextPool=nextTendSum1stPool)
          else
-            call mpas_pool_link_pools(tendSumPool)
+            call mpas_pool_link_pools(tendSum1stPool)
+         end if
+
+         if (associated(prevTendSum2ndPool) .and. associated(nextTendSum2ndPool)) then
+            call mpas_pool_link_pools(tendSum2ndPool, prevTendSum2ndPool, nextTendSum2ndPool)
+         else if (associated(prevTendSum2ndPool)) then
+            call mpas_pool_link_pools(tendSum2ndPool, prevTendSum2ndPool)
+         else if (associated(nextTendSum2ndPool)) then
+            call mpas_pool_link_pools(tendSum2ndPool,nextPool=nextTendSum2ndPool)
+         else
+            call mpas_pool_link_pools(tendSum2ndPool)
          end if
 
          call mpas_pool_link_parinfo(block, firstStagePool)
-         call mpas_pool_link_parinfo(block, tendSumPool)
+         call mpas_pool_link_parinfo(block, tendSum1stPool)
+         call mpas_pool_link_parinfo(block, tendSum2ndPool)
 
          block => block % next
      end do
