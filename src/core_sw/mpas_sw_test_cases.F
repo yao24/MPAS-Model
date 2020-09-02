@@ -679,7 +679,7 @@ module sw_test_cases
    integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges, nVertices
    real (kind=RKIND), dimension(:), pointer :: latCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell,  nVerticesOnCell, minMaxLTSRegion
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion
    integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo, nVerticesInLTSHalo
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo, verticesInLTSHalo
 
@@ -693,8 +693,7 @@ module sw_test_cases
    call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
    call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
    call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
-   call mpas_pool_get_array(meshPool, 'verticesOnCell', edgesOnCell)
-   call mpas_pool_get_array(meshPool, 'nVerticesOnCell', nEdgesOnCell)
+   call mpas_pool_get_array(meshPool, 'verticesOnCell', verticesOnCell)
    call mpas_pool_get_array(LTSPool, 'LTSRegion', LTSRegion)
    call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
    call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
@@ -816,17 +815,15 @@ module sw_test_cases
       nVerticesInLTSHalo(:,:) = 0
     
       do iCell = 1, nCellsInLTSHalo(1,1)
-         !edges
          do i = 1, nEdgesOnCell(cellsInLTSHalo(1,1,iCell))
+            !edges
             iEdge = edgesOnCell(i,cellsInLTSHalo(1,1,iCell))
             if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                nEdgesInLTSHalo(1,1) = nEdgesInLTSHalo(1,1) + 1
                edgesInLTSHalo(1,1, nEdgesInLTSHalo(1,1)) = iEdge
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
-         end do
-         !vertices
-         do i = 1, nVerticesOnCell(cellsInLTSHalo(1,1,iCell))
+            !vertices
             iVertex = verticesOnCell(i,cellsInLTSHalo(1,1,iCell))
             if (isLTSRegionVertexAssigned(iVertex) == 0) then
                nVerticesInLTSHalo(1,1) = nVerticesInLTSHalo(1,1) + 1
@@ -838,18 +835,16 @@ module sw_test_cases
    
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 2)
-            !edges
             do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
+               !edges
                iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                   nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) + 1
                   edgesInLTSHalo(1, nLTSHalos - iHalo + 2,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2)) = iEdge
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
-            end do
-            !vertices
-            do i = 1, nVerticesOnCell(cellsInLTSHalo(1, nLTSHalos-iHalo + 2,iCell))
-               iVertex = verticesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo +2,iCell))
+               !vertices
+               iVertex = verticesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo +2, iCell))
                if (isLTSRegionVertexAssigned(iVertex) == 0) then
                   nVerticesInLTSHalo(1, nLTSHalos - iHalo + 2) = nVerticesInLTSHalo(1,nLTSHalos - iHalo + 2) + 1
                   verticesInLTSHalo(1, nLTSHalos - iHalo + 2, nVerticesInLTSHalo(1,nLTSHalos - iHalo + 2)) = iVertex
@@ -861,17 +856,15 @@ module sw_test_cases
 
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(2, iHalo+1)
-            !edges
             do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
+               !edges
                iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                   nEdgesInLTSHalo(2, iHalo+1) = nEdgesInLTSHalo(2, iHalo+1) + 1
                   edgesInLTSHalo(2, iHalo+1,  nEdgesInLTSHalo(2, iHalo+1)) = iEdge
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
-            end do
-            !vertices
-            do i = 1, nVerticesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
+               !vertices
                iVertex = verticesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
                if (isLTSRegionVertexAssigned(iVertex) == 0) then
                   nVerticesInLTSHalo(2, iHalo+1) = nVerticesInLTSHalo(2, iHalo+1) + 1
@@ -883,17 +876,15 @@ module sw_test_cases
       end do
  
       do iCell = 1, nCellsInLTSHalo(2,1)
-         !edges
          do i = 1, nEdgesOnCell(cellsInLTSHalo(2,1,iCell))
+            !edges
             iEdge = edgesOnCell(i,cellsInLTSHalo(2,1,iCell))
             if(isLTSRegionEdgeAssigned(iEdge) == 0) then
                nEdgesInLTSHalo(2,1) = nEdgesInLTSHalo(2,1) + 1
                edgesInLTSHalo(2,1,nEdgesInLTSHalo(2,1)) = iEdge
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
-         end do
-         !vertices
-         do i = 1, nVerticesOnCell(cellsInLTSHalo(2,1,iCell))
+            !vertices
             iVertex = verticesOnCell(i,cellsInLTSHalo(2,1,iCell))
             if(isLTSRegionVertexAssigned(iVertex) == 0) then
                nVerticesInLTSHalo(2,1) = nVerticesInLTSHalo(2,1) + 1
