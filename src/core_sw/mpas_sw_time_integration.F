@@ -594,15 +594,14 @@ module sw_time_integration
       type (domain_type), intent(inout) :: domain
       real (kind=RKIND), intent(in) :: dt
 
-      integer :: iCell, iEdge, iRegion, k, ic, ie, m
+      integer :: iCell, iEdge, iRegion, k, ic, ie, m, dtScalingLTS !this has to be an input file 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: firstStagePool, tendSum1stPool, tendSum2ndPool
       type (mpas_pool_type), pointer :: prevFirstStagePool, nextFirstStagePool, prevTendSum1stPool, nextTendSum1stPool, prevTendSum2ndPool, nextTendSum2ndPool
 
  
-      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, dtScalingLTS
-      integer, dimension(:), pointer :: minMaxLTSRegion
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels
 
       real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend, uTendSum1st, uTendSum2nd, uFirstStage
       real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend, hTendSum1st, hTendSum2nd, hFirstStage
@@ -619,8 +618,7 @@ module sw_time_integration
       call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
       call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
 
-      call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
-      call mpas_pool_get_dimension(meshPool, 'dtScalingLTS', dtScalingLTS)
+      dtScalingLTS = 1
 
       dtFine = dt / dtScalingLTS
 
@@ -628,6 +626,7 @@ module sw_time_integration
       do while (associated(block))
          call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
          call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
 
          allocate(firstStagePool)
          allocate(tendSum1stPool)
@@ -1492,7 +1491,7 @@ module sw_time_integration
 
            block => block % next
         end do
-     end do
+     end do  ! End of substepping
 
      ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st  
 
