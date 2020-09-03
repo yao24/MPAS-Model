@@ -387,6 +387,13 @@ module sw_time_integration
       type (mpas_pool_type), pointer :: meshPool
       type (mpas_pool_type), pointer :: tendPool
 
+      !BEGIN: TO REMOVE
+      integer :: i, iEdge
+      type (mpas_pool_type), pointer :: LTSPool
+      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
+      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
+      !END: TO REMOVE
+
       integer :: ssprk_step
 
       real (kind=RKIND), dimension(ssprk_order) :: weights_old, weights_new, weights_tend
@@ -504,6 +511,14 @@ module sw_time_integration
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
 
+          !BEGIN: TO REMOVE
+          call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+          call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+          call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+          call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+          call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+          !END: TO REMOVE
+
           call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
@@ -523,6 +538,21 @@ module sw_time_integration
           uNew(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_new(ssprk_step) * uNew(:,:) + weights_tend(ssprk_step) * uTend(:,:) 
           end if
           hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
+          !BEGIN: TO REMOVE
+          if(ssprk_step == 2) then
+             print*, 'SSPRK - Second Stage - Interface Layer 2'
+             do k = 1, nVertLevels
+                do i = 1, nEdgesInLTSHalo(2,2)
+                   iEdge = edgesInLTSHalo(2,2,i)
+                   print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
+                end do
+                do i = 1, nCellsInLTSHalo(2,2)
+                   iCell = cellsInLTSHalo(2,2,i)
+                   print*, 'h=', hNew(k,iCell), 'cell=', iCell
+                end do
+             end do 
+          end if
+          !END: TO REMOVE
           do iCell = 1, nCells
              do k = 1, nVertLevels 
                 tracersNew(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) * hOld(k,iCell)  + weights_new(ssprk_step) &
@@ -594,7 +624,7 @@ module sw_time_integration
       type (domain_type), intent(inout) :: domain
       real (kind=RKIND), intent(in) :: dt
 
-      integer :: iCell, iEdge, iRegion, k, ic, ie, m, dtScalingLTS !this has to be an input file 
+      integer :: iCell, iEdge, iRegion, k, ic, ie, m, dtScalingLTS !TODO this has to be an input file 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: firstStagePool, tendSum1stPool, tendSum2ndPool
@@ -654,6 +684,21 @@ module sw_time_integration
          call mpas_pool_get_array(statePool, 'u', uNew, 2)
          call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
          call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
+         call mpas_pool_get_array(tendSum1stPool, 'u', uTendSum1st)
+         call mpas_pool_get_array(tendSum1stPool, 'h', hTendSum1st)
+         call mpas_pool_get_array(tendSum1stPool, 'tracers', tracersTendSum1st)
+
+         call mpas_pool_get_array(tendSum2ndPool, 'u', uTendSum2nd)
+         call mpas_pool_get_array(tendSum2ndPool, 'h', hTendSum2nd)
+         call mpas_pool_get_array(tendSum2ndPool, 'tracers', tracersTendSum2nd)
+
+         uTendSum1st(:,:) = 0
+         hTendSum1st(:,:) = 0
+         tracersTendSum1st(:,:,:) = 0
+         uTendSum2nd(:,:) = 0
+         hTendSum2nd(:,:) = 0
+         tracersTendSum2nd(:,:,:) = 0
 
          hNew(:,:) = hOld(:,:) !these lines are needed for when we advance the fine
          uNew(:,:) = uOld(:,:)
@@ -737,8 +782,6 @@ module sw_time_integration
 
      ! --- INTERFACE PREDICTION STEP: compute the first stage of SSPRK for interface layer 1, interface layer 2 and coarse
 
-     ! --- interface layer 1
-
      ! --- update halos for diagnostic variables
      call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -747,7 +790,7 @@ module sw_time_integration
         call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
      end if
 
-     ! --- compute tendencies for interface layer 1
+     ! --- compute tendencies for interface layer 1, interface layer 2 and coarse
      block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -755,11 +798,11 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool,  1, 1, 2) !compute tendency at old soln on interface layer 1
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 1, 2)
-           call sw_compute_tend(tendPool, statePool, meshPool, 1)
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1) 
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 1) !TODO
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1) !TODO 
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1) !coarse
         
            block => block % next
         end do
@@ -769,7 +812,7 @@ module sw_time_integration
      call mpas_dmpar_field_halo_exch(domain, 'tend_h')
      call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
 
-     ! --- advance solution for interface layer 1 with first stage of SSPRK2
+     ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK2
      block => domain % blocklist
      do while (associated(block))
         call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -799,178 +842,46 @@ module sw_time_integration
         
         do k =1, nVertLevels
            if (config_test_case /= 1) then ! For case 1, wind should be fixed
-              do ie = 1, nEdgesInLTSHalo(1,2)
-                 iEdge = edgesInLTSHalo(1,2,ie)
-                 uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
+              do iRegion =1,2
+                 do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                    iEdge = edgesInLTSHalo(iRegion,2,ie)
+                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
+                 end do
               end do
-           end if
-           do ic = 1, nCellsInLTSHalo(1,2)
-              iCell = cellsInLTSHalo(1,2,ic)
-              hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-              tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
-           end do
-        end do
-          
-        call sw_compute_solve_diagnostics_lts(dt, firstStagePool, meshPool, LTSPool, 1, 1, 2)
-          
-        block => block % next
-     end do
-
-
-     ! --- interface layer 2
-
-     ! --- update halos for diagnostic variables
-     call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
-
-     if (config_h_mom_eddy_visc4 > 0.0) then
-        call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
-        call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
-     end if
-
-     ! --- compute tendencies for interface layer 2
-     block => domain % blocklist
-        do while (associated(block))
-           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'state', statePool)
-           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 1, 2, 2)  !compute tendency at old soln on interface layer 2
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 2, 2)
-           call sw_compute_tend(tendPool, statePool, meshPool, 1)
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
-        
-           block => block % next
-        end do
-
-     ! --- update halos for prognostic variables
-     call mpas_dmpar_field_halo_exch(domain, 'tend_u')
-     call mpas_dmpar_field_halo_exch(domain, 'tend_h')
-     call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
-
-     ! --- advance solution for interface layer 2 with first stage of SSPRK2
-     block => domain % blocklist
-     do while (associated(block))
-        call mpas_pool_get_subpool(block % structs, 'state', statePool)
-        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-        call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
-
-        call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
-
-        call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-        call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-        call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-        call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-        call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
-        call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
-        call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
-
-        call mpas_pool_get_array(statePool, 'u', uOld, 1)
-        call mpas_pool_get_array(statePool, 'h', hOld, 1)
-        call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
-
-        call mpas_pool_get_array(tendPool, 'u', uTend)
-        call mpas_pool_get_array(tendPool, 'h', hTend)
-        call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
-        
-        do k =1, nVertLevels
-           if (config_test_case /= 1) then ! For case 1, wind should be fixed
-              do ie = 1, nEdgesInLTSHalo(2,2)
-                 iEdge = edgesInLTSHalo(2,2,ie)
-                  uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
-              end do
-           end if
-           do ic = 1, nCellsInLTSHalo(2,2)
-              iCell = cellsInLTSHalo(2,2,ic)
-              hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-              tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
-           end do
-        end do
-          
-        call sw_compute_solve_diagnostics_lts(dt, firstStagePool, meshPool, LTSPool, 1, 2, 2)
-          
-        block => block % next
-     end do
-
-
-     ! --- coarse
-
-     ! --- update halos for diagnostic variables
-     call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
-
-     if (config_h_mom_eddy_visc4 > 0.0) then
-        call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
-        call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
-     end if
-
-     ! --- compute tendencies for coarse
-     block => domain % blocklist
-     do while (associated(block))
-        call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-        call mpas_pool_get_subpool(block % structs, 'state', statePool)
-        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-
-        !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 1, 2, 1)  !compute tendency at old soln on coarse
-        !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 2, 1)
-        call sw_compute_tend(tendPool, statePool, meshPool, 1)
-        call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)
-        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
-        block => block % next
-     end do
-
-     ! --- update halos for prognostic variables
-     call mpas_dmpar_field_halo_exch(domain, 'tend_u')
-     call mpas_dmpar_field_halo_exch(domain, 'tend_h')
-     call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
-
-     ! --- advance solution for coarse with first stage of SSPRK2
-     block => domain % blocklist
-     do while (associated(block))
-        call mpas_pool_get_subpool(block % structs, 'state', statePool)
-        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-        call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
-
-        call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
-
-        call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-        call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-        call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-        call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-        call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
-        call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
-        call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
-
-        call mpas_pool_get_array(statePool, 'u', uOld, 1)
-        call mpas_pool_get_array(statePool, 'h', hOld, 1)
-        call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
-
-        call mpas_pool_get_array(tendPool, 'u', uTend)
-        call mpas_pool_get_array(tendPool, 'h', hTend)
-        call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
-        
-        do k =1, nVertLevels
-           if (config_test_case /= 1) then ! For case 1, wind should be fixed
               do ie = 1, nEdgesInLTSHalo(2,1)
                  iEdge = edgesInLTSHalo(2,1,ie)
                  uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
               end do
            end if
+           do iRegion = 1,2
+              do ic = 1, nCellsInLTSHalo(iRegion,2)
+                 iCell = cellsInLTSHalo(iRegion,2,ic)
+                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
+              end do
+           end do
            do ic = 1, nCellsInLTSHalo(2,1)
-              iCell = cellsInLTSHalo(2,1,ic)
-              hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-              tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
+                 iCell = cellsInLTSHalo(2,1,ic)
+                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
            end do
         end do
+
+        !BEGIN: TO REMOVE
+        !print*, 'LTS - First Stage - Coarse'
+        !do k =1, nVertLevels
+        !   do ie = 1, nEdgesInLTSHalo(2,1)
+        !      iEdge = edgesInLTSHalo(2,1,ie)
+        !      print*, 'u=', uFirstStage(k,iEdge), 'edge=', iEdge
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(2,1)
+        !      iCell = cellsInLTSHalo(2,1,ic)
+        !      print*, 'h=', hFirstStage(k,iCell), 'cell=', iCell
+        !   end do 
+        !end do
+        !END: TO REMOVE
           
-        call sw_compute_solve_diagnostics_lts(dt, firstStagePool, meshPool, LTSPool, 1, 2, 1)
+        call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) !TODO
           
         block => block % next
      end do
@@ -994,10 +905,8 @@ module sw_time_integration
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-        !call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool,  1, 2, 1) !compute tendency at first stage soln on coarse
-        !call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, 2, 1)
-        call sw_compute_tend(tendPool, firstStagePool, meshPool, 1)
-        call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1)
+        call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) !TODO
+        call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) !TODO
         call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
         block => block % next
      end do
@@ -1053,7 +962,21 @@ module sw_time_integration
            end do
         end do
 
-        call sw_compute_solve_diagnostics_lts(dt, statePool, meshPool, LTSPool, 2, 2, 1)
+        !BEGIN: TO REMOVE
+        !print*, 'LTS - Second Stage - Coarse'
+        !do k =1, nVertLevels
+        !   do ie = 1, nEdgesInLTSHalo(2,1)
+        !      iEdge = edgesInLTSHalo(2,1,ie)
+        !      print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(2,1)
+        !      iCell = cellsInLTSHalo(2,1,ic)
+        !      print*, 'h=', hNew(k,iCell), 'cell=', iCell
+        !   end do
+        !end do
+        !END: TO REMOVE
+
+        call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !TODO
           
         block => block % next
      end do
@@ -1111,7 +1034,7 @@ module sw_time_integration
            call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
         end if
 
-        ! --- compute tendencies for interface layer 1 
+        ! --- compute tendencies for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1119,70 +1042,14 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 2) !compute tendency at sol new on interface layer 1
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 2)
-           call sw_compute_tend(tendPool, statePool, meshPool, 2) 
-           call sw_compute_scalar_tend(tendPool, statePool,meshPool, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2) !TODO 
+           call sw_compute_scalar_tend(tendPool, statePool,meshPool, 2) !TODO
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
-           block => block % next
-        end do
-
-        ! --- sum up the tendecies above into tendSum2nd
-        block => domain % blocklist
-        do while (associated(block))
-           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-           call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
-
-           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
-
-           call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-           call mpas_pool_get_array(tendPool, 'u', uTend)
-           call mpas_pool_get_array(tendPool, 'h', hTend)
-           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
-
-           call mpas_pool_get_array(tendSum2ndPool, 'u', uTendSum2nd)
-           call mpas_pool_get_array(tendSum2ndPool, 'h', hTendSum2nd)
-           call mpas_pool_get_array(tendSum2ndPool, 'tracers', tracersTendSum2nd)
-
-           do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,2)
-                    iEdge = edgesInLTSHalo(1,2,ie)
-                    uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
-                 end do
-              end if
-              do ic = 1, nCellsInLTSHalo(1,2)
-                 iCell = cellsInLTSHalo(1,2,ic)
-                 hTendSum2nd(k,iCell) = hTendSum2nd(k,iCell) +  hTend(k,iCell)
-                 tracersTendSum2nd(:,k,iCell) = tracersTendSum2nd(:,k,iCell) + tracersTend(:,k,iCell)
-              end do
-           end do
-
-           block => block % next
-        end do
-
-        ! --- compute tendencies for interface layer 2
-        block => domain % blocklist
-        do while (associated(block))
-           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'state', statePool)
-           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 2, 2) !compute tendency at sol new on interface layer 2
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 2, 2)
-           call sw_compute_tend(tendPool, statePool, meshPool, 2)
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
            block => block % next
         end do
 
-        ! --- sum up the tendecies above into tendSum2nd
+        ! --- sum up the tendecies above into tendSum2nd for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1206,15 +1073,19 @@ module sw_time_integration
 
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(2,2)
-                    iEdge = edgesInLTSHalo(2,2,ie)
-                    uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
+                 do iRegion =1,2  
+                    do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                      iEdge = edgesInLTSHalo(iRegion,2,ie)
+                      uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
+                    end do
                  end do
               end if
-              do ic = 1, nCellsInLTSHalo(2,2)
-                 iCell = cellsInLTSHalo(2,2,ic)
-                 hTendSum2nd(k,iCell) = hTendSum2nd(k,iCell) +  hTend(k,iCell)
-                 tracersTendSum2nd(:,k,iCell) = tracersTendSum2nd(:,k,iCell) + tracersTend(:,k,iCell)
+              do iRegion =1,2
+                 do ic = 1, nCellsInLTSHalo(iRegion,2)
+                    iCell = cellsInLTSHalo(iRegion,2,ic)
+                    hTendSum2nd(k,iCell) = hTendSum2nd(k,iCell) +  hTend(k,iCell)
+                    tracersTendSum2nd(:,k,iCell) = tracersTendSum2nd(:,k,iCell) + tracersTend(:,k,iCell)
+                 end do
               end do
            end do
 
@@ -1229,10 +1100,8 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 1) !compute tendency at sol new on the fine
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 1)
-           call sw_compute_tend(tendPool, statePool, meshPool, 2) 
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2) !TODO
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) !TODO
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
            block => block % next
         end do
@@ -1283,7 +1152,21 @@ module sw_time_integration
               end do
            end do
 
-           call sw_compute_solve_diagnostics_lts(dt, statePool, meshPool, LTSPool, 2, 1, 1)
+           !BEGIN: TO REMOVE
+           !print*, 'LTS - First Stage - Fine'
+           !do k =1, nVertLevels
+           !   do ie = 1, nEdgesInLTSHalo(1,1)
+           !      iEdge = edgesInLTSHalo(1,1,ie)
+           !      print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
+           !   end do
+           !   do ic = 1, nCellsInLTSHalo(1,1)
+           !      iCell = cellsInLTSHalo(1,1,ic)
+           !      print*, 'h=', hNew(k,iCell), 'cell=', iCell
+           !   end do
+           !end do
+           !END: TO REMOVE
+
+           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !TODO
 
            block => block % next
         end do
@@ -1339,7 +1222,7 @@ module sw_time_integration
            call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
         end if
 
-        ! --- compute tendencies for interface layer 1 
+        ! --- compute tendencies for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1347,70 +1230,14 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 2) !compute tendency at sol new on interface layer 1
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 2)
-           call sw_compute_tend(tendPool, statePool, meshPool, 2)
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2) !TODO
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) !TODO
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
-           block => block % next
-        end do
-
-        ! --- sum up the tendecies above into tendSum1st
-        block => domain % blocklist
-        do while (associated(block))
-           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-           call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
-
-           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
-
-           call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-           call mpas_pool_get_array(tendPool, 'u', uTend)
-           call mpas_pool_get_array(tendPool, 'h', hTend)
-           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
-
-           call mpas_pool_get_array(tendSum2ndPool, 'u', uTendSum1st)
-           call mpas_pool_get_array(tendSum2ndPool, 'h', hTendSum1st)
-           call mpas_pool_get_array(tendSum2ndPool, 'tracers', tracersTendSum1st)
-
-           do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,2)
-                    iEdge = edgesInLTSHalo(1,2,ie)
-                    uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
-                 end do
-              end if
-              do ic = 1, nCellsInLTSHalo(1,2)
-                 iCell = cellsInLTSHalo(1,2,ic)
-                 hTendSum1st(k,iCell) = hTendSum1st(k,iCell) +  hTend(k,iCell)
-                 tracersTendSum1st(:,k,iCell) = tracersTendSum1st(:,k,iCell) + tracersTend(:,k,iCell)
-              end do
-           end do
-
-           block => block % next
-        end do
-
-        ! --- compute tendencies for interface layer 2
-        block => domain % blocklist
-        do while (associated(block))
-           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'state', statePool)
-           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 2, 2) !compute tendency at sol new on interface layer 2
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 2, 2)
-           call sw_compute_tend(tendPool, statePool, meshPool, 2)
-           call sw_compute_scalar_tend(tendPool, statePool,meshPool, 2) 
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
            block => block % next
-         end do
+        end do
 
-        ! --- sum up the tendecies above into tendSum1st
+        ! --- sum up the tendecies above into tendSum1st for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1434,15 +1261,19 @@ module sw_time_integration
 
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(2,2)
-                    iEdge = edgesInLTSHalo(2,2,ie)
-                    uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
+                 do iRegion = 1,2
+                    do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                       iEdge = edgesInLTSHalo(iRegion,2,ie)
+                       uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
+                    end do
                  end do
               end if
-              do ic = 1, nCellsInLTSHalo(2,2)
-                 iCell = cellsInLTSHalo(2,2,ic)
-                 hTendSum1st(k,iCell) = hTendSum1st(k,iCell) +  hTend(k,iCell)
-                 tracersTendSum1st(:,k,iCell) = tracersTendSum1st(:,k,iCell) + tracersTend(:,k,iCell)
+              do iRegion = 1,2
+                 do ic = 1, nCellsInLTSHalo(iRegion,2)
+                    iCell = cellsInLTSHalo(iRegion,2,ic)
+                    hTendSum1st(k,iCell) = hTendSum1st(k,iCell) +  hTend(k,iCell)
+                    tracersTendSum1st(:,k,iCell) = tracersTendSum1st(:,k,iCell) + tracersTend(:,k,iCell)
+                 end do
               end do
            end do
 
@@ -1457,10 +1288,8 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 1) !compute tendency at sol new on the fine
-           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 1)
-           call sw_compute_tend(tendPool, statePool, meshPool, 2)
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2) !TODO
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) !TODO
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
            block => block % next
         end do
@@ -1504,18 +1333,32 @@ module sw_time_integration
                     uNew(k,iEdge) =  0.5 * uOld(k,iEdge) + 0.5 * uNew(k,iEdge) + 0.5 *  dtFine * uTend(k,iEdge)
                  end do
               end if
-              do ic = 1, nCellsInLTSHalo(1,2)
-                 iCell = cellsInLTSHalo(1,2,ic)
+              do ic = 1, nCellsInLTSHalo(1,1)
+                 iCell = cellsInLTSHalo(1,1,ic)
                  hNew(k,iCell) = 0.5 * hOld(k,iCell) + 0.5 * hNew(k,iCell) + 0.5 * dtFine * hTend(k,iCell)
                  tracersNew(:,k,iCell) = 0.5 * tracersOld(:,k,iCell) * hOld(k,iCell) + 0.5 * tracersNew(:,k,iCell) + 0.5 * dtFine * tracersTend(:,k,iCell)
               end do
            end do
 
-           call sw_compute_solve_diagnostics_lts(dt, statePool, meshPool, LTSPool, 2, 1, 1)
+           !BEGIN: TO REMOVE
+           !print*, 'LTS - Second Stage - Fine'
+           !do k =1, nVertLevels
+           !   do ie = 1, nEdgesInLTSHalo(1,1)
+           !      iEdge = edgesInLTSHalo(1,1,ie)
+           !      print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
+           !   end do
+           !   do ic = 1, nCellsInLTSHalo(1,1)
+           !      iCell = cellsInLTSHalo(1,1,ic)
+           !      print*, 'h=', hNew(k,iCell), 'cell=', iCell
+           !   end do
+           !end do
+           !END: TO REMOVE
+
+           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !TODO
 
            block => block % next
         end do
-     end do  ! End of substepping
+     end do  ! end of substepping
 
      ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st  
 
@@ -1564,14 +1407,27 @@ module sw_time_integration
               do ic = 1, nCellsInLTSHalo(iRegion,2)
                  iCell = cellsInLTSHalo(iRegion,2,ic)
                  hNew(k,iCell) = hOld(k,iCell) + 0.5 * dtFine * hTendSum2nd(k,iCell) + 0.5 * dtFine * hTendSum1st(k,iCell)
-                 tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + 0.5 * dtFine * tracersTendSum2nd(:,k,iCell) &
+                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + 0.5 * dtFine * tracersTendSum2nd(:,k,iCell) &
                                                 + 0.5 * dtFine * tracersTendSum1st(:,k,iCell)
               end do
            end do
         end do
 
-        call sw_compute_solve_diagnostics_lts(dt, firstStagePool, meshPool, LTSPool, 1, 1, 2)
-        call sw_compute_solve_diagnostics_lts(dt, firstStagePool, meshPool, LTSPool, 1, 2, 2)
+        !BEGIN: TO REMOVE
+        print*, 'LTS - Second Stage - Interface Layer 2'
+        do k =1, nVertLevels
+          do ie = 1, nEdgesInLTSHalo(2,2)
+             iEdge = edgesInLTSHalo(2,2,ie)
+             print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
+          end do
+          do ic = 1, nCellsInLTSHalo(2,2)
+             iCell = cellsInLTSHalo(2,2,ic)
+             print*, 'h=', hNew(k,iCell), 'cell=', iCell
+          end do
+        end do
+        !END: TO REMOVE
+
+        call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !TODO 
 
         block => block % next
      end do
