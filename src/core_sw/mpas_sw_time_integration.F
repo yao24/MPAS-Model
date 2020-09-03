@@ -755,8 +755,10 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool,  1, 1, 2) !compute tendency at old soln on interface layer 1
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 1, 2)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool,  1, 1, 2) !compute tendency at old soln on interface layer 1
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 1, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 1)
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1) 
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
         
            block => block % next
@@ -833,8 +835,10 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 1, 2, 2)  !compute tendency at old soln on interface layer 2
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 2, 2)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 1, 2, 2)  !compute tendency at old soln on interface layer 2
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 2, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 1)
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
         
            block => block % next
@@ -911,8 +915,10 @@ module sw_time_integration
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-        call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 1, 2, 1)  !compute tendency at old soln on coarse
-        call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 2, 1)
+        !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 1, 2, 1)  !compute tendency at old soln on coarse
+        !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 1, 2, 1)
+        call sw_compute_tend(tendPool, statePool, meshPool, 1)
+        call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)
         call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
         block => block % next
      end do
@@ -988,8 +994,10 @@ module sw_time_integration
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-        call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool,  1, 2, 1) !compute tendency at first stage soln on coarse
-        call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, 2, 1)
+        !call sw_compute_tend_lts(tendPool, firstStagePool, meshPool, LTSPool,  1, 2, 1) !compute tendency at first stage soln on coarse
+        !call sw_compute_scalar_tend_lts(tendPool, firstStagePool, meshPool,LTSPool, 1, 2, 1)
+        call sw_compute_tend(tendPool, firstStagePool, meshPool, 1)
+        call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1)
         call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
         block => block % next
      end do
@@ -1111,8 +1119,11 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 2) !compute tendency at sol new on interface layer 1
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 2)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 2) !compute tendency at sol new on interface layer 1
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2) 
+           call sw_compute_scalar_tend(tendPool, statePool,meshPool, 2)
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
            block => block % next
         end do
 
@@ -1163,8 +1174,11 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 2, 2) !compute tendency at sol new on interface layer 2
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 2, 2)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 2, 2) !compute tendency at sol new on interface layer 2
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 2, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2)
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
            block => block % next
         end do
 
@@ -1215,8 +1229,10 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 1) !compute tendency at sol new on the fine
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 1)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 1) !compute tendency at sol new on the fine
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 1)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2) 
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
            block => block % next
         end do
@@ -1331,8 +1347,11 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 2) !compute tendency at sol new on interface layer 1
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 2)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 2) !compute tendency at sol new on interface layer 1
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2)
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
            block => block % next
         end do
 
@@ -1383,8 +1402,11 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 2, 2) !compute tendency at sol new on interface layer 2
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 2, 2)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 2, 2) !compute tendency at sol new on interface layer 2
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 2, 2)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2)
+           call sw_compute_scalar_tend(tendPool, statePool,meshPool, 2) 
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
            block => block % next
          end do
 
@@ -1435,8 +1457,10 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 1) !compute tendency at sol new on the fine
-           call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 1)
+           !call sw_compute_tend_lts(tendPool, statePool, meshPool, LTSPool, 2, 1, 1) !compute tendency at sol new on the fine
+           !call sw_compute_scalar_tend_lts(tendPool, statePool, meshPool,LTSPool, 2, 1, 1)
+           call sw_compute_tend(tendPool, statePool, meshPool, 2)
+           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
            block => block % next
         end do
