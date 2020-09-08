@@ -491,27 +491,6 @@ module sw_time_integration
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
 
-           !BEGIN: TO REMOVE
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-           call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-           call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-           if( ssprk_step == 2) then
-           print*, 'SSPRK2 - Sol New when we compute the increment for tendSum1st'
-           do k =1, nVertLevels
-              do i = 1, nEdgesInLTSHalo(1,1)
-                 iEdge = edgesInLTSHalo(1,1,i)
-                 !print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
-              end do
-           do i = 1, nCellsInLTSHalo(1,1)
-               iCell = cellsInLTSHalo(1,1,i)
-               !print*, 'h=', hNew(k,iCell), 'cell=', iCell
-           end do
-           end do
-           end if
-           !END: TO REMOVE
-
           call sw_compute_tend(tendPool, statePool, meshPool, 2)
           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
           call sw_enforce_boundary_edge(tendPool, meshPool)
@@ -560,19 +539,19 @@ module sw_time_integration
           end if
           hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
           !BEGIN: TO REMOVE
-          if(ssprk_step == 1) then
-             print*, 'SSPRK - First Stage - Interface Layer 2'
-             do k = 1, nVertLevels
-                do i = 1, nEdgesInLTSHalo(2,2)
-                   iEdge = edgesInLTSHalo(2,2,i)
-                   print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
-                end do
-                do i = 1, nCellsInLTSHalo(2,2)
-                   iCell = cellsInLTSHalo(2,2,i)
-                   print*, 'h=', hNew(k,iCell), 'cell=', iCell
-                end do
-             end do
-          end if
+          !if(ssprk_step == 2) then
+          !   print*, 'SSPRK - Second Stage - Coarse'
+          !   do k = 1, nVertLevels
+          !      do i = 1, nEdgesInLTSHalo(2,1)
+          !         iEdge = edgesInLTSHalo(2,1,i)
+          !         print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
+          !      end do
+          !      do i = 1, nCellsInLTSHalo(2,1)
+          !         iCell = cellsInLTSHalo(2,1,i)
+          !         print*, 'h=', hNew(k,iCell), 'cell=', iCell
+          !      end do
+          !   end do
+          !end if
           !END: TO REMOVE
           do iCell = 1, nCells
              do k = 1, nVertLevels 
@@ -900,17 +879,17 @@ module sw_time_integration
         end do
 
         !BEGIN: TO REMOVE
-        print*, 'LTS - First Stage - Interface Layer 2'
-        do k =1, nVertLevels
-           do ie = 1, nEdgesInLTSHalo(2,2)
-              iEdge = edgesInLTSHalo(2,2,ie)
-              print*, 'u=', uFirstStage(k,iEdge), 'edge=', iEdge
-           end do
-           do ic = 1, nCellsInLTSHalo(2,2)
-              iCell = cellsInLTSHalo(2,2,ic)
-              print*, 'h=', hFirstStage(k,iCell), 'cell=', iCell
-           end do 
-        end do
+        !print*, 'LTS - First Stage - Coarse'
+        !do k =1, nVertLevels
+        !   do ie = 1, nEdgesInLTSHalo(2,1)
+        !      iEdge = edgesInLTSHalo(2,1,ie)
+        !      print*, 'u=', uFirstStage(k,iEdge), 'edge=', iEdge
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(2,1)
+        !      iCell = cellsInLTSHalo(2,1,ic)
+        !      print*, 'h=', hFirstStage(k,iCell), 'cell=', iCell
+        !   end do 
+        !end do
         !END: TO REMOVE
           
         call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) !TODO
@@ -1452,17 +1431,17 @@ module sw_time_integration
         end do
 
         !BEGIN: TO REMOVE
-        print*, 'LTS - Second Stage - Interface Layer 2'
-        do k =1, nVertLevels
-          !do ie = 1, nEdgesInLTSHalo(1,2)
-          !   iEdge = edgesInLTSHalo(1,2,ie)
-          !   print*, 'uTendSum2nd=',  uTendSum2nd(k,iEdge), 'uTendSum1st=', uTendSum1st(k,iEdge), 'edge=', iEdge
-          !end do
-          do ic = 1, nCellsInLTSHalo(1,2)
-             iCell = cellsInLTSHalo(1,2,ic)
-             !print*, 'h=', hNew(k,iCell), 'cell=', iCell
-          end do
-        end do
+        !print*, 'LTS - Second Stage - Interface Layer 2'
+        !do k =1, nVertLevels
+        !  do ie = 1, nEdgesInLTSHalo(2,2)
+        !     iEdge = edgesInLTSHalo(2,2,ie)
+        !     print*, 'u=',  uNew(k,iEdge), 'edge=', iEdge
+        !  end do
+        !  do ic = 1, nCellsInLTSHalo(2,2)
+        !     iCell = cellsInLTSHalo(2,2,ic)
+        !     print*, 'h=', hNew(k,iCell), 'cell=', iCell
+        !  end do
+        !end do
         !END: TO REMOVE
 
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !TODO 
