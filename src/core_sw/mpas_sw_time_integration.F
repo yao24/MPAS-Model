@@ -561,14 +561,14 @@ module sw_time_integration
           hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
           !BEGIN: TO REMOVE
           if(ssprk_step == 1) then
-             print*, 'SSPRK - First Stage - Interface Layer 1'
+             print*, 'SSPRK - First Stage - Interface Layer 2'
              do k = 1, nVertLevels
-                do i = 1, nEdgesInLTSHalo(1,2)
-                   iEdge = edgesInLTSHalo(1,2,i)
+                do i = 1, nEdgesInLTSHalo(2,2)
+                   iEdge = edgesInLTSHalo(2,2,i)
                    print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
                 end do
-                do i = 1, nCellsInLTSHalo(1,2)
-                   iCell = cellsInLTSHalo(1,2,i)
+                do i = 1, nCellsInLTSHalo(2,2)
+                   iCell = cellsInLTSHalo(2,2,i)
                    print*, 'h=', hNew(k,iCell), 'cell=', iCell
                 end do
              end do
@@ -900,14 +900,14 @@ module sw_time_integration
         end do
 
         !BEGIN: TO REMOVE
-        print*, 'LTS - First Stage - Interface Layer 1'
+        print*, 'LTS - First Stage - Interface Layer 2'
         do k =1, nVertLevels
-           do ie = 1, nEdgesInLTSHalo(1,2)
-              iEdge = edgesInLTSHalo(1,2,ie)
+           do ie = 1, nEdgesInLTSHalo(2,2)
+              iEdge = edgesInLTSHalo(2,2,ie)
               print*, 'u=', uFirstStage(k,iEdge), 'edge=', iEdge
            end do
-           do ic = 1, nCellsInLTSHalo(1,2)
-              iCell = cellsInLTSHalo(1,2,ic)
+           do ic = 1, nCellsInLTSHalo(2,2)
+              iCell = cellsInLTSHalo(2,2,ic)
               print*, 'h=', hFirstStage(k,iCell), 'cell=', iCell
            end do 
         end do
