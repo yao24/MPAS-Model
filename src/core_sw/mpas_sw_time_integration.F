@@ -539,16 +539,16 @@ module sw_time_integration
           end if
           hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
           !BEGIN: TO REMOVE
-          !if(ssprk_step == 2) then
-          !   print*, 'SSPRK - Second Stage - Coarse'
+          !if(ssprk_step == 1) then
+          !   print*, 'SSPRK - First Stage - Fine'
           !   do k = 1, nVertLevels
-          !      do i = 1, nEdgesInLTSHalo(2,1)
-          !         iEdge = edgesInLTSHalo(2,1,i)
+          !      do i = 1, nEdgesInLTSHalo(1,1)
+          !         iEdge = edgesInLTSHalo(1,1,i)
           !         print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
           !      end do
-          !      do i = 1, nCellsInLTSHalo(2,1)
-          !         iCell = cellsInLTSHalo(2,1,i)
-          !         print*, 'h=', hNew(k,iCell), 'cell=', iCell
+          !      do i = 1, nCellsInLTSHalo(1,1)
+          !         iCell = cellsInLTSHalo(1,1,i)
+          !         print*,  hNew(k,iCell), 'cell=', iCell
           !      end do
           !   end do
           !end if
@@ -883,11 +883,11 @@ module sw_time_integration
         !do k =1, nVertLevels
         !   do ie = 1, nEdgesInLTSHalo(2,1)
         !      iEdge = edgesInLTSHalo(2,1,ie)
-        !      print*, 'u=', uFirstStage(k,iEdge), 'edge=', iEdge
+        !      !print*, 'u=', uFirstStage(k,iEdge), 'edge=', iEdge
         !   end do
         !   do ic = 1, nCellsInLTSHalo(2,1)
         !      iCell = cellsInLTSHalo(2,1,ic)
-        !      print*, 'h=', hFirstStage(k,iCell), 'cell=', iCell
+        !      print*,  hFirstStage(k,iCell)!, 'cell=', iCell
         !   end do 
         !end do
         !END: TO REMOVE
@@ -1066,8 +1066,8 @@ module sw_time_integration
                     uNew(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge)
                  end do
               end if
-              do ic = 1, nCellsInLTSHalo(1,2)
-                 iCell = cellsInLTSHalo(1,2,ic)
+              do ic = 1, nCellsInLTSHalo(1,1)
+                 iCell = cellsInLTSHalo(1,1,ic)
                  hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell)
                  tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)
               end do
@@ -1082,7 +1082,7 @@ module sw_time_integration
            !   end do
            !   do ic = 1, nCellsInLTSHalo(1,1)
            !      iCell = cellsInLTSHalo(1,1,ic)
-           !      print*, 'h=', hNew(k,iCell), 'cell=', iCell
+           !      print*, hCell(k,iCell), 'cell=', iCell
            !   end do
            !end do
            !END: TO REMOVE
