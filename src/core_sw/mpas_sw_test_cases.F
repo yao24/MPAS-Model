@@ -936,7 +936,7 @@ module sw_test_cases
       real (kind=RKIND), dimension(:), pointer :: latEdge, lonEdge
       real (kind=RKIND), dimension(:), pointer :: dvEdge, dcEdge, areaCell, xCell, yCell, zCell
 
-      real (kind=RKIND), dimension(:,:), pointer :: weightsOnEdgeFortran
+      real (kind=RKIND), dimension(:,:), pointer :: weightsOnEdge
  
       call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
       call mpas_pool_get_dimension(meshPool, 'vertexDegree', vertexDegree)
@@ -962,26 +962,40 @@ module sw_test_cases
       call mpas_pool_get_array(meshPool, 'areaCell', areaCell)
       call mpas_pool_get_array(meshPool, 'dcEdge', dcEdge)
       call mpas_pool_get_array(meshPool, 'dvEdge', dvEdge)
-      call mpas_pool_get_array(meshPool, 'weightsOnEdgeFortran', weightsOnEdgeFortran)
+      call mpas_pool_get_array(meshPool, 'weightsOnEdge', weightsOnEdge)
 
-      weightsOnEdgeFortran(:,:) = 0.0
+      weightsOnEdge(:,:) = 0.0
       do iEdge = 1, nEdges
          iEdgeCells(1) = cellsOnEdge(1,iEdge)
          iEdgeCells(2) = cellsOnEdge(2,iEdge)
          
          v2 = verticesOnEdge(1,iEdge) !this is v2 in the Thuburn paper  
+         
+         ! BEGIN: TO REMOVE: This is what is in MPAS but it is wrong because it
+         ! assumes that verticesOnEdge(1,iEdge) < verticesOnEdge(2,iEdge) but
+         ! that is not always the case, unlike for the cellsOnEdge for which
+         ! cellsOnEdge(1,)iEdge < cellsOnEdge(2,iEdge) always
+
          ! ---- BEGIN: compute c
-         do ii = 1, vertexDegree
-            v2Edge = edgesOnVertex(ii, v2)
-            if (v2Edge == iEdge) then 
-               ! Vector points from vertex 1 to vertex 2
-               if(v2 == verticesOnEdge(1, iEdge)) then
-                  c  = - 1.0 !this is t_{e,v_2} from Thuburn (or edgeSignOnVertex(ii,v2) from MPAS)
-               else
-                  c  =  1.0
-               end if
-            end if
-         end do       
+         !do ii = 1, vertexDegree
+         !   v2Edge = edgesOnVertex(ii, v2)
+         !   if (v2Edge == iEdge) then 
+         !      ! Vector points from vertex 1 to vertex 2
+         !      if(v2 == verticesOnEdge(1, iEdge)) then
+         !         c  = - 1.0 !this is t_{e,v_2} from Thuburn (or edgeSignOnVertex(ii,v2) from MPAS)
+         !      else
+         !         c  =  1.0
+         !      end if
+         !   end if
+         !end do       
+ 
+         !END: TO REMOVE
+
+         if (v2 < verticesOnEdge(2,iEdge)) then
+            c = - 1.0
+         else 
+            c = 1.0
+         end if
  
          c = - c !this is c_{e,e'} from Peixoto, which is -1/t_{e,v_2}
          
@@ -1185,7 +1199,7 @@ module sw_test_cases
 
             ! --- END: compute areaSum
 
-            weightsOnEdgeFortran(i, iEdge) = c  * dvEdge(jEdge)/dcEdge(iEdge) * (0.5 - areaSum) * n 
+            weightsOnEdge(i, iEdge) = c  * dvEdge(jEdge)/dcEdge(iEdge) * (0.5 - areaSum) * n 
 
          end do
       end do
