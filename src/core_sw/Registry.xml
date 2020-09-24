@@ -223,6 +223,7 @@
 			<var name="edgesOnCell"/>
 			<var name="edgesOnEdge"/>
 			<var name="weightsOnEdge"/>
+			<var name="weightsOnEdgeFortran"/>
 			<var name="dvEdge"/>
 			<var name="dcEdge"/>
 			<var name="angleEdge"/>
@@ -303,6 +304,7 @@
 		<var name="edgesOnCell"                       type="integer"  dimensions="maxEdges nCells"/>
 		<var name="edgesOnEdge"                       type="integer"  dimensions="maxEdges2 nEdges"/>
 		<var name="weightsOnEdge"                     type="real"     dimensions="maxEdges2 nEdges"/>
+		<var name="weightsOnEdgeFortran"              type="real"     dimensions="maxEdges2 nEdges"/>
 		<var name="dvEdge"                            type="real"     dimensions="nEdges"/>
 		<var name="dcEdge"                            type="real"     dimensions="nEdges"/>
 		<var name="angleEdge"                         type="real"     dimensions="nEdges"/>
