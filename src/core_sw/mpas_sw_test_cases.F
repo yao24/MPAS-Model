@@ -971,34 +971,19 @@ module sw_test_cases
          
          v2 = verticesOnEdge(1,iEdge) !this is v2 in the Thuburn paper  
          
-         ! BEGIN: TO REMOVE: This is what is in MPAS but it is wrong because it
-         ! assumes that verticesOnEdge(1,iEdge) < verticesOnEdge(2,iEdge) but
-         ! that is not always the case, unlike for the cellsOnEdge for which
-         ! cellsOnEdge(1,)iEdge < cellsOnEdge(2,iEdge) always
-
          ! ---- BEGIN: compute c
-         !do ii = 1, vertexDegree
-         !   v2Edge = edgesOnVertex(ii, v2)
-         !   if (v2Edge == iEdge) then 
-         !      ! Vector points from vertex 1 to vertex 2
-         !      if(v2 == verticesOnEdge(1, iEdge)) then
-         !         c  = - 1.0 !this is t_{e,v_2} from Thuburn (or edgeSignOnVertex(ii,v2) from MPAS)
-         !      else
-         !         c  =  1.0
-         !      end if
-         !   end if
-         !end do       
- 
-         !END: TO REMOVE
-
-         if (v2 < verticesOnEdge(2,iEdge)) then
-            c = - 1.0
-         else 
-            c = 1.0
-         end if
- 
-         c = - c !this is c_{e,e'} from Peixoto, which is -1/t_{e,v_2}
-         
+         do ii = 1, vertexDegree
+            v2Edge = edgesOnVertex(ii, v2)
+            if (v2Edge == iEdge) then 
+               ! Vector points from vertex 1 to vertex 2
+               if(v2 == verticesOnEdge(1, iEdge)) then
+                  c  = - 1.0 
+               else
+                  c  =  1.0
+               end if
+            end if
+         end do       
+         c = - c 
          ! ----- END: compute c
 
          do i = 1, nEdgesOnEdge(iEdge)
@@ -1015,11 +1000,11 @@ module sw_test_cases
                end do
             end do         
 
-            ! ---- BEGIN: compute n
+            ! ---- BEGIN: compute n (note we are using the MPAS convention, opposite to the 2010 Ringler paper)
             if (sharedCell < jEdgeCells(1) .or. sharedCell < jEdgeCells(2)) then
-               n = 1.0 !this is n_{e',i} in Peixoto
+               n = - 1.0 
             else if (sharedCell > jEdgeCells(1) .or. sharedCell > jEdgeCells(2)) then
-               n = - 1.0
+               n = 1.0
             end if
             ! --- END: compute n
 
