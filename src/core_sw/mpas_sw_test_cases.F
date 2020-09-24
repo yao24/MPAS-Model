@@ -1020,8 +1020,8 @@ module sw_test_cases
             deltaLon = lonCell(iEdgeCells(2)) - lonCell(iEdgeCells(1))
             Bx = cos(latCell(iEdgeCells(2))) * cos(deltaLon)
             By = cos(latCell(iEdgeCells(2))) * sin(deltaLon)
-            laEdge = atan2(sin(latCell(iEdgeCells(1))) + sin(latCell(iEdgeCells(2))) , sqrt( (cos(latCell(iEdgeCells(1))) + Bx) * (cos(latCell(iEdgeCells(1))) &
-                                                       + Bx) + By * By ))
+            laEdge = atan2(sin(latCell(iEdgeCells(1))) + sin(latCell(iEdgeCells(2))) , sqrt( (cos(latCell(iEdgeCells(1))) + & 
+                     Bx) * (cos(latCell(iEdgeCells(1))) + Bx) + By * By ))
             loEdge = lonCell(iEdgeCells(1)) + atan2(By, cos(latCell(iEdgeCells(1))) + Bx)
 
             !BEGIN: COMMENT TO DO CELL AREA TEST
@@ -1082,8 +1082,8 @@ module sw_test_cases
                deltaLon = lonCell(nextEdgeCells(2)) - lonCell(nextEdgeCells(1))
                Bx = cos(latCell(nextEdgeCells(2))) * cos(deltaLon)
                By = cos(latCell(nextEdgeCells(2))) * sin(deltaLon)
-               laEdge = atan2(sin(latCell(nextEdgeCells(1))) + sin(latCell(nextEdgeCells(2))) , sqrt( (cos(latCell(nextEdgeCells(1))) &
-                                                             + Bx) * (cos(latCell(nextEdgeCells(1))) + Bx) + By * By ))
+               laEdge = atan2(sin(latCell(nextEdgeCells(1))) + sin(latCell(nextEdgeCells(2))) , sqrt( (cos(latCell(nextEdgeCells(1))) + &
+                        Bx) * (cos(latCell(nextEdgeCells(1))) + Bx) + By * By ))
                loEdge = lonCell(nextEdgeCells(1)) + atan2(By, cos(latCell(nextEdgeCells(1))) + Bx)
 
                do ii=1,2 
@@ -1155,8 +1155,8 @@ module sw_test_cases
             deltaLon = lonCell(jEdgeCells(2)) - lonCell(jEdgeCells(1))
             Bx = cos(latCell(jEdgeCells(2))) * cos(deltaLon)
             By = cos(latCell(jEdgeCells(2))) * sin(deltaLon)
-            laEdge = atan2(sin(latCell(jEdgeCells(1))) + sin(latCell(jEdgeCells(2))) , sqrt( (cos(latCell(jEdgeCells(1))) &
-                                                       + Bx) * (cos(latCell(jEdgeCells(1))) + Bx) + By * By ))
+            laEdge = atan2(sin(latCell(jEdgeCells(1))) + sin(latCell(jEdgeCells(2))) , sqrt( (cos(latCell(jEdgeCells(1))) + &
+                     Bx) * (cos(latCell(jEdgeCells(1))) + Bx) + By * By ))
             loEdge = lonCell(jEdgeCells(1)) + atan2(By, cos(latCell(jEdgeCells(1))) + Bx)            
             !END: COMMENT TO DO CELL AREA TEST
 
@@ -1231,7 +1231,6 @@ module sw_test_cases
       sphere_distance = 2.*radius*asin(arg1)
 
    end function sphere_distance
-
 
    real function aa(theta)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
