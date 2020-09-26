@@ -68,7 +68,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'state', statePool)
 
-            call compute_weightsOnEdgeFortran(meshPool)
+            !call compute_weightsOnEdgeFortran(meshPool) decomment to use in-house weights
 
             call sw_test_case_2(meshPool, statePool)
 
@@ -315,7 +315,7 @@ module sw_test_cases
 
       call mpas_pool_get_array(statePool, 'u', u, 1)
       call mpas_pool_get_array(statePool, 'h', h, 1)
-
+    
       xCell = xCell * a
       yCell = yCell * a
       zCell = zCell * a
@@ -347,6 +347,7 @@ module sw_test_cases
                                  psiVertex(verticesOnEdge(2,iEdge)) - &
                                  psiVertex(verticesOnEdge(1,iEdge)) &
                                ) / dvEdge(iEdge)
+
       end do
       deallocate(psiVertex)
 
