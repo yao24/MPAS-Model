@@ -628,7 +628,7 @@ module sw_time_integration
       real (kind=RKIND), intent(in) :: dt
       integer, intent(in) :: lts_order
 
-      integer :: iCell, iEdge, iRegion, k, ic, ie, m, dtScalingLTS !TODO this has to be an input file 
+      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: firstStagePool, secondStagePool, tendSum1stPool, tendSum2ndPool, tendSum3rdPool
@@ -650,15 +650,16 @@ module sw_time_integration
       real (kind=RKIND) :: weightOld, weightNew, weightTend
       real (kind=RKIND) :: weightTendSum1st, weightTendSum2nd, weightTendSum3rd
 
-      integer, pointer :: config_test_case
+      integer, pointer :: config_test_case, config_dt_scaling_LTS
       real (kind=RKIND), pointer :: config_h_mom_eddy_visc4
 
+      call mpas_pool_get_config(domain % configs, 'config_dt_scaling_LTS', config_dt_scaling_LTS)
       call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
       call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
 
-      dtScalingLTS = 4
+      M = config_dt_scaling_LTS
 
-      dtFine = dt / dtScalingLTS
+      dtFine = dt / M
 
       weightOld = 0.5
       weightNew = 0.5
@@ -1078,7 +1079,7 @@ module sw_time_integration
      ! --- FINE AND COARSE ADVANCEMENT STEP: all stages for fine, second (and third if needed) for coarse
   
      ! --- begin substepping for fine solution advancement
-     do m =1, dtScalingLTS
+     do im =1, M
 
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
         block => domain % blocklist
@@ -1109,10 +1110,10 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
  
-           alpha = REAL((m - 1)) / dtScalingLTS
+           alpha = REAL((im - 1)) / M
            alphaHat = 0.0
            if (lts_order == 3) then
-              alphaHat = REAL((m - 1) * (m - 1)) / (dtScalingLTS * dtScalingLTS)
+              alphaHat = REAL((im - 1) * (im - 1)) / (M * M)
            end if
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
@@ -1284,10 +1285,10 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-           beta = REAL(m) / dtScalingLTS
+           beta = REAL(im) / M
            betaHat = 0.0
            if (lts_order == 3) then
-              betaHat = REAL((m - 1) * (m + 1)) / (dtScalingLTS * dtScalingLTS)
+              betaHat = REAL((im - 1) * (im + 1)) / (M * M)
            end if
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
@@ -1462,8 +1463,8 @@ module sw_time_integration
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
   
-              gam = REAL(2 * (m - 1) + 1) / ( 2 * dtScalingLTS )
-              gamHat = REAL(2 * (m - 1) * (m - 1) + 2 * (m - 1) + 1) / (2 * dtScalingLTS * dtScalingLTS)
+              gam = REAL(2 * (im - 1) + 1) / ( 2 * M )
+              gamHat = REAL(2 * (im - 1) * (im - 1) + 2 * (im - 1) + 1) / (2 * M * M)
               do k =1, nVertLevels
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
