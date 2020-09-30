@@ -52,10 +52,12 @@ module sw_time_integration
       else if (trim(config_time_integration) == 'FWDEULR') then
          call sw_ssprk(domain, dt, 1)
       else if (trim(config_time_integration) == 'LTS2') then
-         call sw_lts2(domain, dt)
+         call sw_lts(domain, dt, 2)
+      else if (trim(config_time_integration) == 'LTS3') then
+         call sw_lts(domain, dt, 3)
       else
          call mpas_log_write('Unknown time integration option '//trim(config_time_integration), MPAS_LOG_ERR)
-         call mpas_log_write('Currently, only ''RK4'', ''FWDEULR'', ''SSPRK2'', ''SSPRK3'' and ''LTS2'' are supported.', MPAS_LOG_CRIT)
+         call mpas_log_write('Currently, only ''RK4'', ''FWDEULR'', ''SSPRK2'', ''SSPRK3'', ''LTS2'' and ''LTS3'' are supported.', MPAS_LOG_CRIT)
       end if
 
       block => domain % blocklist
@@ -607,7 +609,7 @@ module sw_time_integration
 
    end subroutine sw_ssprk
 
-   subroutine sw_lts2(domain, dt)
+   subroutine sw_lts(domain, dt, lts_order)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Advance model state forward in time by the specified time step using
    !   the local time stepping (LTS) scheme of order 2 from Hoang et al. (2019)
@@ -624,34 +626,57 @@ module sw_time_integration
 
       type (domain_type), intent(inout) :: domain
       real (kind=RKIND), intent(in) :: dt
+      integer, intent(in) :: lts_order
 
       integer :: iCell, iEdge, iRegion, k, ic, ie, m, dtScalingLTS !TODO this has to be an input file 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
-      type (mpas_pool_type), pointer :: firstStagePool, tendSum1stPool, tendSum2ndPool
+      type (mpas_pool_type), pointer :: firstStagePool, secondStagePool, tendSum1stPool, tendSum2ndPool, tendSum3rdPool
       type (mpas_pool_type), pointer :: prevFirstStagePool, nextFirstStagePool, prevTendSum1stPool, nextTendSum1stPool, prevTendSum2ndPool, nextTendSum2ndPool
-
+      type (mpas_pool_type), pointer :: prevSecondStagePool, nextSecondStagePool, prevTendSum3rdPool, nextTendSum3rdPool
  
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels
 
-      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend, uTendSum1st, uTendSum2nd, uFirstStage
-      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend, hTendSum1st, hTendSum2nd, hFirstStage
+      real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend, uTendSum1st, uTendSum2nd, uTendSum3rd, uFirstStage, uSecondStage
+      real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend, hTendSum1st, hTendSum2nd, hTendSum3rd, hFirstStage, hSecondStage
       real (kind=RKIND), dimension(:,:), pointer :: uReconstructX, uReconstructY, uReconstructZ, uReconstructZonal, uReconstructMeridional
-      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersTend, tracersTendSum1st, tracersTendSum2nd, tracersFirstStage
-      real (kind=RKIND) :: dtFine
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersTend, tracersTendSum1st, tracersTendSum2nd, tracersTendSum3rd
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracersFirstStage, tracersSecondStage
+      real (kind=RKIND) :: dtFine, alpha, alphaHat, beta, betaHat, gam, gamHat
 
       integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
       integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
-      
+
+      real (kind=RKIND) :: weightOld, weightNew, weightTend
+      real (kind=RKIND) :: weightTendSum1st, weightTendSum2nd, weightTendSum3rd
+
       integer, pointer :: config_test_case
       real (kind=RKIND), pointer :: config_h_mom_eddy_visc4
 
       call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
       call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
 
-      dtScalingLTS = 8
+      dtScalingLTS = 4
 
       dtFine = dt / dtScalingLTS
+
+      weightOld = 0.5
+      weightNew = 0.5
+      weightTend = 0.5
+
+      weightTendSum1st = 0.5
+      weightTendSum2nd = 0.5
+      weightTendSum3rd = 0.0
+
+      if (lts_order == 3) then
+         weightOld = 0.75
+         weightNew = 0.25
+         weightTend = 0.25
+
+         weightTendSum1st = 1.0 / 6.0
+         weightTendSum2nd = 1.0 / 6.0
+         weightTendSum3rd = 2.0 / 3.0
+      end if
 
       block => domain % blocklist
       do while (associated(block))
@@ -661,21 +686,28 @@ module sw_time_integration
          call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
          allocate(firstStagePool)
+         allocate(secondStagePool)
          allocate(tendSum1stPool)
          allocate(tendSum2ndPool)
+         allocate(tendSum3rdPool)
 
          call mpas_pool_create_pool(firstStagePool)
          call mpas_pool_clone_pool(statePool, firstStagePool, 1)
-
+         call mpas_pool_create_pool(secondStagePool)
+         call mpas_pool_clone_pool(statePool, secondStagePool, 1)
+         
          call mpas_pool_create_pool(tendSum1stPool)
          call mpas_pool_clone_pool(tendPool, tendSum1stPool, 1)
-         
          call mpas_pool_create_pool(tendSum2ndPool)
          call mpas_pool_clone_pool(tendPool, tendSum2ndPool, 1)
+         call mpas_pool_create_pool(tendSum3rdPool)
+         call mpas_pool_clone_pool(tendPool, tendSum3rdPool, 1)
 
          call mpas_pool_add_subpool(block % structs, 'first_stage_state', firstStagePool)
+         call mpas_pool_add_subpool(block % structs, 'second_stage_state', secondStagePool)
          call mpas_pool_add_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
          call mpas_pool_add_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
+         call mpas_pool_add_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
 
          call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
          call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -699,13 +731,23 @@ module sw_time_integration
          call mpas_pool_get_array(tendSum2ndPool, 'u', uTendSum2nd)
          call mpas_pool_get_array(tendSum2ndPool, 'h', hTendSum2nd)
          call mpas_pool_get_array(tendSum2ndPool, 'tracers', tracersTendSum2nd)
+         
+         call mpas_pool_get_array(tendSum3rdPool, 'u', uTendSum3rd)
+         call mpas_pool_get_array(tendSum3rdPool, 'h', hTendSum3rd)
+         call mpas_pool_get_array(tendSum3rdPool, 'tracers', tracersTendSum3rd)
 
          uTendSum1st(:,:) = 0
          hTendSum1st(:,:) = 0
          tracersTendSum1st(:,:,:) = 0
+         
          uTendSum2nd(:,:) = 0
          hTendSum2nd(:,:) = 0
          tracersTendSum2nd(:,:,:) = 0
+         
+         uTendSum3rd(:,:) = 0
+         hTendSum3rd(:,:) = 0
+         tracersTendSum3rd(:,:,:) = 0
+
 
          ! initialize new solution to old solution for the fine
          do k =1, nVertLevels
@@ -785,14 +827,62 @@ module sw_time_integration
          call mpas_pool_link_parinfo(block, tendSum1stPool)
          call mpas_pool_link_parinfo(block, tendSum2ndPool)
 
+         if(lts_order == 3) then
+
+         if (associated(block % prev)) then
+            call mpas_pool_get_subpool(block % prev % structs, 'second_stage_state', prevSecondStagePool)
+            call mpas_pool_get_subpool(block % prev % structs, 'tend_sum_3rd', prevTendSum3rdPool)
+         else
+            nullify(prevSecondStagePool)
+            nullify(prevTendSum3rdPool)
+         end if
+
+         if (associated(block % next)) then
+            call mpas_pool_get_subpool(block % next % structs, 'second_stage_state', nextSecondStagePool)
+            call mpas_pool_get_subpool(block % next % structs, 'tend_sum_3rd', nextTendSum3rdPool)
+         else
+            nullify(nextSecondStagePool)
+            nullify(nextTendSum3rdPool)
+         end if
+
+         call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
+
+         if (associated(prevSecondStagePool) .and. associated(nextSecondStagePool)) then
+            call mpas_pool_link_pools(secondStagePool, prevSecondStagePool, nextSecondStagePool)
+         else if (associated(prevSecondStagePool)) then
+            call mpas_pool_link_pools(secondStagePool, prevSecondStagePool)
+         else if (associated(nextSecondStagePool)) then 
+            call mpas_pool_link_pools(secondStagePool, nextPool=nextSecondStagePool)
+         else
+            call mpas_pool_link_pools(secondStagePool)
+         end if
+
+         if (associated(prevTendSum3rdPool) .and. associated(nextTendSum3rdPool)) then
+            call mpas_pool_link_pools(tendSum3rdPool, prevTendSum3rdPool, nextTendSum3rdPool)
+         else if (associated(prevTendSum3rdPool)) then
+            call mpas_pool_link_pools(tendSum3rdPool, prevTendSum3rdPool)
+         else if (associated(nextTendSum3rdPool)) then
+            call mpas_pool_link_pools(tendSum3rdPool,nextPool=nextTendSum3rdPool)
+         else
+            call mpas_pool_link_pools(tendSum3rdPool)
+         end if
+
+         call mpas_pool_link_parinfo(block, secondStagePool)
+         call mpas_pool_link_parinfo(block, tendSum3rdPool)
+
+         end if
+
          block => block % next
      end do
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-     ! BEGIN SECOND ORDER LTS SCHEME
+     ! BEGIN LTS SCHEME
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-     ! --- INTERFACE PREDICTION STEP: compute the first stage of SSPRK for interface layer 1, interface layer 2 and coarse
+     ! --- INTERFACE PREDICTION STEP
+
+     ! --- compute the first stage of SSPRK for interface layer 1, interface layer 2 and coarse (note: this is always needed)
 
      ! --- update halos for diagnostic variables
      call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
@@ -804,28 +894,28 @@ module sw_time_integration
 
      ! --- compute tendencies for interface layer 1, interface layer 2 and coarse
      block => domain % blocklist
-        do while (associated(block))
-           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'state', statePool)
-           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+        call mpas_pool_get_subpool(block % structs, 'state', statePool)
+        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) !TODO
-           call sw_compute_tend(tendPool, statePool, meshPool, 1) !TODO
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1) !TODO 
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1) !coarse
+        call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) !TODO
+        call sw_compute_tend(tendPool, statePool, meshPool, 1) !TODO
+        call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1) !TODO 
+        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
+        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
+        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1) !coarse
         
-           block => block % next
-        end do
+        block => block % next
+     end do
 
      ! --- update halos for prognostic variables
      call mpas_dmpar_field_halo_exch(domain, 'tend_u')
      call mpas_dmpar_field_halo_exch(domain, 'tend_h')
      call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
 
-     ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK2
+     ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK
      block => domain % blocklist
      do while (associated(block))
         call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -893,12 +983,99 @@ module sw_time_integration
         !   end do 
         !end do
         !END: TO REMOVE
-          
+
         block => block % next
      end do
 
-     ! --- FINE AND COARSE ADVANCEMENT STEP: compute the second stage of SSPRK2 for
-     ! the coarse and both first and second stages for the fine (using dtFine)     
+     ! --- compute the second stage of SSPRK only for interface 1 and interface 2 (this is needed here only if lts_order = 3)
+     if (lts_order == 3) then
+
+        ! --- update halos for diagnostic variables
+        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+
+        if (config_h_mom_eddy_visc4 > 0.0) then
+           call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
+           call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
+        end if
+
+        ! --- compute tendencies for interface layer 1, interface layer 2 
+        block => domain % blocklist
+        do while (associated(block))
+           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+           call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+
+           call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) !TODO
+           call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) !TODO
+           call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) !TODO
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
+
+           block => block % next
+        end do
+
+        ! --- update halos for prognostic variables
+        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+        call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+     
+        ! --- advance solution for interface layer 1, interface layer 2 with second stage of SSPRK
+        block => domain % blocklist
+        do while (associated(block))
+           call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+           call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+           call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+           call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+           call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+           call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)       
+
+           call mpas_pool_get_array(statePool, 'u', uOld, 1)
+           call mpas_pool_get_array(statePool, 'h', hOld, 1)
+           call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+           call mpas_pool_get_array(tendPool, 'u', uTend)
+           call mpas_pool_get_array(tendPool, 'h', hTend)
+           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
+
+           do k =1, nVertLevels
+              if (config_test_case /= 1) then ! For case 1, wind should be fixed
+                 do iRegion =1,2
+                    do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                       iEdge = edgesInLTSHalo(iRegion,2,ie)
+                       uSecondStage(k,iEdge) =  0.75 * uOld(k,iEdge) + 0.25 * uFirstStage(k,iEdge) + 0.25 * dt * uTend(k,iEdge)
+                    end do
+                 end do
+              end if
+              do iRegion = 1,2
+                 do ic = 1, nCellsInLTSHalo(iRegion,2)
+                    iCell = cellsInLTSHalo(iRegion,2,ic)
+                    hSecondStage(k,iCell) = 0.75 * hOld(k,iCell) + 0.25 * hFirstStage(k,iCell) + 0.25 * dt * hTend(k,iCell)
+                    tracersSecondStage(:,k,iCell) = 0.75 * tracersOld(:,k,iCell) * hOld(k,iCell) + 0.25 * tracersFirstStage(:,k,iCell) + &
+                                                    0.25 * dt * tracersTend(:,k,iCell)
+                 end do
+              end do
+           end do
+          
+           block => block % next
+        end do
+     end if
+
+     ! --- FINE AND COARSE ADVANCEMENT STEP: all stages for fine, second (and third if needed) for coarse
   
      ! --- begin substepping for fine solution advancement
      do m =1, dtScalingLTS
@@ -922,16 +1099,26 @@ module sw_time_integration
            call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+           call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
  
            call mpas_pool_get_array(statePool, 'u', uOld, 1)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
  
+           alpha = REAL((m - 1)) / dtScalingLTS
+           alphaHat = 0.0
+           if (lts_order == 3) then
+              alphaHat = REAL((m - 1) * (m - 1)) / (dtScalingLTS * dtScalingLTS)
+           end if
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
                     iEdge = edgesInLTSHalo(1,2,ie)
-                    uNew(k,iEdge) = (1 - (REAL((m - 1)) / dtScalingLTS))  * uOld(k,iEdge) + (REAL((m - 1)) / dtScalingLTS) * uFirstStage(k,iEdge)
+                    uNew(k,iEdge) = (1.0 - alpha - alphaHat) * uOld(k,iEdge) + (alpha - alphaHat) * uFirstStage(k,iEdge) + 2.0 * alphaHat * uSecondStage(k,iEdge)
                  end do
                  do ie = 1, nEdgesInLTSHalo(2,2) !interface layer 2
                     iEdge = edgesInLTSHalo(2,2,ie)
@@ -944,9 +1131,9 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
-                 hNew(k,iCell) = (1 - (REAL((m - 1)) / dtScalingLTS))  * hOld(k,iCell) + (REAL((m - 1)) / dtScalingLTS) * hFirstStage(k,iCell)
-                 tracersNew(:,k,iCell) = (1 - (REAL((m - 1)) / dtScalingLTS)) * tracersOld(:,k,iCell) * hOld(k,iCell) &
-                                          + (REAL((m - 1)) / dtScalingLTS) * tracersFirstStage(:,k,iCell)
+                 hNew(k,iCell) = (1.0 - alpha - alphaHat) * hOld(k,iCell) + (alpha - alphaHat) * hFirstStage(k,iCell) + 2.0 * alphaHat * hSecondStage(k,iCell)
+                 tracersNew(:,k,iCell) = (1.0 - alpha - alphaHat) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                         (alpha - alphaHat) * tracersFirstStage(:,k,iCell) + 2.0 * alphaHat * tracersSecondStage(:,k,iCell)
               end do
               do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
                  iCell = cellsInLTSHalo(2,2,ic)
@@ -993,7 +1180,7 @@ module sw_time_integration
         call mpas_dmpar_field_halo_exch(domain, 'tend_h')
         call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
 
-        ! --- advance fine solution (first stage of SSPRK2) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface layer 2
+        ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1089,16 +1276,24 @@ module sw_time_integration
            call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
  
            call mpas_pool_get_array(statePool, 'u', uOld, 1)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
+           beta = REAL(m) / dtScalingLTS
+           betaHat = 0.0
+           if (lts_order == 3) then
+              betaHat = REAL((m - 1) * (m + 1)) / (dtScalingLTS * dtScalingLTS)
+           end if
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
                     iEdge = edgesInLTSHalo(1,2,ie)
-                    uNew(k,iEdge) = (1 - (REAL((m)) / dtScalingLTS))  * uOld(k,iEdge) + (REAL((m)) / dtScalingLTS) * uFirstStage(k,iEdge)
+                    uNew(k,iEdge) = (1.0 - beta - betaHat) * uOld(k,iEdge) + (beta - betaHat) * uFirstStage(k,iEdge) + 2.0 * betaHat * uSecondStage(k,iEdge)
                  end do
                  do ie = 1, nEdgesInLTSHalo(2,2) !interface layer 2
                     iEdge = edgesInLTSHalo(2,2,ie)
@@ -1111,9 +1306,9 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
-                 hNew(k,iCell) = (1 - (REAL((m)) / dtScalingLTS))  * hOld(k,iCell) + (REAL((m)) / dtScalingLTS) * hFirstStage(k,iCell)
-                 tracersNew(:,k,iCell) = (1 - (REAL((m)) / dtScalingLTS)) * tracersOld(:,k,iCell) * hOld(k,iCell) &
-                                          + (REAL((m)) / dtScalingLTS) * tracersFirstStage(:,k,iCell)
+                 hNew(k,iCell) = (1.0 - beta - betaHat) * hOld(k,iCell) + (beta - betaHat) * hFirstStage(k,iCell) + 2.0 * betaHat * hSecondStage(k,iCell)
+                 tracersNew(:,k,iCell) = (1.0 - beta - betaHat) * tracersOld(:,k,iCell) * hOld(k,iCell) + &
+                                         (beta - betaHat) * tracersFirstStage(:,k,iCell) + 2.0 * betaHat * tracersSecondStage(:,k,iCell)
               end do
               do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
                  iCell = cellsInLTSHalo(2,2,ic)
@@ -1155,7 +1350,12 @@ module sw_time_integration
            block => block % next
         end do
 
-        ! --- advance fine solution (second stage of SSPRK2) AND sum up the tendecies above into tendSum1st for interface layer 1 and interface layer 2
+        ! --- update halos for prognostic variables
+        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+        call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+
+        ! --- advance fine solution (second stage of SSPRK) AND sum up the tendecies above into tendSum1st for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1197,7 +1397,7 @@ module sw_time_integration
                  end do
                  do ie = 1, nEdgesInLTSHalo(1,1)
                     iEdge = edgesInLTSHalo(1,1,ie)
-                    uNew(k,iEdge) =  0.5 * uOld(k,iEdge) + 0.5 * uNew(k,iEdge) + 0.5 *  dtFine * uTend(k,iEdge) !soln update for the fine
+                    uNew(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uNew(k,iEdge) + weightTend *  dtFine * uTend(k,iEdge) !soln update for the fine
                  end do
               end if
               do iRegion = 1,2
@@ -1209,23 +1409,9 @@ module sw_time_integration
               end do
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
-                 hNew(k,iCell) = 0.5 * hOld(k,iCell) + 0.5 * hNew(k,iCell) + 0.5 * dtFine * hTend(k,iCell) !soln update for the fine
-                 tracersNew(:,k,iCell) = 0.5 * tracersOld(:,k,iCell) * hOld(k,iCell) + 0.5 * tracersNew(:,k,iCell) + 0.5 * dtFine * tracersTend(:,k,iCell)
-              end do
-           end do
-
-           ! --- copy old soln into new soln for the fine cells and edges
-           do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,1)
-                    iEdge = edgesInLTSHalo(1,1,ie)
-                    uOld(k,iEdge) =  uNew(k,iEdge)
-                 end do
-              end if
-              do ic = 1, nCellsInLTSHalo(1,1)
-                 iCell = cellsInLTSHalo(1,1,ic)
-                 hOld(k,iCell) = hNew(k,iCell)
-                 tracersOld(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
+                 hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
+                 tracersNew(:,k,iCell) = weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
+                                         weightTend * dtFine * tracersTend(:,k,iCell)
               end do
            end do
 
@@ -1246,9 +1432,210 @@ module sw_time_integration
            block => block % next
         end do
 
+        if (lts_order == 3) then
+
+           ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
+           block => domain % blocklist
+           do while (associated(block))
+              call mpas_pool_get_subpool(block % structs, 'state', statePool)
+              call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+              call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+              call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+              call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+              call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+              call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+              call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+              call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+              call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+              call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+              call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+              call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+              call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+              call mpas_pool_get_array(statePool, 'u', uOld, 1)
+              call mpas_pool_get_array(statePool, 'h', hOld, 1)
+              call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+  
+              gam = REAL(2 * (m - 1) + 1) / ( 2 * dtScalingLTS )
+              gamHat = REAL(2 * (m - 1) * (m - 1) + 2 * (m - 1) + 1) / (2 * dtScalingLTS * dtScalingLTS)
+              do k =1, nVertLevels
+                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
+                    do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
+                       iEdge = edgesInLTSHalo(1,2,ie)
+                       uNew(k,iEdge) = (1.0 - gam - gamHat) * uOld(k,iEdge) + (gam - gamHat) * uFirstStage(k,iEdge) + 2.0 * gamHat * uSecondStage(k,iEdge)
+                    end do
+                    do ie = 1, nEdgesInLTSHalo(2,2) !interface layer 2
+                       iEdge = edgesInLTSHalo(2,2,ie)
+                       uNew(k,iEdge) = uSecondStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
+                    end do
+                    do ie = 1, nEdgesInLTSHalo(2,1) !coarse
+                       iEdge = edgesInLTSHalo(2,1,ie)
+                       uNew(k,iEdge) = uSecondStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
+                    end do
+                 end if
+                 do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
+                    iCell = cellsInLTSHalo(1,2,ic)
+                    hNew(k,iCell) = (1.0 - gam - gamHat) * hOld(k,iCell) + (gam - gamHat) * hFirstStage(k,iCell) + 2.0 * gamHat * hSecondStage(k,iCell)
+                    tracersNew(:,k,iCell) = (1.0 - gam - gamHat) * tracersOld(:,k,iCell) * hOld(k,iCell) + &
+                                            (gam - gamHat) * tracersFirstStage(:,k,iCell) + 2.0 * gamHat * tracersSecondStage(:,k,iCell)
+                 end do
+                 do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
+                    iCell = cellsInLTSHalo(2,2,ic)
+                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 end do
+                 do ic = 1, nCellsInLTSHalo(2,1) !coarse
+                    iCell = cellsInLTSHalo(2,1,ic)
+                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 end do
+              end do
+
+              block => block % next
+           end do
+
+           ! --- update halos for diagnostic variables
+           call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+
+           if (config_h_mom_eddy_visc4 > 0.0) then
+              call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
+              call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
+           end if
+
+           ! --- compute tendencies for interface layer 1, interface layer 2 and fine
+           block => domain % blocklist
+           do while (associated(block))
+              call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+              call mpas_pool_get_subpool(block % structs, 'state', statePool)
+              call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+              call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+
+              call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !TODO
+              call sw_compute_tend(tendPool, statePool, meshPool, 2) !TODO
+              call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) !TODO
+              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
+              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
+              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
+              block => block % next
+           end do
+
+           ! --- update halos for prognostic variables
+           call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+           call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+           call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+
+           ! --- advance fine solution (third stage of SSPRK) AND sum up the tendecies above into tendSum3rd for interface layer 1 and interface layer 2
+           block => domain % blocklist
+           do while (associated(block))
+              call mpas_pool_get_subpool(block % structs, 'tend', tendPool) 
+              call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+              call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
+              call mpas_pool_get_subpool(block % structs, 'state', statePool)
+              call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+
+              call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+              call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+              call mpas_pool_get_array(tendPool, 'u', uTend)
+              call mpas_pool_get_array(tendPool, 'h', hTend)
+              call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
+
+              call mpas_pool_get_array(tendSum3rdPool, 'u', uTendSum3rd)
+              call mpas_pool_get_array(tendSum3rdPool, 'h', hTendSum3rd)
+              call mpas_pool_get_array(tendSum3rdPool, 'tracers', tracersTendSum3rd)
+
+              call mpas_pool_get_array(statePool, 'u', uNew, 2) 
+              call mpas_pool_get_array(statePool, 'h', hNew, 2)
+              call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
+              call mpas_pool_get_array(statePool, 'u', uOld, 1)
+              call mpas_pool_get_array(statePool, 'h', hOld, 1)
+              call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+              do k =1, nVertLevels
+                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
+                    do iRegion = 1,2
+                       do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                          iEdge = edgesInLTSHalo(iRegion,2,ie)
+                          uTendSum3rd(k,iEdge) = uTendSum3rd(k,iEdge) + uTend(k,iEdge)
+                       end do
+                    end do
+                    do ie = 1, nEdgesInLTSHalo(1,1)
+                       iEdge = edgesInLTSHalo(1,1,ie)
+                       uNew(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uNew(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
+                    end do
+                 end if
+                 do iRegion = 1,2
+                    do ic = 1, nCellsInLTSHalo(iRegion,2)
+                       iCell = cellsInLTSHalo(iRegion,2,ic)
+                       hTendSum3rd(k,iCell) = hTendSum3rd(k,iCell) + hTend(k,iCell)
+                       tracersTendSum3rd(:,k,iCell) = tracersTendSum3rd(:,k,iCell) + tracersTend(:,k,iCell)
+                    end do
+                 end do
+                 do ic = 1, nCellsInLTSHalo(1,1)
+                    iCell = cellsInLTSHalo(1,1,ic)
+                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersNew(:,k,iCell) = (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + & 
+                                            (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell)
+                 end do
+              end do
+ 
+              block => block % next
+           end do
+        
+        end if
+
+        ! --- copy old soln into new soln for the fine cells and edges
+        block => domain % blocklist
+        do while (associated(block))
+           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+           call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+
+           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+           call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+           call mpas_pool_get_array(statePool, 'u', uNew, 2)
+           call mpas_pool_get_array(statePool, 'h', hNew, 2)
+           call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
+           call mpas_pool_get_array(statePool, 'u', uOld, 1)
+           call mpas_pool_get_array(statePool, 'h', hOld, 1)
+           call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)           
+           
+           do k =1, nVertLevels
+              if (config_test_case /= 1) then ! For case 1, wind should be fixed
+                 do ie = 1, nEdgesInLTSHalo(1,1)
+                    iEdge = edgesInLTSHalo(1,1,ie)
+                    uOld(k,iEdge) =  uNew(k,iEdge)
+                 end do
+              end if
+              do ic = 1, nCellsInLTSHalo(1,1)
+                 iCell = cellsInLTSHalo(1,1,ic)
+                 hOld(k,iCell) = hNew(k,iCell)
+                 tracersOld(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
+              end do
+           end do
+           block => block % next
+        end do
+
      end do  ! end of substepping
 
-     ! --- compute second stage of SSPRK2 for coarse
+     ! --- compute second (and third) stage of SSPRK for coarse
 
      ! --- update halos for diagnostic variables
      call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
@@ -1279,7 +1666,7 @@ module sw_time_integration
      call mpas_dmpar_field_halo_exch(domain, 'tend_h')
      call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
 
-     ! --- advance solution (2nd stage of SSPRK2 for the coarse using dt)
+     ! --- advance solution (2nd stage of SSPRK for the coarse using dt)
      block => domain % blocklist
      do while (associated(block))
         call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -1342,13 +1729,96 @@ module sw_time_integration
         block => block % next
      end do
 
-     ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st  
+     if (lts_order == 3) then
+
+        ! --- update halos for diagnostic variables
+        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+
+        if (config_h_mom_eddy_visc4 > 0.0) then
+           call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
+           call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
+        end if
+
+        ! --- compute tendencies for coarse
+        block => domain % blocklist
+        do while (associated(block))
+           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+
+           call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) !TODO
+           call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) !TODO
+           call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) !TODO
+           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
+           block => block % next
+        end do
+
+        ! --- update halos for prognostic variables
+        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+        call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+
+        ! --- advance solution (3rd stage of SSPRK for the coarse using dt)
+        block => domain % blocklist
+        do while (associated(block))
+           call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+  
+           call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+           call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+           call mpas_pool_get_array(statePool, 'u', uOld, 1)
+           call mpas_pool_get_array(statePool, 'h', hOld, 1)
+           call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+           call mpas_pool_get_array(statePool, 'u', uNew, 2)
+           call mpas_pool_get_array(statePool, 'h', hNew, 2)
+           call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+
+           call mpas_pool_get_array(tendPool, 'u', uTend)
+           call mpas_pool_get_array(tendPool, 'h', hTend)
+           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
+
+           do k =1, nVertLevels
+              if (config_test_case /= 1) then ! For case 1, wind should be fixed
+                 do ie = 1, nEdgesInLTSHalo(2,1)
+                    iEdge = edgesInLTSHalo(2,1,ie)
+                    uNew(k,iEdge) = (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) * dt * uTend(k,iEdge)
+                 end do
+              end if
+              do ic = 1, nCellsInLTSHalo(2,1)
+                 iCell = cellsInLTSHalo(2,1,ic)
+                 hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
+                 tracersNew(:,k,iCell) = (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersSecondStage(:,k,iCell) + &
+                                         (2.0 / 3.0) * dt * tracersTend(:,k,iCell)
+              end do
+           end do
+
+           block => block % next
+        end do
+
+     end if
+
+     ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st (and tendSum3rd)  
 
      ! --- correct solution for interface layer 1 and interface layer 2
      block => domain % blocklist
      do while (associated(block))
         call mpas_pool_get_subpool(block % structs, 'state', statePool)
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+        call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
         call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
         call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
@@ -1359,6 +1829,10 @@ module sw_time_integration
         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+        call mpas_pool_get_array(tendSum3rdPool, 'u', uTendSum3rd, 1)
+        call mpas_pool_get_array(tendSum3rdPool, 'h', hTendSum3rd, 1)
+        call mpas_pool_get_array(tendSum3rdPool, 'tracers', tracersTendSum3rd, 1)
 
         call mpas_pool_get_array(tendSum2ndPool, 'u', uTendSum2nd, 1)
         call mpas_pool_get_array(tendSum2ndPool, 'h', hTendSum2nd, 1)
@@ -1381,16 +1855,18 @@ module sw_time_integration
               do iRegion = 1,2
                  do ie = 1, nEdgesInLTSHalo(iRegion,2)
                     iEdge = edgesInLTSHalo(iRegion,2,ie)
-                    uNew(k,iEdge) =  uOld(k,iEdge) + 0.5 * dtFine * uTendSum2nd(k,iEdge) + 0.5 * dtFine * uTendSum1st(k,iEdge)
+                    uNew(k,iEdge) =  uOld(k,iEdge) + weightTendSum2nd * dtFine * uTendSum2nd(k,iEdge) + weightTendSum1st * dtFine * uTendSum1st(k,iEdge) + &
+                                     weightTendSum3rd * dtFine * uTendSum3rd(k,iEdge)
                  end do
               end do
            end if
            do iRegion = 1,2 
               do ic = 1, nCellsInLTSHalo(iRegion,2)
                  iCell = cellsInLTSHalo(iRegion,2,ic)
-                 hNew(k,iCell) = hOld(k,iCell) + 0.5 * dtFine * hTendSum2nd(k,iCell) + 0.5 * dtFine * hTendSum1st(k,iCell)
-                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + 0.5 * dtFine * tracersTendSum2nd(:,k,iCell) &
-                                                + 0.5 * dtFine * tracersTendSum1st(:,k,iCell)
+                 hNew(k,iCell) = hOld(k,iCell) + weightTendSum2nd * dtFine * hTendSum2nd(k,iCell) + weightTendSum1st * dtFine * hTendSum1st(k,iCell) + &
+                                 weightTendsum3rd * dtFine * hTendSum3rd(k,iCell)
+                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + weightTendSum2nd * dtFine * tracersTendSum2nd(:,k,iCell) + &
+                                         weightTendSum1st * dtFine * tracersTendSum1st(:,k,iCell) + weightTendSum3rd * dtFine * tracersTendSum3rd(:,k,iCell)
               end do
            end do
         end do
@@ -1413,7 +1889,7 @@ module sw_time_integration
      end do
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-     ! END SECOND ORDER LTS SCHEME
+     ! END LTS SCHEME
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
      !
@@ -1462,20 +1938,27 @@ module sw_time_integration
      block => domain % blocklist
      do while(associated(block))
         call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
-        call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
+        call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
         call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
+        call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
+        call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
 
         call mpas_pool_destroy_pool(firstStagePool)
-        call mpas_pool_destroy_pool(tendSum2ndPool)
+        call mpas_pool_destroy_pool(secondStagePool)
         call mpas_pool_destroy_pool(tendSum1stPool)
+        call mpas_pool_destroy_pool(tendSum2ndPool)
+        call mpas_pool_destroy_pool(tendSum3rdPool)
 
         call mpas_pool_remove_subpool(block % structs, 'first_stage_state')
-        call mpas_pool_remove_subpool(block % structs, 'tend_sum_2nd')
+        call mpas_pool_remove_subpool(block % structs, 'second_stage_state')
         call mpas_pool_remove_subpool(block % structs, 'tend_sum_1st')
+        call mpas_pool_remove_subpool(block % structs, 'tend_sum_2nd')
+        call mpas_pool_remove_subpool(block % structs, 'tend_sum_3rd')
+
         block => block % next
      end do
 
-   end subroutine sw_lts2
+   end subroutine sw_lts
 
    subroutine sw_compute_tend(tendPool, statePool, meshPool, timeLevelIn)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
