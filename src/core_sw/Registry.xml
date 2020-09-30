@@ -55,6 +55,7 @@
 	</nml_record>
 	<nml_record name="local_time_stepping" in_defaults="true">
 		<nml_option name="config_use_local_time_stepping"                 type="logical"       default_value="false"/>
+		<nml_option name="config_dt_scaling_LTS"                          type="integer"       default_value="4"/>
 	</nml_record>
 	<streams>
 		<stream name="input" 
@@ -344,8 +345,6 @@
                 <var name="nCellsInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalosP1"/>
                 <var name="edgesInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalosP1 nEdges"/>
                 <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalosP1"/>
-                <var name="verticesInLTSHalo"                 type="integer"  dimensions="TWO nLTSHalosP1 nVertices"/>
-                <var name="nVerticesInLTSHalo"                type="integer"  dimensions="TWO nLTSHalosP1"/>
                 <var name="minMaxLTSRegion"                   type="integer"  dimensions="TWO"/>
         </var_struct>
 </registry>
