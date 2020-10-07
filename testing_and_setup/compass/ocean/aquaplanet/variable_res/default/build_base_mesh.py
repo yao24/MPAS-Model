@@ -25,25 +25,37 @@ def cellWidthVsLatLon():
     """
     createPlots = True
     ddeg = 10.0 # computed grid resolution, in degrees
-    courseResolution = 240 # km
-    refinementFactor = 2
     latCenter = 45.0 # center point in degrees
     lonCenter = 0.0 # center point in degrees
+
+# Giacomo, after we get this working with an earth-sized sphere, we need to
+# change these flags to be a unit sphere, or reduce it to a unit sphere at the
+# end of this routine
+    courseResolution = 240 # km
+    refinementFactor = 2
     fineRadius = 1000 # km
     transitionWidth = 100 # km
     earthRadius = 6.371e3 # radius in km
     
-    lat1D = np.deg2rad(np.arange(-90, 90.01, ddeg))
-    lon1D = np.deg2rad(np.arange(-180, 180.01, ddeg))
+    lat = np.arange(-90, 90.01, ddeg)
+    lon = np.arange(-180, 180.01, ddeg)
     latCenter = np.deg2rad(latCenter)
     lonCenter = np.deg2rad(lonCenter)
-    lonGrid, latGrid = np.meshgrid(lon1D, lat1D)
+
+    # create meshed 2D grid in radians
+    lonGrid, latGrid = np.meshgrid(np.deg2rad(lon), np.deg2rad(lat))
+
     # Halversine formula for distance
+    # better to compute it in code directly, but example functions are below
+# Giacomo, I just got this formula from this post:
+# https://stackoverflow.com/a/51722117/12656503
+# please double check it against an original formula.
     distance = earthRadius * np.sin((latGrid - latCenter)/2)**2 \
         + np.cos(latCenter)*np.cos(latGrid) * np.sin((lonGrid - lonCenter)/2)**2
      
     tanhDistance = np.tanh(distance)
-    cellWidth = np.tanh(distance)
+    # Next line is just a dummy line, fill in with actual cell width.
+    cellWidth = courseResolution*np.ones(np.shape(distance))
 
     if createPlots:
         varList = ['latGrid','lonGrid','distance','tanhDistance','cellWidth']
@@ -60,8 +72,12 @@ def cellWidthVsLatLon():
             plt.ylabel('lat index')
             plt.colorbar()
         plt.savefig('cellWidth.png')
-    return cellWidth, lonGrid, latGrid
+    return cellWidth, lon, lat
 
+
+# code examples from
+# https://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
+# this fuction can be removed later if not used.
 def distance(s_lat, s_lng, e_lat, e_lng):
 
    # approximate radius of earth in km
@@ -78,6 +94,7 @@ def distance(s_lat, s_lng, e_lat, e_lng):
 
 # code examples from
 # https://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
+# this fuction can be removed later if not used.
 def haversine(lon1, lat1, lon2, lat2):
     """
     Calculate the great circle distance between two points 
