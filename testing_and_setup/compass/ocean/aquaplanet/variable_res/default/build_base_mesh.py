@@ -3,6 +3,9 @@ import numpy as np
 from mpas_tools.ocean import build_spherical_mesh
 from mpas_tools.mesh.creation.util import lonlat2xyz
 from numpy import radians, cos, sin, arcsin, sqrt
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 
 
 def cellWidthVsLatLon():
@@ -20,6 +23,7 @@ def cellWidthVsLatLon():
     lat : ndarray
         longitude in degrees (length m and between -90 and 90)
     """
+    createPlots = True
     ddeg = 10.0 # computed grid resolution, in degrees
     courseResolution = 240 # km
     refinementFactor = 2
@@ -27,7 +31,7 @@ def cellWidthVsLatLon():
     lonCenter = 0.0 # center point in degrees
     fineRadius = 1000 # km
     transitionWidth = 100 # km
-    earth_radius = 6.371e6 # radius in m
+    earthRadius = 6.371e3 # radius in km
     
     lat1D = np.deg2rad(np.arange(-90, 90.01, ddeg))
     lon1D = np.deg2rad(np.arange(-180, 180.01, ddeg))
@@ -35,11 +39,28 @@ def cellWidthVsLatLon():
     lonCenter = np.deg2rad(lonCenter)
     lonGrid, latGrid = np.meshgrid(lon1D, lat1D)
     # Halversine formula for distance
-    d = np.sin((latGrid - latCenter)/2)**2 \
+    distance = earthRadius * np.sin((latGrid - latCenter)/2)**2 \
         + np.cos(latCenter)*np.cos(latGrid) * np.sin((lonGrid - lonCenter)/2)**2
      
-    cellWidth = courseResolution * np.ones((lat.size, lon.size))
-    return cellWidth, lon, lat
+    tanhDistance = np.tanh(distance)
+    cellWidth = np.tanh(distance)
+
+    if createPlots:
+        varList = ['latGrid','lonGrid','distance','tanhDistance','cellWidth']
+        fig = plt.gcf()
+        plt.clf()
+        fig.set_size_inches(20.0, 20.0)
+        iPlt = 1
+        for varName in varList:
+            plt.subplot(3,2,iPlt)
+            plt.imshow(vars()[varName])
+            iPlt += 1
+            plt.title(varName)
+            plt.xlabel('lon index')
+            plt.ylabel('lat index')
+            plt.colorbar()
+        plt.savefig('cellWidth.png')
+    return cellWidth, lonGrid, latGrid
 
 def distance(s_lat, s_lng, e_lat, e_lng):
 
@@ -55,6 +76,8 @@ def distance(s_lat, s_lng, e_lat, e_lng):
 
    return 2 * R * np.arcsin(np.sqrt(d))
 
+# code examples from
+# https://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
 def haversine(lon1, lat1, lon2, lat2):
     """
     Calculate the great circle distance between two points 
