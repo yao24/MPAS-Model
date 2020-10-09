@@ -257,11 +257,15 @@ module sw_time_integration
 
              uProvis(:,:) = uOld(:,:) + rk_substep_weights(rk_step) * uTend(:,:)
              hProvis(:,:) = hOld(:,:) + rk_substep_weights(rk_step) * hTend(:,:)
+             !BEGIN: TO REMOVE
+             if (config_test_case == 1) then   
+                hProvis(:,:) = hOld(:,:)
+             end if
+             !END: TO REMOVE
              do iCell = 1, nCells
                 do k = 1, nVertLevels
-                   tracersProvis(:,k,iCell) = ( hOld(k,iCell) * tracersOld(:,k,iCell)  &
-                                   + rk_substep_weights(rk_step) * tracersTend(:,k,iCell) &
-                                              ) / hProvis(k,iCell)
+                   tracersProvis(:,k,iCell) = ( hOld(k,iCell) * tracersOld(:,k,iCell) +  &
+                                                rk_substep_weights(rk_step) * tracersTend(:,k,iCell) ) / hProvis(k,iCell)
                 end do
              end do
              if (config_test_case == 1) then    ! For case 1, wind field should be fixed
@@ -296,7 +300,11 @@ module sw_time_integration
           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
           uNew(:,:) = uNew(:,:) + rk_weights(rk_step) * uTend(:,:) 
-          hNew(:,:) = hNew(:,:) + rk_weights(rk_step) * hTend(:,:) 
+          !BEGIN: switch back
+          !hNew(:,:) = hNew(:,:) + rk_weights(rk_step) * hTend(:,:) 
+          hNew(:,:) = hOld(:,:) 
+          uNew(:,:) = uOld(:,:)
+          !ENDL switch back
           do iCell = 1, nCells
              do k = 1, nVertLevels
                 tracersNew(:,k,iCell) = tracersNew(:,k,iCell) + rk_weights(rk_step) * tracersTend(:,k,iCell)
@@ -339,9 +347,11 @@ module sw_time_integration
             end do
          end do
 
-         if (config_test_case == 1) then    ! For case 1, wind field should be fixed
-            uNew(:,:) = uOld(:,:)
-         end if
+         !BEGIN: switch back
+         !if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+         !   uNew(:,:) = uOld(:,:)
+         !end if
+         !END: switch back
 
          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 
@@ -436,9 +446,9 @@ module sw_time_integration
 
         uNew(:,:) = uOld(:,:)
         hNew(:,:) = hOld(:,:)
-        do iCell = 1, nCells  ! couple tracers to h
+        do iCell = 1, nCells  
           do k = 1, nVertLevels
-            tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell)
+            tracersNew(:,k,iCell) = tracersOld(:,k,iCell) 
            end do
         end do
 
@@ -536,11 +546,19 @@ module sw_time_integration
           call mpas_pool_get_array(tendPool, 'h', hTend)
           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
+          do iCell = 1, nCells
+             do k = 1, nVertLevels
+               tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+             end do
+          end do
+
           if (config_test_case /= 1) then ! For case 1, wind should be fixed
           uNew(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_new(ssprk_step) * uNew(:,:) + weights_tend(ssprk_step) * uTend(:,:) 
           end if
-          hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
-          
+          !BEGIN: decomment
+          !hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
+          !END          
+
           !BEGIN: TO REMOVE
           !if(ssprk_step == 2) then
           !   print*, '----------- Fine'
@@ -558,8 +576,8 @@ module sw_time_integration
           
           do iCell = 1, nCells
              do k = 1, nVertLevels 
-                tracersNew(:,k,iCell) = weights_old(ssprk_step) * tracersOld(:,k,iCell) * hOld(k,iCell)  + weights_new(ssprk_step) &
-                                                                      * tracersNew(:,k,iCell) + weights_tend(ssprk_step) * tracersTend(:,k,iCell)
+                tracersNew(:,k,iCell) = ( weights_old(ssprk_step) * tracersOld(:,k,iCell) * hOld(k,iCell)  + weights_new(ssprk_step) * tracersNew(:,k,iCell) + & 
+                                          weights_tend(ssprk_step) * tracersTend(:,k,iCell) ) / hNew(k,iCell)
              end do
           end do
           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
@@ -592,12 +610,13 @@ module sw_time_integration
          call mpas_pool_get_array(statePool, 'uReconstructZonal', uReconstructZonal, 2)
          call mpas_pool_get_array(statePool, 'uReconstructMeridional', uReconstructMeridional, 2)
 
-         do iCell = 1, nCells
-            do k = 1, nVertLevels
-               tracersNew(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
-            end do
-         end do
+         !do iCell = 1, nCells
+         !   do k = 1, nVertLevels
+         !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
+         !   end do
+         !end do
 
+         ! TODO: I think we can remove this
          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 
          call mpas_reconstruct(meshPool, uNew,          &
@@ -759,7 +778,7 @@ module sw_time_integration
             do ic = 1, nCellsInLTSHalo(1,1)
                iCell = cellsInLTSHalo(1,1,ic)
                hNew(k,iCell) = hOld(k,iCell) 
-               tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell)
+               tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
             end do
          end do
 
@@ -963,14 +982,20 @@ module sw_time_integration
            do iRegion = 1,2
               do ic = 1, nCellsInLTSHalo(iRegion,2)
                  iCell = cellsInLTSHalo(iRegion,2,ic)
-                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-                 tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 hFirstStage(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell) 
               end do
            end do
            do ic = 1, nCellsInLTSHalo(2,1)
                  iCell = cellsInLTSHalo(2,1,ic)
-                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-                 tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 hFirstStage(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
            end do
         end do
 
@@ -989,13 +1014,19 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(2,3)
                  iCell = cellsInLTSHalo(2,3,ic)
-                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-                 tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 hFirstStage(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
               end do
               do ic = 1, nCellsInLTSHalo(1,3)
                  iCell = cellsInLTSHalo(1,3,ic)
-                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-                 tracersFirstStage(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 hFirstStage(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
               end do
            end do
 
@@ -1097,9 +1128,13 @@ module sw_time_integration
            end if
            do ic = 1, nCellsInLTSHalo(2,1)
               iCell = cellsInLTSHalo(2,1,ic)
-              hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
-              tracersSecondStage(:,k,iCell) = weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersFirstStage(:,k,iCell) + &
-                                      weightTend * dt * tracersTend(:,k,iCell)
+              !BEGIN: switch back
+              !hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
+              hSecondStage(k,iCell) = hOld(k,iCell)
+              !END: switch back
+              tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                                weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + &
+                                                weightTend * dt * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell) 
            end do
         end do
 
@@ -1114,9 +1149,13 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(2,3)
                  iCell = cellsInLTSHalo(2,3,ic)
-                 hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
-                 tracersSecondStage(:,k,iCell) = weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersFirstStage(:,k,iCell) + &
-                                                 weightTend * dt * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
+                 hSecondStage(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                                   weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + &
+                                                   weightTend * dt * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell)
               end do
            end do
 
@@ -1206,6 +1245,7 @@ module sw_time_integration
            call mpas_pool_get_array(tendPool, 'h', hTend)
            call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
+
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do iRegion =1,2
@@ -1218,9 +1258,13 @@ module sw_time_integration
               do iRegion = 1,2
                  do ic = 1, nCellsInLTSHalo(iRegion,2)
                     iCell = cellsInLTSHalo(iRegion,2,ic)
-                    hSecondStage(k,iCell) = 0.75 * hOld(k,iCell) + 0.25 * hFirstStage(k,iCell) + 0.25 * dt * hTend(k,iCell)
-                    tracersSecondStage(:,k,iCell) = 0.75 * tracersOld(:,k,iCell) * hOld(k,iCell) + 0.25 * tracersFirstStage(:,k,iCell) + &
-                                                    0.25 * dt * tracersTend(:,k,iCell)
+                    !BEGIN: switch back
+                    !hSecondStage(k,iCell) = 0.75 * hOld(k,iCell) + 0.25 * hFirstStage(k,iCell) + 0.25 * dt * hTend(k,iCell)
+                    hSecondStage(k,iCell) = hOld(k,iCell)
+                    !END: switch back
+                    tracersSecondStage(:,k,iCell) = ( 0.75 * tracersOld(:,k,iCell) * hOld(k,iCell) + &
+                                                    0.25 * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + &
+                                                    0.25 * dt * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell)
                  end do
               end do
            end do
@@ -1287,19 +1331,23 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
-                 hNew(k,iCell) = (1.0 - alpha - alphaHat) * hOld(k,iCell) + (alpha - alphaHat) * hFirstStage(k,iCell) + 2.0 * alphaHat * hSecondStage(k,iCell)
-                 tracersNew(:,k,iCell) = (1.0 - alpha - alphaHat) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
-                                         (alpha - alphaHat) * tracersFirstStage(:,k,iCell) + 2.0 * alphaHat * tracersSecondStage(:,k,iCell)
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = (1.0 - alpha - alphaHat) * hOld(k,iCell) + (alpha - alphaHat) * hFirstStage(k,iCell) + 2.0 * alphaHat * hSecondStage(k,iCell)
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersNew(:,k,iCell) = (1.0 - alpha - alphaHat) * tracersOld(:,k,iCell) + & 
+                                         (alpha - alphaHat) * tracersFirstStage(:,k,iCell) + & 
+                                          2.0 * alphaHat * tracersSecondStage(:,k,iCell) 
               end do
               do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
                  iCell = cellsInLTSHalo(2,2,ic)
                  hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell)  !note this is due to the fact that the tendencies are computed at sol new
               end do
               do ic = 1, nCellsInLTSHalo(2,1) !coarse
                  iCell = cellsInLTSHalo(2,1,ic)
                  hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
               end do
            end do 
 
@@ -1315,7 +1363,7 @@ module sw_time_integration
                  do ic = 1, nCellsInLTSHalo(2,3) !coarse
                     iCell = cellsInLTSHalo(2,3,ic)
                     hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                    tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    tracersNew(:,k,iCell) = tracersOld(:,k,iCell)  !note this is due to the fact that the tendencies are computed at sol new
                  end do
               end do
 
@@ -1411,8 +1459,11 @@ module sw_time_integration
               end do
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
-                 hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
-                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell) 
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
               end do
            end do
 
@@ -1426,8 +1477,11 @@ module sw_time_integration
                  end if
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
+                    tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)) / hNew(k,iCell)
                  end do
               end do
            end if
@@ -1498,18 +1552,28 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
-                 hNew(k,iCell) = (1.0 - beta - betaHat) * hOld(k,iCell) + (beta - betaHat) * hFirstStage(k,iCell) + 2.0 * betaHat * hSecondStage(k,iCell)
-                 tracersNew(:,k,iCell) = (1.0 - beta - betaHat) * tracersOld(:,k,iCell) * hOld(k,iCell) + &
-                                         (beta - betaHat) * tracersFirstStage(:,k,iCell) + 2.0 * betaHat * tracersSecondStage(:,k,iCell)
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = (1.0 - beta - betaHat) * hOld(k,iCell) + (beta - betaHat) * hFirstStage(k,iCell) + 2.0 * betaHat * hSecondStage(k,iCell)
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersNew(:,k,iCell) = (1.0 - beta - betaHat) * tracersOld(:,k,iCell) + &
+                                         (beta - betaHat) * tracersFirstStage(:,k,iCell) + & 
+                                          2.0 * betaHat * tracersSecondStage(:,k,iCell)
               end do
               do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
                  iCell = cellsInLTSHalo(2,2,ic)
-                 hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
                  tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
               end do
               do ic = 1, nCellsInLTSHalo(2,1) !coarse
                  iCell = cellsInLTSHalo(2,1,ic)
-                 hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
                  tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
               end do
            end do         
@@ -1525,7 +1589,10 @@ module sw_time_integration
                  end if
                  do ic = 1, nCellsInLTSHalo(2,3) !coarse
                     iCell = cellsInLTSHalo(2,3,ic)
-                    hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
                     tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  end do
               end do
@@ -1601,6 +1668,16 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
            do k =1, nVertLevels
+              do ic = 1, nCellsInLTSHalo(1,1)
+                 iCell = cellsInLTSHalo(1,1,ic)
+                 !BEGIN: switch back
+                 !tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+                 tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hOld(k,iCell)
+                 !END: switch back
+              end do
+           end do
+
+           do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do iRegion = 1,2
                     do ie = 1, nEdgesInLTSHalo(iRegion,2)
@@ -1622,13 +1699,27 @@ module sw_time_integration
               end do
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
-                 hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
-                 tracersNew(:,k,iCell) = weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
-                                         weightTend * dtFine * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersNew(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
+                                         weightTend * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
               end do
            end do
 
            if (lts_order == 3) then
+           
+              do k =1, nVertLevels
+                 do ic = 1, nCellsInLTSHalo(1,3)
+                    iCell = cellsInLTSHalo(1,3,ic)
+                    !BEGIN: switch back
+                    !tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hOld(k,iCell)
+                    !END: switch back
+                 end do
+              end do
+
               do k =1, nVertLevels
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,3)
@@ -1638,9 +1729,12 @@ module sw_time_integration
                  end if
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
-                                            weightTend * dtFine * tracersTend(:,k,iCell)
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
+                    tracersNew(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
+                                            weightTend * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
                  end do
               end do
            end if
@@ -1715,23 +1809,36 @@ module sw_time_integration
                  end if
                  do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                     iCell = cellsInLTSHalo(1,2,ic)
-                    hNew(k,iCell) = (1.0 - gam - gamHat) * hOld(k,iCell) + (gam - gamHat) * hFirstStage(k,iCell) + 2.0 * gamHat * hSecondStage(k,iCell)
-                    tracersNew(:,k,iCell) = (1.0 - gam - gamHat) * tracersOld(:,k,iCell) * hOld(k,iCell) + &
-                                            (gam - gamHat) * tracersFirstStage(:,k,iCell) + 2.0 * gamHat * tracersSecondStage(:,k,iCell)
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = (1.0 - gam - gamHat) * hOld(k,iCell) + (gam - gamHat) * hFirstStage(k,iCell) + 2.0 * gamHat * hSecondStage(k,iCell)
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
+                    tracersNew(:,k,iCell) = (1.0 - gam - gamHat) * tracersOld(:,k,iCell)  + &
+                                            (gam - gamHat) * tracersFirstStage(:,k,iCell) + & 
+                                             2.0 * gamHat * tracersSecondStage(:,k,iCell)
                  end do
                  do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
                     iCell = cellsInLTSHalo(2,2,ic)
-                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    !BEGIN: switch back
+                    ! hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
                     tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  end do
                  do ic = 1, nCellsInLTSHalo(2,1) !coarse
                     iCell = cellsInLTSHalo(2,1,ic)
-                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
                     tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  end do
                  do ic = 1, nCellsInLTSHalo(2,3) !coarse
                     iCell = cellsInLTSHalo(2,3,ic)
-                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
                     tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  end do
               end do
@@ -1802,6 +1909,23 @@ module sw_time_integration
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
+              do k=1, nVertLevels
+                 do ic = 1, nCellsInLTSHalo(1,1)
+                    iCell = cellsInLTSHalo(1,1,ic)
+                    !BEGIN: switch back
+                    !tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hOld(k,iCell)
+                    !END: switch back
+                 end do
+                 do ic = 1, nCellsInLTSHalo(1,3)
+                    iCell = cellsInLTSHalo(1,3,ic)
+                    !BEGIN: switch back
+                    !tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hOld(k,iCell)
+                    !END: switch back
+                 end do  
+              end do
+
               do k =1, nVertLevels
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do iRegion = 1,2
@@ -1828,15 +1952,21 @@ module sw_time_integration
                  end do
                  do ic = 1, nCellsInLTSHalo(1,1)
                     iCell = cellsInLTSHalo(1,1,ic)
-                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + & 
-                                            (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell)
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
+                    tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + & 
+                                            (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
                  end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + &
-                                            (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell)
+                    !BEGIN: switch back
+                    !hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
+                    hNew(k,iCell) = hOld(k,iCell)
+                    !END: switch back
+                    tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + &
+                                            (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
                  end do
               end do
  
@@ -1876,8 +2006,10 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
-                 hOld(k,iCell) = hNew(k,iCell)
-                 tracersOld(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
+                 !BEGIN: decomment
+                 !hOld(k,iCell) = hNew(k,iCell)
+                 !END: decomment
+                 tracersOld(:,k,iCell) = tracersNew(:,k,iCell) 
               end do
            end do
 
@@ -1891,8 +2023,10 @@ module sw_time_integration
                  end if
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    hOld(k,iCell) = hNew(k,iCell)
-                    tracersOld(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
+                    !BEGIN: decomment
+                    !hOld(k,iCell) = hNew(k,iCell)
+                    !END: decomment
+                    tracersOld(:,k,iCell) = tracersNew(:,k,iCell) 
                  end do
               end do
            end if           
@@ -1939,7 +2073,10 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(2,1)
                  iCell = cellsInLTSHalo(2,1,ic)
-                 hNew(k,iCell) = hSecondStage(k,iCell)
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = hSecondStage(k,iCell)
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
                  tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) 
               end do
            end do
@@ -2026,15 +2163,23 @@ module sw_time_integration
               end if
               do ic = 1, nCellsInLTSHalo(2,1)
                  iCell = cellsInLTSHalo(2,1,ic)
-                 hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
-                 tracersNew(:,k,iCell) = (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersSecondStage(:,k,iCell) + &
-                                         (2.0 / 3.0) * dt * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                           (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
+                                           (2.0 / 3.0) * dt * tracersTend(:,k,iCell) ) / hNew(k,iCell)
               end do
               do ic = 1, nCellsInLTSHalo(2,3)
                  iCell = cellsInLTSHalo(2,3,ic)
-                 hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
-                 tracersNew(:,k,iCell) = (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersSecondStage(:,k,iCell) + &
-                                         (2.0 / 3.0) * dt * tracersTend(:,k,iCell)
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                           (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
+                                           (2.0 / 3.0) * dt * tracersTend(:,k,iCell) ) / hNew(k,iCell)
               end do
            end do
 
@@ -2095,10 +2240,15 @@ module sw_time_integration
            do iRegion = 1,2 
               do ic = 1, nCellsInLTSHalo(iRegion,2)
                  iCell = cellsInLTSHalo(iRegion,2,ic)
-                 hNew(k,iCell) = hOld(k,iCell) + weightTendSum2nd * dtFine * hTendSum2nd(k,iCell) + weightTendSum1st * dtFine * hTendSum1st(k,iCell) + &
-                                 weightTendsum3rd * dtFine * hTendSum3rd(k,iCell)
-                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) * hOld(k,iCell) + weightTendSum2nd * dtFine * tracersTendSum2nd(:,k,iCell) + &
-                                         weightTendSum1st * dtFine * tracersTendSum1st(:,k,iCell) + weightTendSum3rd * dtFine * tracersTendSum3rd(:,k,iCell)
+                 !BEGIN: switch back
+                 !hNew(k,iCell) = hOld(k,iCell) + weightTendSum2nd * dtFine * hTendSum2nd(k,iCell) + weightTendSum1st * dtFine * hTendSum1st(k,iCell) + &
+                 !                weightTendsum3rd * dtFine * hTendSum3rd(k,iCell)
+                 hNew(k,iCell) = hOld(k,iCell)
+                 !END: switch back
+                 tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                           weightTendSum2nd * dtFine * tracersTendSum2nd(:,k,iCell) + &
+                                           weightTendSum1st * dtFine * tracersTendSum1st(:,k,iCell) + & 
+                                           weightTendSum3rd * dtFine * tracersTendSum3rd(:,k,iCell) ) / hNew(k,iCell)
               end do
            end do
         end do
@@ -2147,11 +2297,6 @@ module sw_time_integration
         call mpas_pool_get_array(statePool, 'uReconstructZonal', uReconstructZonal, 2)
         call mpas_pool_get_array(statePool, 'uReconstructMeridional', uReconstructMeridional, 2)
         
-        do iCell = 1, nCells
-           do k = 1, nVertLevels
-              tracersNew(:,k,iCell) = tracersNew(:,k,iCell) / hNew(k,iCell)
-           end do
-        end do 
 
         !TODO this below may not be necessary
         if (config_test_case == 1) then    ! For case 1, wind field should be fixed

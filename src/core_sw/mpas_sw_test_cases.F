@@ -165,6 +165,7 @@ module sw_test_cases
       real (kind=RKIND), dimension(:,:), pointer :: kiteAreasOnVertex
 
       real (kind=RKIND), dimension(:,:), pointer :: u, h
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracers
 
       !
       ! Scale all distances and areas from a unit sphere to one with radius a
@@ -196,6 +197,7 @@ module sw_test_cases
 
       call mpas_pool_get_array(statePool, 'u', u, 1)
       call mpas_pool_get_array(statePool, 'h', h, 1)
+      call mpas_pool_get_array(statePool, 'tracers', tracers, 1)
 
       xCell = xCell * a
       yCell = yCell * a
@@ -240,7 +242,9 @@ module sw_test_cases
          else
             h(1,iCell) = h0 / 2.0
          end if
+         tracers(:,1,iCell) = h(1,iCell)
       end do
+
 
    end subroutine sw_test_case_1
 
