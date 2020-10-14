@@ -242,7 +242,6 @@ module sw_test_cases
          else
             h(1,iCell) = h0 / 2.0
          end if
-         tracers(:,1,iCell) = h(1,iCell)
       end do
 
 
