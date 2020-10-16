@@ -122,7 +122,7 @@ module sw_test_cases
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'LTS', LTSPool)
 
-            call mpas_init_LTS(meshPool, LTSPool)
+            call mpas_init_LTS(meshPool, LTSPool, domain)
 
             block_ptr => block_ptr % next
          end do
@@ -669,7 +669,7 @@ module sw_test_cases
 
    end subroutine sw_test_case_6
 
-   subroutine mpas_init_LTS(meshPool, LTSPool)
+   subroutine mpas_init_LTS(meshPool, LTSPool, domain)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Set local time stepping (LTS) regions and lists
    !
@@ -678,6 +678,7 @@ module sw_test_cases
    implicit none   
 
    type (mpas_pool_type), intent(inout) :: meshPool, LTSPool
+   type (domain_type), intent(inout) :: domain
 
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
    !integer, dimension(:), allocatable :: isLTSRegionVertexAssigned !TODO: we might be able to get rid of the part on vertices
@@ -685,9 +686,10 @@ module sw_test_cases
    integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges!,nVertices !TODO: we might be able to get rid of the part on vertices
    real (kind=RKIND), dimension(:), pointer :: latCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion, onlyFineOrCoarse
    integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo!, nVerticesInLTSHalo
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo!, verticesInLTSHalo
+   integer, dimension(:), pointer :: mpiRankCell
 
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
    call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
@@ -696,6 +698,7 @@ module sw_test_cases
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
    call mpas_pool_get_array(meshPool, 'latCell', latCell)
+   call mpas_pool_get_array(meshPool, 'mpiRankCell', mpiRankCell)
    call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
    call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
    call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
@@ -703,6 +706,7 @@ module sw_test_cases
    call mpas_pool_get_array(LTSPool, 'LTSRegion', LTSRegion)
    call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
    call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
+   call mpas_pool_get_array(LTSPool, 'onlyFineOrCoarse', onlyFineOrCoarse)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
@@ -733,6 +737,11 @@ module sw_test_cases
    nEdgesInLTSHalo(:,:) = 0
    !nVerticesInLTSHalo(:,:) = 0 !we might be able to remove the part on vertices 
    LTSRegionLocal(:) = LTSRegion(:) 
+
+   onlyFineOrCoarse(1) = 0 ! first entry is fine (initialized to false)
+   onlyFineOrCoarse(2) = 0 ! second entry is coarse (initialized to false)
+
+   mpiRankCell(1:nCells) = domain % dminfo % my_proc_id
 
    minMaxLTSRegion(1) = minval(LTSRegionLocal(1:nCells))  !this is the fine
    minMaxLTSRegion(2) = maxval(LTSRegionLocal(1:nCells))  !this is the coarse
@@ -916,6 +925,8 @@ module sw_test_cases
             edgesInLTSHalo(1,1,iEdge) = iEdge
          end do
 
+         onlyFineOrCoarse(1) = 1 ! set to true
+
       else if (minMaxLTSRegion(1) == 2) then
          nCellsInLTSHalo(2,1) = nCells
          do iCell = 1, nCells
@@ -925,6 +936,9 @@ module sw_test_cases
          do iEdge = 1, nEdges
             edgesInLTSHalo(2,1,iEdge) = iEdge
          end do
+
+         onlyFineOrcoarse(2) = 1 ! set to true
+ 
       end if          
 
    else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 

@@ -629,7 +629,7 @@ module sw_time_integration
       real (kind=RKIND), intent(in) :: dt
       integer, intent(in) :: lts_order
 
-      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M 
+      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M, onlyFine, onlyCoarse 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: firstStagePool, secondStagePool, tendSum1stPool, tendSum2ndPool, tendSum3rdPool
@@ -645,6 +645,7 @@ module sw_time_integration
       real (kind=RKIND), dimension(:,:,:), pointer :: tracersFirstStage, tracersSecondStage
       real (kind=RKIND) :: dtFine, alpha, alphaHat, beta, betaHat, gam, gamHat
 
+      integer, dimension(:), pointer :: onlyFineOrCoarse
       integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
       integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
 
@@ -659,6 +660,17 @@ module sw_time_integration
       call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
 
       M = config_dt_scaling_LTS
+
+      call mpas_pool_get_subpool(domain % blocklist % structs, 'LTS', LTSPool)
+      call mpas_pool_get_array(LTSPool, 'onlyFineOrCoarse', onlyFineOrCoarse)
+      onlyFine = onlyFineOrCoarse(1)
+      onlyCoarse = onlyFineOrCoarse(2)
+
+      !BEGIN: TO REMOVE
+      !if (domain % dminfo % my_proc_id == 18) then
+      !   print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
+      !end if
+      !END: TO REMOVE
 
       dtFine = dt / M
 
@@ -752,6 +764,7 @@ module sw_time_integration
 
 
          ! initialize new solution to old solution for the fine
+         if(onlyCoarse == 0) then
          do k =1, nVertLevels
             do ie = 1, nEdgesInLTSHalo(1,1)
                iEdge = edgesInLTSHalo(1,1,ie)
@@ -763,6 +776,7 @@ module sw_time_integration
                tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
             end do
          end do
+         end if
 
          call mpas_pool_initialize_time_levels(statePool)
 
@@ -902,6 +916,7 @@ module sw_time_integration
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
+        if(onlyFine == 0) then
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
         call sw_compute_tend(tendPool, statePool, meshPool, 1) 
         call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)  
@@ -911,6 +926,7 @@ module sw_time_integration
         if (lts_order == 3) then
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 3) !coarse
         end if 
+        end if
 
         block => block % next
      end do
@@ -947,7 +963,8 @@ module sw_time_integration
         call mpas_pool_get_array(tendPool, 'u', uTend)
         call mpas_pool_get_array(tendPool, 'h', hTend)
         call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
-        
+       
+        if (onlyFine == 0) then
         do k =1, nVertLevels
            if (config_test_case /= 1) then ! For case 1, wind should be fixed
               do iRegion =1,2
@@ -1001,6 +1018,7 @@ module sw_time_integration
            end do
 
         end if
+        end if
 
         !BEGIN: TO REMOVE
         !print*, 'LTS - First Stage - Coarse'
@@ -1040,12 +1058,14 @@ module sw_time_integration
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
+        if(onlyFine == 0) then
         call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
         call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
         call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
         call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
         if (lts_order == 3) then
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 3) !coarse
+        end if
         end if
 
         block => block % next
@@ -1089,6 +1109,7 @@ module sw_time_integration
         call mpas_pool_get_array(tendPool, 'h', hTend)
         call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
+        if(onlyFine == 0) then
         do k =1, nVertLevels
            if (config_test_case /= 1) then ! For case 1, wind should be fixed
               do ie = 1, nEdgesInLTSHalo(2,1)
@@ -1123,6 +1144,7 @@ module sw_time_integration
               end do
            end do
 
+        end if
         end if
 
         !BEGIN: TO REMOVE
@@ -1163,11 +1185,13 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
+           if (onlyFine == 0 .and. onlyCoarse == 0) then
            call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
            call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
            call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
+           end if
 
            block => block % next
         end do
@@ -1209,7 +1233,7 @@ module sw_time_integration
            call mpas_pool_get_array(tendPool, 'h', hTend)
            call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-
+           if (onlyFine == 0 .and. onlyCoarse == 0) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do iRegion =1,2
@@ -1229,17 +1253,28 @@ module sw_time_integration
                  end do
               end do
            end do
+           end if
           
            block => block % next
         end do
      end if
 
+     !BEGIN: TO REMOVE
+     print*, domain % dminfo % my_proc_id, 'made it until the end of interface prediction --------------------------------'
+     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse, 'M=', M
+     !END: TO REMOVE
+   
      ! ---------------------------------------------------------------------------------------------------------------------
 
      ! --- FINE AND COARSE ADVANCEMENT STEP: all stages for fine, second (and third if needed) for coarse
   
      ! --- begin substepping for fine solution advancement
      do im =1, M
+
+     !BEGIN: TO REMOVE
+     print*, domain % dminfo % my_proc_id, 'iterations = ', im
+     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse, 'M=', M
+     !END: TO REMOVE
 
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
         block => domain % blocklist
@@ -1269,7 +1304,8 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'u', uOld, 1)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
- 
+
+           if (onlyCoarse  == 0) then 
            alpha = REAL((im - 1)) / M
            alphaHat = 0.0
            if (lts_order == 3) then
@@ -1326,6 +1362,7 @@ module sw_time_integration
               end do
 
            end if        
+           end if
 
            block => block % next
         end do
@@ -1346,6 +1383,7 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
+           if (onlyCoarse == 0 ) then
            call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) 
            call sw_compute_tend(tendPool, statePool, meshPool, 2) 
            call sw_compute_scalar_tend(tendPool, statePool,meshPool, 2) 
@@ -1355,6 +1393,8 @@ module sw_time_integration
            if (lts_order == 3) then
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 3) !fine
            end if
+           end if
+
            block => block % next
         end do
 
@@ -1395,6 +1435,7 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
+           if (onlyCoarse == 0 ) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do iRegion =1,2  
@@ -1437,6 +1478,7 @@ module sw_time_integration
                  end do
               end do
            end if
+           end if   
 
            !BEGIN: TO REMOVE
            !print*, 'LTS - First Stage - Fine'
@@ -1482,6 +1524,7 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
+           if (onlyCoarse == 0 ) then
            beta = REAL(im) / M
            betaHat = 0.0
            if (lts_order == 3) then
@@ -1538,6 +1581,7 @@ module sw_time_integration
               end do
 
            end if
+           end if
 
            block => block % next
         end do
@@ -1558,6 +1602,7 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
+           if( onlyCoarse  == 0 ) then
            call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) 
            call sw_compute_tend(tendPool, statePool, meshPool, 2) 
            call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) 
@@ -1566,6 +1611,7 @@ module sw_time_integration
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
            if (lts_order == 3) then
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 3) !fine
+           end if
            end if
            block => block % next
         end do
@@ -1607,6 +1653,7 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
+           if( onlyCoarse  == 0 ) then
            do k =1, nVertLevels
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
@@ -1666,6 +1713,7 @@ module sw_time_integration
                  end do
               end do
            end if
+           end if
 
            !BEGIN: TO REMOVE
            !print*, 'LTS - Second Stage - Fine'
@@ -1713,7 +1761,8 @@ module sw_time_integration
               call mpas_pool_get_array(statePool, 'u', uOld, 1)
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
-  
+ 
+              if (onlyCoarse == 0) then 
               gam = REAL(2 * (im - 1) + 1) / ( 2 * M )
               gamHat = REAL(2 * (im - 1) * (im - 1) + 2 * (im - 1) + 1) / (2 * M * M)
               do k =1, nVertLevels
@@ -1758,6 +1807,7 @@ module sw_time_integration
                     tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  end do
               end do
+              end if
 
               block => block % next
            end do
@@ -1778,6 +1828,7 @@ module sw_time_integration
               call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
               call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
+              if( onlyCoarse == 0 ) then
               call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) 
               call sw_compute_tend(tendPool, statePool, meshPool, 2) 
               call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) 
@@ -1785,6 +1836,7 @@ module sw_time_integration
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 3)
+              end if
               block => block % next
            end do
 
@@ -1825,6 +1877,7 @@ module sw_time_integration
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
+              if(onlyCoarse == 0) then
               do k=1, nVertLevels
                  do ic = 1, nCellsInLTSHalo(1,1)
                     iCell = cellsInLTSHalo(1,1,ic)
@@ -1873,6 +1926,7 @@ module sw_time_integration
                                             (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
                  end do
               end do
+              end if
  
               block => block % next
            end do
@@ -1901,6 +1955,7 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)           
            
+           if( onlyCoarse == 0) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(1,1)
@@ -1930,6 +1985,7 @@ module sw_time_integration
                  end do
               end do
            end if           
+           end if
 
            block => block % next
         end do
@@ -1964,6 +2020,7 @@ module sw_time_integration
            call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
 
+           if (onlyFine == 0) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(2,1)
@@ -1977,6 +2034,7 @@ module sw_time_integration
                  tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) 
               end do
            end do
+           end if
            block => block % next
         end do
 
@@ -2002,11 +2060,13 @@ module sw_time_integration
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) !TODO
-           call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) !TODO
-           call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) !TODO
+           if (onlyFine == 0) then
+           call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) 
+           call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) 
+           call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) 
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 3)
+           end if
            block => block % next
         end do
 
@@ -2047,6 +2107,7 @@ module sw_time_integration
            call mpas_pool_get_array(tendPool, 'h', hTend)
            call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
+           if (onlyFine == 0) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(2,1)
@@ -2073,11 +2134,17 @@ module sw_time_integration
                                            (2.0 / 3.0) * dt * tracersTend(:,k,iCell) ) / hNew(k,iCell)
               end do
            end do
+           end if
 
            block => block % next
         end do
 
      end if
+
+     !BEGIN: TO REMOVE
+     print*, domain % dminfo % my_proc_id, 'made it until the end of fine substepping --------------------------------'
+     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
+     !END: TO REMOVE
 
      ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st (and tendSum3rd)  
 
@@ -2118,6 +2185,7 @@ module sw_time_integration
         call mpas_pool_get_array(statePool, 'h', hNew, 2)
         call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
+        if(onlyFine == 0 .and. onlyCoarse == 0) then
         do k =1, nVertLevels
            if (config_test_case /= 1) then ! For case 1, wind should be fixed
               do iRegion = 1,2
@@ -2140,6 +2208,7 @@ module sw_time_integration
               end do
            end do
         end do
+        end if
 
         !BEGIN: TO REMOVE
         !print*, 'LTS - Second Stage - Interface Layer 2'
@@ -2222,6 +2291,11 @@ module sw_time_integration
 
         block => block % next
      end do
+
+     !BEGIN: TO REMOVE
+     print*, domain % dminfo % my_proc_id, 'made it until the end --------------------------------'
+     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
+     !END: TO REMOVE
 
    end subroutine sw_lts
 
