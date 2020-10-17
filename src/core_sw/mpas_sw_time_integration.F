@@ -1259,22 +1259,12 @@ module sw_time_integration
         end do
      end if
 
-     !BEGIN: TO REMOVE
-     print*, domain % dminfo % my_proc_id, 'made it until the end of interface prediction --------------------------------'
-     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse, 'M=', M
-     !END: TO REMOVE
-   
      ! ---------------------------------------------------------------------------------------------------------------------
 
      ! --- FINE AND COARSE ADVANCEMENT STEP: all stages for fine, second (and third if needed) for coarse
   
      ! --- begin substepping for fine solution advancement
      do im =1, M
-
-     !BEGIN: TO REMOVE
-     print*, domain % dminfo % my_proc_id, 'iterations = ', im
-     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse, 'M=', M
-     !END: TO REMOVE
 
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
         block => domain % blocklist
@@ -2141,11 +2131,6 @@ module sw_time_integration
 
      end if
 
-     !BEGIN: TO REMOVE
-     print*, domain % dminfo % my_proc_id, 'made it until the end of fine substepping --------------------------------'
-     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
-     !END: TO REMOVE
-
      ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st (and tendSum3rd)  
 
      ! --- correct solution for interface layer 1 and interface layer 2
@@ -2291,11 +2276,6 @@ module sw_time_integration
 
         block => block % next
      end do
-
-     !BEGIN: TO REMOVE
-     print*, domain % dminfo % my_proc_id, 'made it until the end --------------------------------'
-     print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
-     !END: TO REMOVE
 
    end subroutine sw_lts
 
