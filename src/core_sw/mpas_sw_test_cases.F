@@ -685,7 +685,7 @@ module sw_test_cases
    integer, pointer :: nLTSRegions, nLTSHalos
    integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
    integer, pointer :: nCells, nEdges!,nVertices !TODO: we might be able to get rid of the part on vertices
-   real (kind=RKIND), dimension(:), pointer :: latCell
+   real (kind=RKIND), dimension(:), pointer :: latCell, areaCell
    integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion, onlyFineOrCoarse
    integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo!, nVerticesInLTSHalo
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo!, verticesInLTSHalo
@@ -698,6 +698,7 @@ module sw_test_cases
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
    call mpas_pool_get_array(meshPool, 'latCell', latCell)
+   call mpas_pool_get_array(meshPool, 'areaCell', areaCell)
    call mpas_pool_get_array(meshPool, 'mpiRankCell', mpiRankCell)
    call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
    call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
@@ -723,12 +724,18 @@ module sw_test_cases
    ! the loop below initializes the LTS regions for the current processor
    ! TODOL this loop should be done in a more automatic way
    ! 1 = highest resolution possible
+   !LTSRegion(:) = 1
    do iCell = 1, nCells
+      !if (2.0 * sqrt(areaCell(iCell) / pii) .ge. 300000) then
+      !   LTSRegion(iCell) = 2
+      !end if
+      !BEGIN: test initializaton
       if (latCell(iCell) < 0.) then
          LTSRegion(iCell) = 1
-      else 
+      else
          LTSRegion(iCell) = 2
       end if
+      !END: test initialization
    end do
 
    ! the following code is assuming that for each processor we have at most two regions, a fine and a coarse
@@ -753,38 +760,54 @@ module sw_test_cases
          cell2 = cellsOnEdge(2,iEdge)
          ! here we write the first layers of the halo (interface layer 1 and interface layer 2)
          if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
-            LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
-            LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
-            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell1
-            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
-            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell2
+            if (cell1 .le. nCells) then
+               LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
+               nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+               cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell1
+            end if
+            if (cell2 .le. nCells) then
+               LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
+               nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
+               cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell2
+            end if
          else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2)) then
-            LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
-            LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
-            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell2
-            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
-            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell1
+            if (cell2 .le. nCells) then
+               LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
+               nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+               cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell2
+            end if
+            if (cell1 .le. nCells) then
+               LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
+               nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
+               cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell1
+            end if
          ! the next if statements are there because we are changing two elements at the
          ! time above so we have to take into consideration the fact that an edge
          ! might be shared by two elements, one of which had its LTSRegionLocal already changed
          else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
-            LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
-            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell2
+            if (cell2 .le. nCells) then
+               LTSRegionLocal(cell2) = minMaxLTSRegion(2) + 2
+               nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1
+               cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell2
+            end if
          else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2)) then
-            LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
-            nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1 
-            cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell1
+            if (cell1 .le. nCells) then
+               LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
+               nCellsInLTSHalo(2,2) = nCellsInLTSHalo(2,2) + 1 
+               cellsInLTSHalo(2,2, nCellsInLTSHalo(2,2)) = cell1
+            end if
          else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2) + 2) then
-            LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
-            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
-            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell1
+            if ( cell1 .le. nCells) then
+               LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
+               nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+               cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell1
+            end if
          else if (LTSRegionLocal(cell2) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell1) == minMaxLTSRegion(2) + 2) then
-            LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
-            nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
-            cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell2
+            if (cell2 .le. nCells) then
+               LTSRegionLocal(cell2) = minMaxLTSRegion(1) + 2
+               nCellsInLTSHalo(1,2) = nCellsInLTSHalo(1,2) + 1
+               cellsInLTSHalo(1,2, nCellsInLTSHalo(1,2)) = cell2
+            end if
          end if
       end do   
 
@@ -800,13 +823,17 @@ module sw_test_cases
                   cell1 = cellsOnEdge(1,iEdge)
                   cell2 = cellsOnEdge(2,iEdge)
                   if (LTSRegionLocal(cell1) - minMaxLTSRegion(1) + 1 == iRegion) then
-                     LTSRegionLocal(cell1) = LTSRegionLocal(cell1) +  2 * iHaloP1
-                     nCellsInLTSHalo(iRegion,iHaloP1+1) = nCellsInLTsHalo(iRegion,iHaloP1+1) + 1
-                     cellsInLTSHalo(iRegion,iHaloP1+1,nCellsInLTSHalo(iRegion,iHaloP1+1)) = cell1
+                     if (cell1 .le. nCells) then
+                        LTSRegionLocal(cell1) = LTSRegionLocal(cell1) +  2 * iHaloP1
+                        nCellsInLTSHalo(iRegion,iHaloP1+1) = nCellsInLTsHalo(iRegion,iHaloP1+1) + 1
+                        cellsInLTSHalo(iRegion,iHaloP1+1,nCellsInLTSHalo(iRegion,iHaloP1+1)) = cell1
+                     end if
                   else if (LTSRegionLocal(cell2) - minMaxLTSRegion(1) + 1 == iRegion) then
-                     LTSRegionLocal(cell2) = LTSRegionLocal(cell2) +  2 * (iHaloP1)
-                     nCellsInLTSHalo(iRegion,iHaloP1+1) = nCellsInLTsHalo(iRegion,iHaloP1+1) + 1 
-                     cellsInLTSHalo(iRegion,iHaloP1+1,nCellsInLTSHalo(iRegion,iHaloP1+1)) = cell2
+                     if (cell2 .le. nCells) then
+                        LTSRegionLocal(cell2) = LTSRegionLocal(cell2) +  2 * (iHaloP1)
+                        nCellsInLTSHalo(iRegion,iHaloP1+1) = nCellsInLTsHalo(iRegion,iHaloP1+1) + 1 
+                        cellsInLTSHalo(iRegion,iHaloP1+1,nCellsInLTSHalo(iRegion,iHaloP1+1)) = cell2
+                     end if
                   end if
                end do              
             end do   
