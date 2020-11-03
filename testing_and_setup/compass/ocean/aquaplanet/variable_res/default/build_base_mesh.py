@@ -24,7 +24,7 @@ def cellWidthVsLatLon():
         longitude in degrees (length m and between -90 and 90)
     """
     createPlots = True
-    ddeg = 10.0 # computed grid resolution, in degrees
+    ddeg = 1.0 # computed grid resolution, in degrees
     latCenter = 90.0 # center point in degrees
     lonCenter = 135.0 # center point in degrees
 
