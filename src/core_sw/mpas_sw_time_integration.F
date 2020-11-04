@@ -13,6 +13,7 @@ module sw_time_integration
    use mpas_constants
    use mpas_dmpar
    use mpas_log
+   use mpas_timer
 
    use sw_constants
 
@@ -478,6 +479,7 @@ module sw_time_integration
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
      do ssprk_step = 1, ssprk_order
 
+call mpas_timer_start("halo updates SSPRK")
 ! --- update halos for diagnostic variables
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -485,9 +487,11 @@ module sw_time_integration
             call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
             call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
         end if
+call mpas_timer_stop("halo updates SSPRK")
 
 ! --- compute tendencies
 
+call mpas_timer_start("tendencies SSPRK")
        block => domain % blocklist
        do while (associated(block))
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -498,15 +502,19 @@ module sw_time_integration
           call sw_enforce_boundary_edge(tendPool, meshPool)
           block => block % next
        end do
+call mpas_timer_stop("tendencies SSPRK")
 
 ! --- update halos for prognostic variables
 
+call mpas_timer_start("halo updates SSPRK")
        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
        call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates SSPRK")
 
 ! --- advance solution
 
+call mpas_timer_start("solution advancement SSPRK")
        block => domain % blocklist
        do while (associated(block))
           call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -568,16 +576,20 @@ module sw_time_integration
                                           weights_tend(ssprk_step) * tracersTend(:,k,iCell) ) / hNew(k,iCell)
              end do
           end do
+call mpas_timer_start("tendencies SSPRK")
           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+call mpas_timer_stop("tendencies SSPRK")
           block => block % next
        end do
 
+call mpas_timer_stop("solution advancement SSPRK")
       end do
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
       ! END SSPRK loop 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
 
 
+call mpas_timer_start("clean-up time SSPRK")
       !
       !  A little clean up at the end: compute diagnostics for new state
       !
@@ -607,6 +619,7 @@ module sw_time_integration
 
          block => block % next
       end do
+call mpas_timer_stop("clean-up time SSPRK")
 
    end subroutine sw_ssprk
 
@@ -692,6 +705,7 @@ module sw_time_integration
          weightTendSum3rd = 2.0 / 3.0
       end if
 
+call mpas_timer_start("create extra pools LTS")
       block => domain % blocklist
       do while (associated(block))
          call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
@@ -764,19 +778,19 @@ module sw_time_integration
 
 
          ! initialize new solution to old solution for the fine
-         if(onlyCoarse == 0) then
-         do k =1, nVertLevels
-            do ie = 1, nEdgesInLTSHalo(1,1)
-               iEdge = edgesInLTSHalo(1,1,ie)
-               uNew(k,iEdge) =  uOld(k,iEdge) 
-            end do
-            do ic = 1, nCellsInLTSHalo(1,1)
-               iCell = cellsInLTSHalo(1,1,ic)
-               hNew(k,iCell) = hOld(k,iCell) 
-               tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
-            end do
-         end do
-         end if
+         !if(onlyCoarse == 0) then
+         !do k =1, nVertLevels
+         !   do ie = 1, nEdgesInLTSHalo(1,1)
+         !      iEdge = edgesInLTSHalo(1,1,ie)
+         !      uNew(k,iEdge) =  uOld(k,iEdge) 
+         !   end do
+         !   do ic = 1, nCellsInLTSHalo(1,1)
+         !      iCell = cellsInLTSHalo(1,1,ic)
+         !      hNew(k,iCell) = hOld(k,iCell) 
+         !      tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
+         !   end do
+         !end do
+         !end if
 
          call mpas_pool_initialize_time_levels(statePool)
 
@@ -892,6 +906,8 @@ module sw_time_integration
          block => block % next
      end do
 
+call mpas_timer_stop("create extra pools LTS")
+
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      ! BEGIN LTS SCHEME
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -900,6 +916,7 @@ module sw_time_integration
 
      ! --- compute the first stage of SSPRK for interface layer 1, interface layer 2 and coarse 
 
+call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
      call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -907,7 +924,9 @@ module sw_time_integration
         call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
         call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
      end if
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("tendencies LTS")
      ! --- compute tendencies for interface layer 1, interface layer 2 and coarse
      block => domain % blocklist
      do while (associated(block))
@@ -930,12 +949,16 @@ module sw_time_integration
 
         block => block % next
      end do
+call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("halo updates  LTS")
      ! --- update halos for prognostic variables
      call mpas_dmpar_field_halo_exch(domain, 'tend_u')
      call mpas_dmpar_field_halo_exch(domain, 'tend_h')
      call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("advance soln LTS")
      ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK
      block => domain % blocklist
      do while (associated(block))
@@ -990,11 +1013,8 @@ module sw_time_integration
                  hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
                  tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
            end do
-        end do
 
-        if (lts_order == 3) then
-
-           do k =1, nVertLevels
+           if (lts_order == 3) then
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(2,3) !these are coarse cells that have a region of their own if nLTSHalos=2
                     iEdge = edgesInLTSHalo(2,3,ie)
@@ -1015,9 +1035,10 @@ module sw_time_integration
                  hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
                  tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
               end do
-           end do
+           end if
 
-        end if
+        end do
+
         end if
 
         !BEGIN: TO REMOVE
@@ -1036,11 +1057,13 @@ module sw_time_integration
 
         block => block % next
      end do
+call mpas_timer_stop("advance soln LTS")
 
      ! ---------------------------------------------------------------------------------------------------------------------
 
      ! --- compute the second stage of SSPRK for coarse
 
+call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
      call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -1048,7 +1071,9 @@ module sw_time_integration
         call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
         call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
      end if
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("tendencies LTS")
      ! --- compute tendencies for coarse
      block => domain % blocklist
      do while (associated(block))
@@ -1070,12 +1095,16 @@ module sw_time_integration
 
         block => block % next
      end do
+call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("halo updates  LTS")
      ! --- update halos for prognostic variables
      call mpas_dmpar_field_halo_exch(domain, 'tend_u')
      call mpas_dmpar_field_halo_exch(domain, 'tend_h')
      call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("advance soln LTS")
      ! --- advance solution (2nd stage of SSPRK for the coarse using dt)
      block => domain % blocklist
      do while (associated(block))
@@ -1124,11 +1153,8 @@ module sw_time_integration
                                                 weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + &
                                                 weightTend * dt * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell) 
            end do
-        end do
 
-        if (lts_order == 3) then !these are coarse cells that have a region of their own if nLTSHalos=2
-
-           do k =1, nVertLevels
+           if (lts_order == 3) then !these are coarse cells that have a region of their own if nLTSHalos=2
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(2,3)
                     iEdge = edgesInLTSHalo(2,3,ie)
@@ -1142,9 +1168,10 @@ module sw_time_integration
                                                    weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + &
                                                    weightTend * dt * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell)
               end do
-           end do
 
-        end if
+           end if
+
+        end do
         end if
 
         !BEGIN: TO REMOVE
@@ -1163,12 +1190,14 @@ module sw_time_integration
 
         block => block % next
      end do
+call mpas_timer_stop("advance soln LTS")
 
      ! ---------------------------------------------------------------------------------------------------------------------
 
      ! --- compute the second stage of SSPRK only for interface 1 and interface 2 (this is needed here only if lts_order = 3)
      if (lts_order == 3) then
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -1176,7 +1205,9 @@ module sw_time_integration
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
            call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
         end if
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("tendencies LTS")
         ! --- compute tendencies for interface layer 1, interface layer 2 
         block => domain % blocklist
         do while (associated(block))
@@ -1195,12 +1226,16 @@ module sw_time_integration
 
            block => block % next
         end do
+call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
         call mpas_dmpar_field_halo_exch(domain, 'tend_u')
         call mpas_dmpar_field_halo_exch(domain, 'tend_h')
         call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
      
+call mpas_timer_start("advance soln LTS")
         ! --- advance solution for interface layer 1, interface layer 2 with second stage of SSPRK
         block => domain % blocklist
         do while (associated(block))
@@ -1257,6 +1292,7 @@ module sw_time_integration
           
            block => block % next
         end do
+call mpas_timer_stop("advance soln LTS")
      end if
 
      ! ---------------------------------------------------------------------------------------------------------------------
@@ -1266,6 +1302,8 @@ module sw_time_integration
      ! --- begin substepping for fine solution advancement
      do im =1, M
 
+
+call mpas_timer_start("interpolate and update sol new  LTS")
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
         block => domain % blocklist
         do while (associated(block))
@@ -1333,11 +1371,8 @@ module sw_time_integration
                  hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  tracersNew(:,k,iCell) = tracersOld(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
               end do
-           end do 
 
-           if (lts_order == 3) then
-
-              do k=1, nVertLevels
+              if (lts_order == 3) then
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(2,3) !coarse
                        iEdge = edgesInLTSHalo(2,3,ie)
@@ -1349,14 +1384,16 @@ module sw_time_integration
                     hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                     tracersNew(:,k,iCell) = tracersOld(:,k,iCell)  !note this is due to the fact that the tendencies are computed at sol new
                  end do
-              end do
+              end if        
 
-           end if        
+           end do
            end if
 
            block => block % next
         end do
+call mpas_timer_stop("interpolate and update sol new  LTS")
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -1364,7 +1401,9 @@ module sw_time_integration
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
            call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
         end if
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("tendencies LTS")
         ! --- compute tendencies for interface layer 1, interface layer 2 and fine
         block => domain % blocklist
         do while (associated(block))
@@ -1387,12 +1426,16 @@ module sw_time_integration
 
            block => block % next
         end do
+call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
         call mpas_dmpar_field_halo_exch(domain, 'tend_u')
         call mpas_dmpar_field_halo_exch(domain, 'tend_h')
         call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("advance soln LTS")
         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
@@ -1451,10 +1494,8 @@ module sw_time_integration
                  hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
                  tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
               end do
-           end do
 
-           if (lts_order == 3) then
-              do k =1, nVertLevels
+              if (lts_order == 3) then
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,3)
                       iEdge = edgesInLTSHalo(1,3,ie)
@@ -1466,8 +1507,9 @@ module sw_time_integration
                     hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
                     tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)) / hNew(k,iCell)
                  end do
-              end do
-           end if
+              end if
+
+           end do
            end if   
 
            !BEGIN: TO REMOVE
@@ -1486,7 +1528,9 @@ module sw_time_integration
 
            block => block % next
         end do
+call mpas_timer_stop("advance soln LTS")
 
+call mpas_timer_start("interpolate and update sol new  LTS")
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
         block => domain % blocklist
         do while (associated(block))
@@ -1552,11 +1596,8 @@ module sw_time_integration
                  hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
               end do
-           end do         
 
-           if (lts_order == 3) then
-
-              do k=1, nVertLevels
+              if (lts_order == 3) then
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(2,3) !coarse
                        iEdge = edgesInLTSHalo(2,3,ie)
@@ -1568,14 +1609,16 @@ module sw_time_integration
                     hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                     tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  end do
-              end do
+              end if
 
-           end if
+           end do
            end if
 
            block => block % next
         end do
+call mpas_timer_stop("interpolate and update sol new  LTS")
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -1583,7 +1626,9 @@ module sw_time_integration
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
            call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
         end if
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("tendencies LTS")
         ! --- compute tendencies for interface layer 1, interface layer 2 and fine
         block => domain % blocklist
         do while (associated(block))
@@ -1605,12 +1650,16 @@ module sw_time_integration
            end if
            block => block % next
         end do
+call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
         call mpas_dmpar_field_halo_exch(domain, 'tend_u')
         call mpas_dmpar_field_halo_exch(domain, 'tend_h')
         call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("advance soln LTS")
         ! --- advance fine solution (second stage of SSPRK) AND sum up the tendecies above into tendSum1st for interface layer 1 and interface layer 2
         block => domain % blocklist
         do while (associated(block))
@@ -1644,12 +1693,12 @@ module sw_time_integration
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
            if( onlyCoarse  == 0 ) then
-           do k =1, nVertLevels
-              do ic = 1, nCellsInLTSHalo(1,1)
-                 iCell = cellsInLTSHalo(1,1,ic)
-                 tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-              end do
-           end do
+           !do k =1, nVertLevels
+           !   do ic = 1, nCellsInLTSHalo(1,1)
+           !      iCell = cellsInLTSHalo(1,1,ic)
+           !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+           !   end do
+           !end do
 
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
@@ -1673,6 +1722,7 @@ module sw_time_integration
               end do
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
+                 tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
                  hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
                  tracersNew(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
                                          weightTend * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
@@ -1681,12 +1731,12 @@ module sw_time_integration
 
            if (lts_order == 3) then
            
-              do k =1, nVertLevels
-                 do ic = 1, nCellsInLTSHalo(1,3)
-                    iCell = cellsInLTSHalo(1,3,ic)
-                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-                 end do
-              end do
+              !do k =1, nVertLevels
+              !   do ic = 1, nCellsInLTSHalo(1,3)
+              !      iCell = cellsInLTSHalo(1,3,ic)
+              !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+              !   end do
+              !end do
 
               do k =1, nVertLevels
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
@@ -1697,6 +1747,7 @@ module sw_time_integration
                  end if
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
+                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
                     hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
                     tracersNew(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
                                             weightTend * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
@@ -1721,9 +1772,11 @@ module sw_time_integration
 
            block => block % next
         end do
+call mpas_timer_stop("advance soln LTS")
 
         if (lts_order == 3) then
 
+call mpas_timer_start("interpolate and update sol new  LTS")
            ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
            block => domain % blocklist
            do while (associated(block))
@@ -1801,7 +1854,9 @@ module sw_time_integration
 
               block => block % next
            end do
+call mpas_timer_stop("interpolate and update sol new  LTS")
 
+call mpas_timer_start("halo updates  LTS")
            ! --- update halos for diagnostic variables
            call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -1809,7 +1864,9 @@ module sw_time_integration
               call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
               call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
            end if
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("tendencies LTS")
            ! --- compute tendencies for interface layer 1, interface layer 2 and fine
            block => domain % blocklist
            do while (associated(block))
@@ -1829,12 +1886,16 @@ module sw_time_integration
               end if
               block => block % next
            end do
+call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("halo updates  LTS")
            ! --- update halos for prognostic variables
            call mpas_dmpar_field_halo_exch(domain, 'tend_u')
            call mpas_dmpar_field_halo_exch(domain, 'tend_h')
            call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("advance soln LTS")
            ! --- advance fine solution (third stage of SSPRK) AND sum up the tendecies above into tendSum3rd for interface layer 1 and interface layer 2
            block => domain % blocklist
            do while (associated(block))
@@ -1868,16 +1929,16 @@ module sw_time_integration
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
               if(onlyCoarse == 0) then
-              do k=1, nVertLevels
-                 do ic = 1, nCellsInLTSHalo(1,1)
-                    iCell = cellsInLTSHalo(1,1,ic)
-                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-                 end do
-                 do ic = 1, nCellsInLTSHalo(1,3)
-                    iCell = cellsInLTSHalo(1,3,ic)
-                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-                 end do  
-              end do
+              !do k=1, nVertLevels
+              !   do ic = 1, nCellsInLTSHalo(1,1)
+              !      iCell = cellsInLTSHalo(1,1,ic)
+              !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+              !   end do
+              !   do ic = 1, nCellsInLTSHalo(1,3)
+              !      iCell = cellsInLTSHalo(1,3,ic)
+              !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+              !   end do  
+              !end do
 
               do k =1, nVertLevels
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
@@ -1905,12 +1966,14 @@ module sw_time_integration
                  end do
                  do ic = 1, nCellsInLTSHalo(1,1)
                     iCell = cellsInLTSHalo(1,1,ic)
+                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
                     hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
                     tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + & 
                                             (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
                  end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
+                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
                     hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
                     tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + &
                                             (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
@@ -1920,9 +1983,10 @@ module sw_time_integration
  
               block => block % next
            end do
-        
+       call mpas_timer_stop("advance soln LTS") 
         end if
 
+call mpas_timer_start("copy soln into new soln  LTS")
         ! --- copy old soln into new soln for the fine cells and edges
         block => domain % blocklist
         do while (associated(block))
@@ -1958,10 +2022,8 @@ module sw_time_integration
                  hOld(k,iCell) = hNew(k,iCell)
                  tracersOld(:,k,iCell) = tracersNew(:,k,iCell) 
               end do
-           end do
 
-           if (lts_order == 3) then
-              do k =1, nVertLevels
+              if (lts_order == 3) then
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,3)
                        iEdge = edgesInLTSHalo(1,3,ie)
@@ -1973,12 +2035,14 @@ module sw_time_integration
                     hOld(k,iCell) = hNew(k,iCell)
                     tracersOld(:,k,iCell) = tracersNew(:,k,iCell) 
                  end do
-              end do
-           end if           
+              end if
+
+           end do           
            end if
 
            block => block % next
         end do
+call mpas_timer_stop("copy soln into new soln  LTS")
 
      end do  ! end of substepping
 
@@ -1988,6 +2052,7 @@ module sw_time_integration
 
      if (lts_order == 2) then
 
+call mpas_timer_start("copy soln into new soln  LTS")
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
@@ -2028,12 +2093,14 @@ module sw_time_integration
            block => block % next
         end do
 
+call mpas_timer_stop("copy old soln into new soln  LTS")
      end if
 
      ! --- compute third stage of SSPRK for coarse if needed
 
      if (lts_order == 3) then
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
@@ -2041,7 +2108,9 @@ module sw_time_integration
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
            call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
         end if
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("tendencies LTS")
         ! --- compute tendencies for coarse
         block => domain % blocklist
         do while (associated(block))
@@ -2059,12 +2128,16 @@ module sw_time_integration
            end if
            block => block % next
         end do
+call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
         call mpas_dmpar_field_halo_exch(domain, 'tend_u')
         call mpas_dmpar_field_halo_exch(domain, 'tend_h')
         call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("advance soln LTS")
         ! --- advance solution (3rd stage of SSPRK for the coarse using dt)
         block => domain % blocklist
         do while (associated(block))
@@ -2128,11 +2201,12 @@ module sw_time_integration
 
            block => block % next
         end do
-
+call mpas_timer_stop("advance soln LTS")
      end if
 
      ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st (and tendSum3rd)  
 
+call mpas_timer_start("interface correction LTS")
      ! --- correct solution for interface layer 1 and interface layer 2
      block => domain % blocklist
      do while (associated(block))
@@ -2211,11 +2285,13 @@ module sw_time_integration
 
         block => block % next
      end do
+call mpas_timer_stop("interface correction LTS")
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      ! END LTS SCHEME
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+call mpas_timer_start("clean-up time LTS")
      !
      !  A little clean up at the end: compute diagnostics for new state
      !
@@ -2276,6 +2352,7 @@ module sw_time_integration
 
         block => block % next
      end do
+call mpas_timer_stop("clean-up time LTS")
 
    end subroutine sw_lts
 
