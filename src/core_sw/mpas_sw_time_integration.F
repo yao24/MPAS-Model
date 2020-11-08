@@ -1197,43 +1197,43 @@ call mpas_timer_stop("advance soln LTS")
      ! --- compute the second stage of SSPRK only for interface 1 and interface 2 (this is needed here only if lts_order = 3)
      if (lts_order == 3) then
 
-call mpas_timer_start("halo updates  LTS")
-        ! --- update halos for diagnostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+!call mpas_timer_start("halo updates  LTS")
+!        ! --- update halos for diagnostic variables
+!        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
-        if (config_h_mom_eddy_visc4 > 0.0) then
-           call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
-           call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
-        end if
-call mpas_timer_stop("halo updates  LTS")
+!        if (config_h_mom_eddy_visc4 > 0.0) then
+!           call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
+!           call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
+!        end if
+!call mpas_timer_stop("halo updates  LTS")
 
-call mpas_timer_start("tendencies LTS")
-        ! --- compute tendencies for interface layer 1, interface layer 2 
-        block => domain % blocklist
-        do while (associated(block))
-           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'state', statePool)
-           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+!call mpas_timer_start("tendencies LTS")
+!        ! --- compute tendencies for interface layer 1, interface layer 2 
+!        block => domain % blocklist
+!        do while (associated(block))
+!           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+!           call mpas_pool_get_subpool(block % structs, 'state', statePool)
+!           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+!           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           if (onlyFine == 0 .and. onlyCoarse == 0) then
-           call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
-           call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
-           call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
-           end if
+!           if (onlyFine == 0 .and. onlyCoarse == 0) then
+!           call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
+!           call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
+!           call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
+!           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
+!           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
+!           end if
 
-           block => block % next
-        end do
-call mpas_timer_stop("tendencies LTS")
+!           block => block % next
+!        end do
+!call mpas_timer_stop("tendencies LTS")
 
-call mpas_timer_start("halo updates  LTS")
-        ! --- update halos for prognostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
-        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
-        call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
-call mpas_timer_stop("halo updates  LTS")
+!call mpas_timer_start("halo updates  LTS")
+!        ! --- update halos for prognostic variables
+!        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+!        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+!        call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+!call mpas_timer_stop("halo updates  LTS")
      
 call mpas_timer_start("advance soln LTS")
         ! --- advance solution for interface layer 1, interface layer 2 with second stage of SSPRK
@@ -2093,7 +2093,7 @@ call mpas_timer_start("copy soln into new soln  LTS")
            block => block % next
         end do
 
-call mpas_timer_stop("copy old soln into new soln  LTS")
+call mpas_timer_stop("copy soln into new soln  LTS")
      end if
 
      ! --- compute third stage of SSPRK for coarse if needed
