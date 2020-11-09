@@ -95,6 +95,8 @@ module sw_core
          block => block % next
       end do
 
+      call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+
    end function sw_core_init
 
 
