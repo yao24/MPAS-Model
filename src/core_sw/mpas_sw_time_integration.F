@@ -205,7 +205,7 @@ module sw_time_integration
      do rk_step = 1, 4
 
 ! --- update halos for diagnostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
             call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -346,6 +346,8 @@ module sw_time_integration
 
          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 
+         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+
          call mpas_reconstruct(meshPool, uNew,          &
                           uReconstructX, uReconstructY, uReconstructZ, &
                           uReconstructZonal, uReconstructMeridional )
@@ -371,11 +373,6 @@ module sw_time_integration
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
    ! Advance model state forward in time by the specified time step using 
    !   a Strong Stability Preserving Runge Kutta method of order ssprk_order
-   !
-   ! Input: domain - current model state in time level 1 (e.g., time_levs(1)state%h(:,:)) 
-   !                 plus grid meta-data
-   ! Output: domain - upon exit, time level 2 (e.g., time_levs(2)%state%h(:,:)) contains 
-   !                  model state advanced forward in time by dt seconds
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
 
       implicit none
@@ -389,13 +386,6 @@ module sw_time_integration
       type (mpas_pool_type), pointer :: statePool
       type (mpas_pool_type), pointer :: meshPool
       type (mpas_pool_type), pointer :: tendPool
-
-      !BEGIN: TO REMOVE
-      integer :: i, iEdge
-      type (mpas_pool_type), pointer :: LTSPool
-      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
-      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
-      !END: TO REMOVE
 
       integer :: ssprk_step
 
@@ -414,12 +404,6 @@ module sw_time_integration
       call mpas_pool_get_config(domain % configs, 'config_test_case', config_test_case)
       call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
 
-     !
-     ! Initialize time_levs(2) with state at current time
-     ! Initialize first SSPRK state
-     ! Couple tracers time_levs(2) with h in time-levels
-     ! Initialize SSPRK weights
-     !
      block => domain % blocklist
      do while (associated(block))
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
@@ -481,7 +465,7 @@ module sw_time_integration
 
 call mpas_timer_start("halo updates SSPRK")
 ! --- update halos for diagnostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
             call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -521,14 +505,6 @@ call mpas_timer_start("solution advancement SSPRK")
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
 
-          !BEGIN: TO REMOVE
-          call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-          call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-          call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-          call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-          call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-          !END: TO REMOVE
-
           call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
@@ -544,34 +520,14 @@ call mpas_timer_start("solution advancement SSPRK")
           call mpas_pool_get_array(tendPool, 'h', hTend)
           call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-          do iCell = 1, nCells
-             do k = 1, nVertLevels
-               tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-             end do
-          end do
-
           if (config_test_case /= 1) then ! For case 1, wind should be fixed
           uNew(:,:) = weights_old(ssprk_step) * uOld(:,:) + weights_new(ssprk_step) * uNew(:,:) + weights_tend(ssprk_step) * uTend(:,:) 
           end if
-          hNew(:,:) = weights_old(ssprk_step) * hOld(:,:) + weights_new(ssprk_step) * hNew(:,:) + weights_tend(ssprk_step) * hTend(:,:)
 
-          !BEGIN: TO REMOVE
-          !if(ssprk_step == 2) then
-          !   print*, '----------- Fine'
-          !   do k = 1, nVertLevels
-          !      do i = 1, nEdgesInLTSHalo(1,1)
-          !         iEdge = edgesInLTSHalo(1,1,i)
-          !         print*, 'u=', uNew(k,iEdge), 'edge=', iEdge
-          !      end do
-          !      do i = 1, nCellsInLTSHalo(1,1)
-          !         iCell = cellsInLTSHalo(1,1,i)
-          !         print*,  hNew(k,iCell)
-          !      end do
-          !   end do
-          !END: TO REMOVE
-          
           do iCell = 1, nCells
-             do k = 1, nVertLevels 
+             do k = 1, nVertLevels
+                tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
+                hNew(k,iCell) = weights_old(ssprk_step) * hOld(k,iCell) + weights_new(ssprk_step) * hNew(k,iCell) + weights_tend(ssprk_step) * hTend(k,iCell)
                 tracersNew(:,k,iCell) = ( weights_old(ssprk_step) * tracersOld(:,k,iCell) * hOld(k,iCell)  + weights_new(ssprk_step) * tracersNew(:,k,iCell) + & 
                                           weights_tend(ssprk_step) * tracersTend(:,k,iCell) ) / hNew(k,iCell)
              end do
@@ -610,8 +566,9 @@ call mpas_timer_start("clean-up time SSPRK")
          call mpas_pool_get_array(statePool, 'uReconstructZonal', uReconstructZonal, 2)
          call mpas_pool_get_array(statePool, 'uReconstructMeridional', uReconstructMeridional, 2)
 
-         ! TODO: I think we can remove this
          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+         
+         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
          call mpas_reconstruct(meshPool, uNew,          &
                           uReconstructX, uReconstructY, uReconstructZ, &
@@ -918,7 +875,7 @@ call mpas_timer_stop("create extra pools LTS")
 
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
-     call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+     !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
      if (config_h_mom_eddy_visc4 > 0.0) then
         call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1065,7 +1022,7 @@ call mpas_timer_stop("advance soln LTS")
 
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
-     call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+     !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
      if (config_h_mom_eddy_visc4 > 0.0) then
         call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1395,7 +1352,7 @@ call mpas_timer_stop("interpolate and update sol new  LTS")
 
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1620,7 +1577,7 @@ call mpas_timer_stop("interpolate and update sol new  LTS")
 
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1858,7 +1815,7 @@ call mpas_timer_stop("interpolate and update sol new  LTS")
 
 call mpas_timer_start("halo updates  LTS")
            ! --- update halos for diagnostic variables
-           call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+           !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
            if (config_h_mom_eddy_visc4 > 0.0) then
               call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -2102,7 +2059,7 @@ call mpas_timer_stop("copy soln into new soln  LTS")
 
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -2317,11 +2274,12 @@ call mpas_timer_start("clean-up time LTS")
         
 
         !TODO this below may not be necessary
-        if (config_test_case == 1) then    ! For case 1, wind field should be fixed
-           uNew(:,:) = uOld(:,:)
-        end if
+        !if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+        !   uNew(:,:) = uOld(:,:)
+        !end if
 
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         call mpas_reconstruct(meshPool, uNew,          &
                           uReconstructX, uReconstructY, uReconstructZ, &
