@@ -11,6 +11,7 @@ module sw_test_cases
    use mpas_pool_routines
    use mpas_constants
    use mpas_log
+   use mpas_timer
 
 
    contains
@@ -121,8 +122,9 @@ module sw_test_cases
          do while (associated(block_ptr))
             call mpas_pool_get_subpool(block_ptr % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(block_ptr % structs, 'LTS', LTSPool)
-
+call mpas_timer_start("init LTS")
             call mpas_init_LTS(meshPool, LTSPool, domain)
+call mpas_timer_stop("init LTS")
 
             block_ptr => block_ptr % next
          end do
