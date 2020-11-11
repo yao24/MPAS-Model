@@ -567,8 +567,10 @@ call mpas_timer_start("clean-up time SSPRK")
          call mpas_pool_get_array(statePool, 'uReconstructMeridional', uReconstructMeridional, 2)
 
          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
-         
+
+call mpas_timer_start("last halo update SSPRK")         
          call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+call mpas_timer_stop("last halo update SSPRK")
 
          call mpas_reconstruct(meshPool, uNew,          &
                           uReconstructX, uReconstructY, uReconstructZ, &
@@ -2279,7 +2281,9 @@ call mpas_timer_start("clean-up time LTS")
         !end if
 
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+call mpas_timer_start("last halo update  LTS")
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
+call mpas_timer_stop("last halo update  LTS")
 
         call mpas_reconstruct(meshPool, uNew,          &
                           uReconstructX, uReconstructY, uReconstructZ, &
