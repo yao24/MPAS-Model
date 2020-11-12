@@ -585,14 +585,9 @@ call mpas_timer_stop("clean-up time SSPRK")
    subroutine sw_lts(domain, dt, lts_order)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Advance model state forward in time by the specified time step using
-   !   the local time stepping (LTS) scheme of order 2 from Hoang et al. (2019)
-   !
-   ! Input: domain - current model state in time level 1 (e.g.,
-   ! time_levs(1)state%h(:,:))
-   !                 plus grid meta-data
-   ! Output: domain - upon exit, time level 2 (e.g., time_levs(2)%state%h(:,:))
-   ! contains
-   !                  model state advanced forward in time by dt seconds
+   !   the local time stepping (LTS) from "Conservative explicit local
+   !   time-stepping schemes for the shallow water equations", by Hoang at al.
+   !   Journal of Computational Physics 382, 152-176, (2019)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
       implicit none
@@ -735,22 +730,6 @@ call mpas_timer_start("create extra pools LTS")
          hTendSum3rd(:,:) = 0
          tracersTendSum3rd(:,:,:) = 0
 
-
-         ! initialize new solution to old solution for the fine
-         !if(onlyCoarse == 0) then
-         !do k =1, nVertLevels
-         !   do ie = 1, nEdgesInLTSHalo(1,1)
-         !      iEdge = edgesInLTSHalo(1,1,ie)
-         !      uNew(k,iEdge) =  uOld(k,iEdge) 
-         !   end do
-         !   do ic = 1, nCellsInLTSHalo(1,1)
-         !      iCell = cellsInLTSHalo(1,1,ic)
-         !      hNew(k,iCell) = hOld(k,iCell) 
-         !      tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
-         !   end do
-         !end do
-         !end if
-
          call mpas_pool_initialize_time_levels(statePool)
 
          block => block % next
@@ -877,7 +856,6 @@ call mpas_timer_stop("create extra pools LTS")
 
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
-     !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
      if (config_h_mom_eddy_visc4 > 0.0) then
         call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1024,7 +1002,6 @@ call mpas_timer_stop("advance soln LTS")
 
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
-     !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
      if (config_h_mom_eddy_visc4 > 0.0) then
         call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1156,44 +1133,6 @@ call mpas_timer_stop("advance soln LTS")
      ! --- compute the second stage of SSPRK only for interface 1 and interface 2 (this is needed here only if lts_order = 3)
      if (lts_order == 3) then
 
-!call mpas_timer_start("halo updates  LTS")
-!        ! --- update halos for diagnostic variables
-!        call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
-
-!        if (config_h_mom_eddy_visc4 > 0.0) then
-!           call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
-!           call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
-!        end if
-!call mpas_timer_stop("halo updates  LTS")
-
-!call mpas_timer_start("tendencies LTS")
-!        ! --- compute tendencies for interface layer 1, interface layer 2 
-!        block => domain % blocklist
-!        do while (associated(block))
-!           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-!           call mpas_pool_get_subpool(block % structs, 'state', statePool)
-!           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-!           call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-
-!           if (onlyFine == 0 .and. onlyCoarse == 0) then
-!           call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
-!           call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
-!           call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
-!           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
-!           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
-!           end if
-
-!           block => block % next
-!        end do
-!call mpas_timer_stop("tendencies LTS")
-
-!call mpas_timer_start("halo updates  LTS")
-!        ! --- update halos for prognostic variables
-!        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
-!        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
-!        call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
-!call mpas_timer_stop("halo updates  LTS")
-     
 call mpas_timer_start("advance soln LTS")
         ! --- advance solution for interface layer 1, interface layer 2 with second stage of SSPRK
         block => domain % blocklist
@@ -1263,7 +1202,7 @@ call mpas_timer_stop("advance soln LTS")
 
 
 call mpas_timer_start("interpolate and update sol new  LTS")
-        ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
+        ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln old in soln new
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -1271,6 +1210,7 @@ call mpas_timer_start("interpolate and update sol new  LTS")
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
            call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
 
            call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
@@ -1283,7 +1223,6 @@ call mpas_timer_start("interpolate and update sol new  LTS")
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
 
-           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
            call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
@@ -1302,49 +1241,19 @@ call mpas_timer_start("interpolate and update sol new  LTS")
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
                     iEdge = edgesInLTSHalo(1,2,ie)
-                    uNew(k,iEdge) = (1.0 - alpha - alphaHat) * uOld(k,iEdge) + (alpha - alphaHat) * uFirstStage(k,iEdge) + 2.0 * alphaHat * uSecondStage(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(2,2) !interface layer 2
-                    iEdge = edgesInLTSHalo(2,2,ie)
-                    uNew(k,iEdge) = uOld(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(2,1) !coarse
-                    iEdge = edgesInLTSHalo(2,1,ie)
-                    uNew(k,iEdge) = uOld(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
+                    uNew(k,iEdge) = uOld(k,iEdge) 
+                    uOld(k,iEdge) = (1.0 - alpha - alphaHat) * uOld(k,iEdge) + (alpha - alphaHat) * uFirstStage(k,iEdge) + 2.0 * alphaHat * uSecondStage(k,iEdge)
                  end do
               end if
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
-                 hNew(k,iCell) = (1.0 - alpha - alphaHat) * hOld(k,iCell) + (alpha - alphaHat) * hFirstStage(k,iCell) + 2.0 * alphaHat * hSecondStage(k,iCell)
-                 tracersNew(:,k,iCell) = (1.0 - alpha - alphaHat) * tracersOld(:,k,iCell) + & 
+                 hNew(k,iCell) = hOld(k,iCell)
+                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
+                 hOld(k,iCell) = (1.0 - alpha - alphaHat) * hOld(k,iCell) + (alpha - alphaHat) * hFirstStage(k,iCell) + 2.0 * alphaHat * hSecondStage(k,iCell)
+                 tracersOld(:,k,iCell) = (1.0 - alpha - alphaHat) * tracersOld(:,k,iCell) + & 
                                          (alpha - alphaHat) * tracersFirstStage(:,k,iCell) + & 
                                           2.0 * alphaHat * tracersSecondStage(:,k,iCell) 
               end do
-              do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
-                 iCell = cellsInLTSHalo(2,2,ic)
-                 hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell)  !note this is due to the fact that the tendencies are computed at sol new
-              end do
-              do ic = 1, nCellsInLTSHalo(2,1) !coarse
-                 iCell = cellsInLTSHalo(2,1,ic)
-                 hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-              end do
-
-              if (lts_order == 3) then
-                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                    do ie = 1, nEdgesInLTSHalo(2,3) !coarse
-                       iEdge = edgesInLTSHalo(2,3,ie)
-                       uNew(k,iEdge) = uOld(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
-                    end do
-                 end if 
-                 do ic = 1, nCellsInLTSHalo(2,3) !coarse
-                    iCell = cellsInLTSHalo(2,3,ic)
-                    hNew(k,iCell) = hOld(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                    tracersNew(:,k,iCell) = tracersOld(:,k,iCell)  !note this is due to the fact that the tendencies are computed at sol new
-                 end do
-              end if        
-
            end do
            end if
 
@@ -1354,7 +1263,6 @@ call mpas_timer_stop("interpolate and update sol new  LTS")
 
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
-        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1372,9 +1280,9 @@ call mpas_timer_start("tendencies LTS")
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
            if (onlyCoarse == 0 ) then
-           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) 
-           call sw_compute_tend(tendPool, statePool, meshPool, 2) 
-           call sw_compute_scalar_tend(tendPool, statePool,meshPool, 2) 
+           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
+           call sw_compute_tend(tendPool, statePool, meshPool, 1) 
+           call sw_compute_scalar_tend(tendPool, statePool,meshPool, 1) 
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
@@ -1396,12 +1304,14 @@ call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface layer 2
+        ! --- also restore soln old by copying it back from soln new
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
            call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
 
            call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -1427,44 +1337,56 @@ call mpas_timer_start("advance soln LTS")
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
+           call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+           call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+           call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
            if (onlyCoarse == 0 ) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do iRegion =1,2  
-                    do ie = 1, nEdgesInLTSHalo(iRegion,2)
-                      iEdge = edgesInLTSHalo(iRegion,2,ie)
-                      uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
-                    end do
+                 do ie = 1, nEdgesInLTSHalo(1,2)
+                    iEdge = edgesInLTSHalo(1,2,ie)
+                    uOld(k,iEdge) = uNew(k,iEdge)
+                    uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
+                 end do
+                 do ie = 1, nEdgesInLTSHalo(2,2)
+                    iEdge = edgesInLTSHalo(2,2,ie)
+                    uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
                  end do
                  do ie = 1, nEdgesInLTSHalo(1,1)
                     iEdge = edgesInLTSHalo(1,1,ie)
-                    uNew(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
+                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
                  end do
               end if
-              do iRegion =1,2
-                 do ic = 1, nCellsInLTSHalo(iRegion,2)
-                    iCell = cellsInLTSHalo(iRegion,2,ic)
-                    hTendSum2nd(k,iCell) = hTendSum2nd(k,iCell) +  hTend(k,iCell)
-                    tracersTendSum2nd(:,k,iCell) = tracersTendSum2nd(:,k,iCell) + tracersTend(:,k,iCell)
-                 end do
+              do ic = 1, nCellsInLTSHalo(1,2)
+                 iCell = cellsInLTSHalo(1,2,ic)
+                 hOld(k,iCell) = hNew(k,iCell)
+                 tracersOld(:,k,iCell) = tracersNew(:,k,iCell)
+                 hTendSum2nd(k,iCell) = hTendSum2nd(k,iCell) +  hTend(k,iCell)
+                 tracersTendSum2nd(:,k,iCell) = tracersTendSum2nd(:,k,iCell) + tracersTend(:,k,iCell)
+              end do
+              do ic = 1, nCellsInLTSHalo(2,2)
+                 iCell = cellsInLTSHalo(2,2,ic)
+                 hTendSum2nd(k,iCell) = hTendSum2nd(k,iCell) +  hTend(k,iCell)
+                 tracersTendSum2nd(:,k,iCell) = tracersTendSum2nd(:,k,iCell) + tracersTend(:,k,iCell)
               end do
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
-                 hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
-                 tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                 hFirstStage(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
               end do
 
               if (lts_order == 3) then
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,3)
                       iEdge = edgesInLTSHalo(1,3,ie)
-                      uNew(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
+                      uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
                     end do
                  end if
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    hNew(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)) / hNew(k,iCell)
+                    hFirstStage(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)) / hFirstStage(k,iCell)
                  end do
               end if
 
@@ -1490,7 +1412,7 @@ call mpas_timer_start("advance soln LTS")
 call mpas_timer_stop("advance soln LTS")
 
 call mpas_timer_start("interpolate and update sol new  LTS")
-        ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
+        ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln first stage in soln new
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -1509,6 +1431,7 @@ call mpas_timer_start("interpolate and update sol new  LTS")
            call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
            call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
@@ -1527,49 +1450,19 @@ call mpas_timer_start("interpolate and update sol new  LTS")
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
                     iEdge = edgesInLTSHalo(1,2,ie)
-                    uNew(k,iEdge) = (1.0 - beta - betaHat) * uOld(k,iEdge) + (beta - betaHat) * uFirstStage(k,iEdge) + 2.0 * betaHat * uSecondStage(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(2,2) !interface layer 2
-                    iEdge = edgesInLTSHalo(2,2,ie)
-                    uNew(k,iEdge) = uFirstStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(2,1) !coarse
-                    iEdge = edgesInLTSHalo(2,1,ie)
-                    uNew(k,iEdge) = uFirstStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
+                    uNew(k,iEdge) = uFirstStage(k,iEdge)
+                    uFirstStage(k,iEdge) = (1.0 - beta - betaHat) * uOld(k,iEdge) + (beta - betaHat) * uFirstStage(k,iEdge) + 2.0 * betaHat * uSecondStage(k,iEdge)
                  end do
               end if
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
-                 hNew(k,iCell) = (1.0 - beta - betaHat) * hOld(k,iCell) + (beta - betaHat) * hFirstStage(k,iCell) + 2.0 * betaHat * hSecondStage(k,iCell)
-                 tracersNew(:,k,iCell) = (1.0 - beta - betaHat) * tracersOld(:,k,iCell) + &
+                 hNew(k,iCell) = hFirstStage(k,iCell)
+                 tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell)
+                 hFirstStage(k,iCell) = (1.0 - beta - betaHat) * hOld(k,iCell) + (beta - betaHat) * hFirstStage(k,iCell) + 2.0 * betaHat * hSecondStage(k,iCell)
+                 tracersFirstStage(:,k,iCell) = (1.0 - beta - betaHat) * tracersOld(:,k,iCell) + &
                                          (beta - betaHat) * tracersFirstStage(:,k,iCell) + & 
                                           2.0 * betaHat * tracersSecondStage(:,k,iCell)
               end do
-              do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
-                 iCell = cellsInLTSHalo(2,2,ic)
-                 hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-              end do
-              do ic = 1, nCellsInLTSHalo(2,1) !coarse
-                 iCell = cellsInLTSHalo(2,1,ic)
-                 hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-              end do
-
-              if (lts_order == 3) then
-                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                    do ie = 1, nEdgesInLTSHalo(2,3) !coarse
-                       iEdge = edgesInLTSHalo(2,3,ie)
-                       uNew(k,iEdge) = uFirstStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
-                    end do
-                 end if
-                 do ic = 1, nCellsInLTSHalo(2,3) !coarse
-                    iCell = cellsInLTSHalo(2,3,ic)
-                    hNew(k,iCell) = hFirstStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                    tracersNew(:,k,iCell) = tracersFirstStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 end do
-              end if
-
            end do
            end if
 
@@ -1579,7 +1472,6 @@ call mpas_timer_stop("interpolate and update sol new  LTS")
 
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
-        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1592,14 +1484,14 @@ call mpas_timer_start("tendencies LTS")
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-           call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
            if( onlyCoarse  == 0 ) then
-           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) 
-           call sw_compute_tend(tendPool, statePool, meshPool, 2) 
-           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) 
+           call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
+           call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
+           call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
            call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
@@ -1620,12 +1512,15 @@ call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
         ! --- advance fine solution (second stage of SSPRK) AND sum up the tendecies above into tendSum1st for interface layer 1 and interface layer 2
+        ! --- also restore soln first stage by copying it back from soln new
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
            call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+           call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
 
            call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -1651,65 +1546,66 @@ call mpas_timer_start("advance soln LTS")
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-           if( onlyCoarse  == 0 ) then
-           !do k =1, nVertLevels
-           !   do ic = 1, nCellsInLTSHalo(1,1)
-           !      iCell = cellsInLTSHalo(1,1,ic)
-           !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-           !   end do
-           !end do
+           call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+           call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+           call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
 
+           call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+           call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+           if( onlyCoarse  == 0 ) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do iRegion = 1,2
-                    do ie = 1, nEdgesInLTSHalo(iRegion,2)
-                       iEdge = edgesInLTSHalo(iRegion,2,ie)
-                       uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
-                    end do
+                 do ie = 1, nEdgesInLTSHalo(1,2)
+                    iEdge = edgesInLTSHalo(1,2,ie)
+                    uFirstStage(k,iEdge) = uNew(k,iEdge)
+                    uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
+                 end do
+                 do ie = 1, nEdgesInLTSHalo(2,2)
+                    iEdge = edgesInLTSHalo(2,2,ie)
+                    uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
                  end do
                  do ie = 1, nEdgesInLTSHalo(1,1)
                     iEdge = edgesInLTSHalo(1,1,ie)
-                    uNew(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uNew(k,iEdge) + weightTend *  dtFine * uTend(k,iEdge) !soln update for the fine
+                    uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend *  dtFine * uTend(k,iEdge) !soln update for the fine
                  end do
               end if
-              do iRegion = 1,2
-                 do ic = 1, nCellsInLTSHalo(iRegion,2)
-                    iCell = cellsInLTSHalo(iRegion,2,ic)
-                    hTendSum1st(k,iCell) = hTendSum1st(k,iCell) +  hTend(k,iCell)
-                    tracersTendSum1st(:,k,iCell) = tracersTendSum1st(:,k,iCell) + tracersTend(:,k,iCell)
-                 end do
+              do ic = 1, nCellsInLTSHalo(1,2)
+                 iCell = cellsInLTSHalo(1,2,ic)
+                 hFirstStage(k,iCell) = hNew(k,iCell)
+                 tracersFirstStage(:,k,iCell) = tracersNew(:,k,iCell)
+                 hTendSum1st(k,iCell) = hTendSum1st(k,iCell) +  hTend(k,iCell)
+                 tracersTendSum1st(:,k,iCell) = tracersTendSum1st(:,k,iCell) + tracersTend(:,k,iCell)
+              end do
+              do ic = 1, nCellsInLTSHalo(2,2)
+                 iCell = cellsInLTSHalo(2,2,ic)
+                 hTendSum1st(k,iCell) = hTendSum1st(k,iCell) + hTend(k,iCell)
+                 tracersTendSum1st(:,k,iCell) = tracersTendSum1st(:,k,iCell) + tracersTend(:,k,iCell)
               end do
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
-                 tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-                 hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
-                 tracersNew(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
-                                         weightTend * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                 hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
+                 tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                                   weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + & 
+                                                   weightTend * dtFine * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell)
               end do
            end do
 
            if (lts_order == 3) then
-           
-              !do k =1, nVertLevels
-              !   do ic = 1, nCellsInLTSHalo(1,3)
-              !      iCell = cellsInLTSHalo(1,3,ic)
-              !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-              !   end do
-              !end do
-
               do k =1, nVertLevels
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,3)
                       iEdge = edgesInLTSHalo(1,3,ie)
-                      uNew(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uNew(k,iEdge) + weightTend *  dtFine * uTend(k,iEdge) !soln update for the fine
+                      uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dtFine * uTend(k,iEdge)!soln update for the fine
                     end do
                  end if
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-                    hNew(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hNew(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + weightNew * tracersNew(:,k,iCell) + & 
-                                            weightTend * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                    hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                                      weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + & 
+                                                      weightTend * dtFine * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell)
                  end do
               end do
            end if
@@ -1733,10 +1629,56 @@ call mpas_timer_start("advance soln LTS")
         end do
 call mpas_timer_stop("advance soln LTS")
 
+! --- copy second stage soln into old soln for the fine
+call mpas_timer_start("copy second stage soln into old soln  LTS")
+        if(lts_order == 2) then
+
+           block => domain % blocklist
+           do while (associated(block))
+              call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+              call mpas_pool_get_subpool(block % structs, 'state', statePool)
+              call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+              call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+              call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
+
+              call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+              call mpas_pool_get_array(statePool, 'u', uOld, 1)
+              call mpas_pool_get_array(statePool, 'h', hOld, 1)
+              call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+              call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+              call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+              call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+              if (onlyCoarse == 0) then
+                 do k =1, nVertLevels
+                    if (config_test_case /= 1) then ! For case 1, wind should be fixed
+                       do ie = 1, nEdgesInLTSHalo(1,1)
+                          iEdge = edgesInLTSHalo(1,1,ie)
+                          uOld(k,iEdge) =  uSecondStage(k,iEdge)
+                       end do
+                    end if
+                    do ic = 1, nCellsInLTSHalo(1,1)
+                       iCell = cellsInLTSHalo(1,1,ic)
+                       hOld(k,iCell) = hSecondStage(k,iCell)
+                       tracersOld(:,k,iCell) = tracersSecondStage(:,k,iCell)
+                    end do
+                 end do
+              end if
+              block => block % next
+           end do
+         end if
+call mpas_timer_stop("copy second stage soln into old soln  LTS")
+
         if (lts_order == 3) then
 
 call mpas_timer_start("interpolate and update sol new  LTS")
-           ! --- interpolate interface layer 1 values (this is the actual interface prediction) and update sol new for interface layer 2 and coarse
+           ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln second stage in soln new
            block => domain % blocklist
            do while (associated(block))
               call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -1756,6 +1698,7 @@ call mpas_timer_start("interpolate and update sol new  LTS")
               call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
               call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
               call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
               call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
               call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
               call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
@@ -1763,6 +1706,10 @@ call mpas_timer_start("interpolate and update sol new  LTS")
               call mpas_pool_get_array(statePool, 'u', uOld, 1)
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+              call mpas_pool_get_array(statePool, 'u', uNew, 2)
+              call mpas_pool_get_array(statePool, 'h', hNew, 2)
+              call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
  
               if (onlyCoarse == 0) then 
               gam = REAL(2 * (im - 1) + 1) / ( 2 * M )
@@ -1771,42 +1718,18 @@ call mpas_timer_start("interpolate and update sol new  LTS")
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
                        iEdge = edgesInLTSHalo(1,2,ie)
-                       uNew(k,iEdge) = (1.0 - gam - gamHat) * uOld(k,iEdge) + (gam - gamHat) * uFirstStage(k,iEdge) + 2.0 * gamHat * uSecondStage(k,iEdge)
-                    end do
-                    do ie = 1, nEdgesInLTSHalo(2,2) !interface layer 2
-                       iEdge = edgesInLTSHalo(2,2,ie)
-                       uNew(k,iEdge) = uSecondStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
-                    end do
-                    do ie = 1, nEdgesInLTSHalo(2,1) !coarse
-                       iEdge = edgesInLTSHalo(2,1,ie)
-                       uNew(k,iEdge) = uSecondStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
-                    end do
-                     do ie = 1, nEdgesInLTSHalo(2,3) !coarse
-                       iEdge = edgesInLTSHalo(2,3,ie)
-                       uNew(k,iEdge) = uSecondStage(k,iEdge) !note this is due to the fact that the tendencies are computed at sol new
+                       uNew(k,iEdge) = uSecondStage(k,iEdge)
+                       uSecondStage(k,iEdge) = (1.0 - gam - gamHat) * uOld(k,iEdge) + (gam - gamHat) * uFirstStage(k,iEdge) + 2.0 * gamHat * uSecondStage(k,iEdge)
                     end do
                  end if
                  do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                     iCell = cellsInLTSHalo(1,2,ic)
-                    hNew(k,iCell) = (1.0 - gam - gamHat) * hOld(k,iCell) + (gam - gamHat) * hFirstStage(k,iCell) + 2.0 * gamHat * hSecondStage(k,iCell)
-                    tracersNew(:,k,iCell) = (1.0 - gam - gamHat) * tracersOld(:,k,iCell)  + &
+                    hNew(k,iCell) = hSecondStage(k,iCell)
+                    tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell)
+                    hSecondStage(k,iCell) = (1.0 - gam - gamHat) * hOld(k,iCell) + (gam - gamHat) * hFirstStage(k,iCell) + 2.0 * gamHat * hSecondStage(k,iCell)
+                    tracersSecondStage(:,k,iCell) = (1.0 - gam - gamHat) * tracersOld(:,k,iCell)  + &
                                             (gam - gamHat) * tracersFirstStage(:,k,iCell) + & 
                                              2.0 * gamHat * tracersSecondStage(:,k,iCell)
-                 end do
-                 do ic = 1, nCellsInLTSHalo(2,2) !interface layer 2
-                    iCell = cellsInLTSHalo(2,2,ic)
-                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                    tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 end do
-                 do ic = 1, nCellsInLTSHalo(2,1) !coarse
-                    iCell = cellsInLTSHalo(2,1,ic)
-                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                    tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                 end do
-                 do ic = 1, nCellsInLTSHalo(2,3) !coarse
-                    iCell = cellsInLTSHalo(2,3,ic)
-                    hNew(k,iCell) = hSecondStage(k,iCell) !note this is due to the fact that the tendencies are computed at sol new
-                    tracersNew(:,k,iCell) = tracersSecondStage(:,k,iCell) !note this is due to the fact that the tendencies are computed at sol new
                  end do
               end do
               end if
@@ -1817,7 +1740,6 @@ call mpas_timer_stop("interpolate and update sol new  LTS")
 
 call mpas_timer_start("halo updates  LTS")
            ! --- update halos for diagnostic variables
-           !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
            if (config_h_mom_eddy_visc4 > 0.0) then
               call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -1830,14 +1752,14 @@ call mpas_timer_start("tendencies LTS")
            block => domain % blocklist
            do while (associated(block))
               call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-              call mpas_pool_get_subpool(block % structs, 'state', statePool)
+              call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
               call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
               call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
               if( onlyCoarse == 0 ) then
-              call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) 
-              call sw_compute_tend(tendPool, statePool, meshPool, 2) 
-              call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2) 
+              call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) 
+              call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) 
+              call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) 
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
               call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
@@ -1856,12 +1778,14 @@ call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
            ! --- advance fine solution (third stage of SSPRK) AND sum up the tendecies above into tendSum3rd for interface layer 1 and interface layer 2
+           ! -- also restore soln second stage by copying it back from soln new
            block => domain % blocklist
            do while (associated(block))
               call mpas_pool_get_subpool(block % structs, 'tend', tendPool) 
               call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
               call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
               call mpas_pool_get_subpool(block % structs, 'state', statePool)
+              call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
               call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
 
               call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -1879,63 +1803,66 @@ call mpas_timer_start("advance soln LTS")
               call mpas_pool_get_array(tendSum3rdPool, 'h', hTendSum3rd)
               call mpas_pool_get_array(tendSum3rdPool, 'tracers', tracersTendSum3rd)
 
-              call mpas_pool_get_array(statePool, 'u', uNew, 2) 
-              call mpas_pool_get_array(statePool, 'h', hNew, 2)
-              call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
+              call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1) 
+              call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+              call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
 
               call mpas_pool_get_array(statePool, 'u', uOld, 1)
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-              if(onlyCoarse == 0) then
-              !do k=1, nVertLevels
-              !   do ic = 1, nCellsInLTSHalo(1,1)
-              !      iCell = cellsInLTSHalo(1,1,ic)
-              !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-              !   end do
-              !   do ic = 1, nCellsInLTSHalo(1,3)
-              !      iCell = cellsInLTSHalo(1,3,ic)
-              !      tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-              !   end do  
-              !end do
+              call mpas_pool_get_array(statePool, 'u', uNew, 2)
+              call mpas_pool_get_array(statePool, 'h', hNew, 2)
+              call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
+              if(onlyCoarse == 0) then
               do k =1, nVertLevels
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                    do iRegion = 1,2
-                       do ie = 1, nEdgesInLTSHalo(iRegion,2)
-                          iEdge = edgesInLTSHalo(iRegion,2,ie)
+                       do ie = 1, nEdgesInLTSHalo(1,2)
+                          iEdge = edgesInLTSHalo(1,2,ie)
+                          uSecondStage(k,iEdge) = uNew(k,iEdge)
                           uTendSum3rd(k,iEdge) = uTendSum3rd(k,iEdge) + uTend(k,iEdge)
                        end do
-                    end do
+                       do ie = 1, nEdgesInLTSHalo(2,2)
+                          iEdge = edgesInLTSHalo(2,2,ie)
+                          uTendSum3rd(k,iEdge) = uTendSum3rd(k,iEdge) + uTend(k,iEdge)
+                       end do
                     do ie = 1, nEdgesInLTSHalo(1,1)
                        iEdge = edgesInLTSHalo(1,1,ie)
-                       uNew(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uNew(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
+                       uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
                     end do
                     do ie = 1, nEdgesInLTSHalo(1,3)
                        iEdge = edgesInLTSHalo(1,3,ie)
-                       uNew(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uNew(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
+                       uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
                     end do
                  end if
-                 do iRegion = 1,2
-                    do ic = 1, nCellsInLTSHalo(iRegion,2)
-                       iCell = cellsInLTSHalo(iRegion,2,ic)
-                       hTendSum3rd(k,iCell) = hTendSum3rd(k,iCell) + hTend(k,iCell)
-                       tracersTendSum3rd(:,k,iCell) = tracersTendSum3rd(:,k,iCell) + tracersTend(:,k,iCell)
-                    end do
+                 do ic = 1, nCellsInLTSHalo(1,2)
+                    iCell = cellsInLTSHalo(1,2,ic)
+                    hSecondStage(k,iCell) = hNew(k,iCell)
+                    tracersSecondStage(:,k,iCell) = tracersNew(:,k,iCell)
+                    hTendSum3rd(k,iCell) = hTendSum3rd(k,iCell) + hTend(k,iCell)
+                    tracersTendSum3rd(:,k,iCell) = tracersTendSum3rd(:,k,iCell) + tracersTend(:,k,iCell)
+                 end do
+                 do ic = 1, nCellsInLTSHalo(2,2)
+                    iCell = cellsInLTSHalo(2,2,ic)
+                    hTendSum3rd(k,iCell) = hTendSum3rd(k,iCell) + hTend(k,iCell)
+                    tracersTendSum3rd(:,k,iCell) = tracersTendSum3rd(:,k,iCell) + tracersTend(:,k,iCell)
                  end do
                  do ic = 1, nCellsInLTSHalo(1,1)
                     iCell = cellsInLTSHalo(1,1,ic)
-                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + & 
-                                            (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersOld(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                              (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell)+ & 
+                                              (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                    hOld(k,iCell) = hNew(k,iCell)
                  end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    tracersNew(:,k,iCell) = tracersNew(:,k,iCell) * hNew(k,iCell)
-                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hNew(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + (2.0 / 3.0) * tracersNew(:,k,iCell) + &
-                                            (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                              (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
+                                              (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                    hOld(k,iCell) = hNew(k,iCell)
                  end do
               end do
               end if
@@ -1945,7 +1872,11 @@ call mpas_timer_start("advance soln LTS")
        call mpas_timer_stop("advance soln LTS") 
         end if
 
-call mpas_timer_start("copy soln into new soln  LTS")
+     end do  ! end of substepping
+
+     ! ---------------------------------------------------------------------------------------------------------------------
+
+call mpas_timer_start("copy old soln into new soln  LTS")
         ! --- copy old soln into new soln for the fine cells and edges
         block => domain % blocklist
         do while (associated(block))
@@ -1966,48 +1897,44 @@ call mpas_timer_start("copy soln into new soln  LTS")
 
            call mpas_pool_get_array(statePool, 'u', uOld, 1)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
-           call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)           
-           
+           call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
            if( onlyCoarse == 0) then
            do k =1, nVertLevels
               if (config_test_case /= 1) then ! For case 1, wind should be fixed
                  do ie = 1, nEdgesInLTSHalo(1,1)
                     iEdge = edgesInLTSHalo(1,1,ie)
-                    uOld(k,iEdge) =  uNew(k,iEdge)
+                    uNew(k,iEdge) =  uOld(k,iEdge)
                  end do
               end if
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
-                 hOld(k,iCell) = hNew(k,iCell)
-                 tracersOld(:,k,iCell) = tracersNew(:,k,iCell) 
+                 hNew(k,iCell) = hOld(k,iCell)
+                 tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
               end do
 
               if (lts_order == 3) then
                  if (config_test_case /= 1) then ! For case 1, wind should be fixed
                     do ie = 1, nEdgesInLTSHalo(1,3)
                        iEdge = edgesInLTSHalo(1,3,ie)
-                       uOld(k,iEdge) =  uNew(k,iEdge)
+                       uNew(k,iEdge) =  uOld(k,iEdge)
                     end do
                  end if
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
-                    hOld(k,iCell) = hNew(k,iCell)
-                    tracersOld(:,k,iCell) = tracersNew(:,k,iCell) 
+                    hNew(k,iCell) = hOld(k,iCell)
+                    tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
                  end do
               end if
 
-           end do           
+           end do
            end if
 
            block => block % next
         end do
-call mpas_timer_stop("copy soln into new soln  LTS")
+call mpas_timer_stop("copy old soln into new soln  LTS")
 
-     end do  ! end of substepping
-
-     ! ---------------------------------------------------------------------------------------------------------------------
-
-     ! -- copy secondStage soln into newSoln for coarse
+     ! --- copy secondStage soln into newSoln for coarse
 
      if (lts_order == 2) then
 
@@ -2061,7 +1988,6 @@ call mpas_timer_stop("copy soln into new soln  LTS")
 
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
-        !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 
         if (config_h_mom_eddy_visc4 > 0.0) then
            call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
@@ -2274,11 +2200,9 @@ call mpas_timer_start("clean-up time LTS")
         call mpas_pool_get_array(statePool, 'uReconstructZonal', uReconstructZonal, 2)
         call mpas_pool_get_array(statePool, 'uReconstructMeridional', uReconstructMeridional, 2)
         
-
-        !TODO this below may not be necessary
-        !if (config_test_case == 1) then    ! For case 1, wind field should be fixed
-        !   uNew(:,:) = uOld(:,:)
-        !end if
+        if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+           uNew(:,:) = uOld(:,:)
+        end if
 
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 call mpas_timer_start("last halo update  LTS")
