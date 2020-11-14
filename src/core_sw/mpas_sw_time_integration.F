@@ -1062,9 +1062,9 @@ call mpas_timer_start("advance soln LTS")
         call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
         call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
 
-        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 2)
-        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 2)
-        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 2)
+        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
         
         call mpas_pool_get_array(statePool, 'u', uOld, 1)
         call mpas_pool_get_array(statePool, 'h', hOld, 1)
@@ -1154,6 +1154,7 @@ call mpas_timer_start("advance soln LTS")
            call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
            call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)       
@@ -1859,7 +1860,7 @@ call mpas_timer_start("advance soln LTS")
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
                     hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
-                    tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                    tracersOld(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
                                               (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
                                               (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
                     hOld(k,iCell) = hNew(k,iCell)
