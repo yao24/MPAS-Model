@@ -381,7 +381,7 @@ module sw_time_integration
       real (kind=RKIND), intent(in) :: dt
       integer, intent(in) :: ssprk_order
 
-      integer :: iCell, k
+      integer :: iCell, k, err
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool
       type (mpas_pool_type), pointer :: meshPool
@@ -458,11 +458,16 @@ module sw_time_integration
      weights_tend(3) = dt * 2./3.
      end if
 
+     err = 0 ! for MPI_Barrier tests
+
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
      ! BEGIN SSPRK loop 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
      do ssprk_step = 1, ssprk_order
-
+   
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates SSPRK")
 ! --- update halos for diagnostic variables
         !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
@@ -490,6 +495,9 @@ call mpas_timer_stop("tendencies SSPRK")
 
 ! --- update halos for prognostic variables
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates SSPRK")
        call mpas_dmpar_field_halo_exch(domain, 'tend_u')
        call mpas_dmpar_field_halo_exch(domain, 'tend_h')
@@ -568,6 +576,9 @@ call mpas_timer_start("clean-up time SSPRK")
 
          call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("last halo update SSPRK")         
          call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 call mpas_timer_stop("last halo update SSPRK")
@@ -596,7 +607,7 @@ call mpas_timer_stop("clean-up time SSPRK")
       real (kind=RKIND), intent(in) :: dt
       integer, intent(in) :: lts_order
 
-      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M, onlyFine, onlyCoarse 
+      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M, onlyFine, onlyCoarse, err 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: firstStagePool, secondStagePool, tendSum1stPool, tendSum2ndPool, tendSum3rdPool
@@ -638,6 +649,8 @@ call mpas_timer_stop("clean-up time SSPRK")
       !   print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
       !end if
       !END: TO REMOVE
+  
+      err = 0
 
       dtFine = dt / M
 
@@ -854,6 +867,9 @@ call mpas_timer_stop("create extra pools LTS")
 
      ! --- compute the first stage of SSPRK for interface layer 1, interface layer 2 and coarse 
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
 
@@ -888,6 +904,9 @@ call mpas_timer_start("tendencies LTS")
      end do
 call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for prognostic variables
      call mpas_dmpar_field_halo_exch(domain, 'tend_u')
@@ -1000,6 +1019,9 @@ call mpas_timer_stop("advance soln LTS")
 
      ! --- compute the second stage of SSPRK for coarse
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
 
@@ -1033,6 +1055,9 @@ call mpas_timer_start("tendencies LTS")
      end do
 call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for prognostic variables
      call mpas_dmpar_field_halo_exch(domain, 'tend_u')
@@ -1202,7 +1227,7 @@ call mpas_timer_stop("advance soln LTS")
      do im =1, M
 
 
-call mpas_timer_start("interpolate and update sol new  LTS")
+call mpas_timer_start("interface prediction LTS")
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln old in soln new
         block => domain % blocklist
         do while (associated(block))
@@ -1260,8 +1285,11 @@ call mpas_timer_start("interpolate and update sol new  LTS")
 
            block => block % next
         end do
-call mpas_timer_stop("interpolate and update sol new  LTS")
+call mpas_timer_stop("interface prediction LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
 
@@ -1296,6 +1324,9 @@ call mpas_timer_start("tendencies LTS")
         end do
 call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
         call mpas_dmpar_field_halo_exch(domain, 'tend_u')
@@ -1412,7 +1443,7 @@ call mpas_timer_start("advance soln LTS")
         end do
 call mpas_timer_stop("advance soln LTS")
 
-call mpas_timer_start("interpolate and update sol new  LTS")
+call mpas_timer_start("interface prediction LTS")
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln first stage in soln new
         block => domain % blocklist
         do while (associated(block))
@@ -1469,8 +1500,11 @@ call mpas_timer_start("interpolate and update sol new  LTS")
 
            block => block % next
         end do
-call mpas_timer_stop("interpolate and update sol new  LTS")
+call mpas_timer_stop("interface prediction LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
 
@@ -1504,6 +1538,9 @@ call mpas_timer_start("tendencies LTS")
         end do
 call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
         call mpas_dmpar_field_halo_exch(domain, 'tend_u')
@@ -1678,7 +1715,7 @@ call mpas_timer_stop("copy second stage soln into old soln  LTS")
 
         if (lts_order == 3) then
 
-call mpas_timer_start("interpolate and update sol new  LTS")
+call mpas_timer_start("interface prediction LTS")
            ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln second stage in soln new
            block => domain % blocklist
            do while (associated(block))
@@ -1737,8 +1774,11 @@ call mpas_timer_start("interpolate and update sol new  LTS")
 
               block => block % next
            end do
-call mpas_timer_stop("interpolate and update sol new  LTS")
+call mpas_timer_stop("interface prediction LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
            ! --- update halos for diagnostic variables
 
@@ -1770,6 +1810,9 @@ call mpas_timer_start("tendencies LTS")
            end do
 call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
            ! --- update halos for prognostic variables
            call mpas_dmpar_field_halo_exch(domain, 'tend_u')
@@ -1877,7 +1920,7 @@ call mpas_timer_start("advance soln LTS")
 
      ! ---------------------------------------------------------------------------------------------------------------------
 
-call mpas_timer_start("copy old soln into new soln  LTS")
+call mpas_timer_start("copy soln into new soln LTS")
         ! --- copy old soln into new soln for the fine cells and edges
         block => domain % blocklist
         do while (associated(block))
@@ -1933,13 +1976,13 @@ call mpas_timer_start("copy old soln into new soln  LTS")
 
            block => block % next
         end do
-call mpas_timer_stop("copy old soln into new soln  LTS")
+call mpas_timer_stop("copy soln into new soln LTS")
 
      ! --- copy secondStage soln into newSoln for coarse
 
      if (lts_order == 2) then
 
-call mpas_timer_start("copy soln into new soln  LTS")
+call mpas_timer_start("copy soln into new soln LTS")
         block => domain % blocklist
         do while (associated(block))
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
@@ -1980,13 +2023,16 @@ call mpas_timer_start("copy soln into new soln  LTS")
            block => block % next
         end do
 
-call mpas_timer_stop("copy soln into new soln  LTS")
+call mpas_timer_stop("copy soln into new soln LTS")
      end if
 
      ! --- compute third stage of SSPRK for coarse if needed
 
      if (lts_order == 3) then
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
 
@@ -2016,6 +2062,9 @@ call mpas_timer_start("tendencies LTS")
         end do
 call mpas_timer_stop("tendencies LTS")
 
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
         call mpas_dmpar_field_halo_exch(domain, 'tend_u')
@@ -2110,17 +2159,17 @@ call mpas_timer_start("interface correction LTS")
         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
 
-        call mpas_pool_get_array(tendSum3rdPool, 'u', uTendSum3rd, 1)
-        call mpas_pool_get_array(tendSum3rdPool, 'h', hTendSum3rd, 1)
-        call mpas_pool_get_array(tendSum3rdPool, 'tracers', tracersTendSum3rd, 1)
+        call mpas_pool_get_array(tendSum3rdPool, 'u', uTendSum3rd)
+        call mpas_pool_get_array(tendSum3rdPool, 'h', hTendSum3rd)
+        call mpas_pool_get_array(tendSum3rdPool, 'tracers', tracersTendSum3rd)
 
-        call mpas_pool_get_array(tendSum2ndPool, 'u', uTendSum2nd, 1)
-        call mpas_pool_get_array(tendSum2ndPool, 'h', hTendSum2nd, 1)
-        call mpas_pool_get_array(tendSum2ndPool, 'tracers', tracersTendSum2nd, 1)
+        call mpas_pool_get_array(tendSum2ndPool, 'u', uTendSum2nd)
+        call mpas_pool_get_array(tendSum2ndPool, 'h', hTendSum2nd)
+        call mpas_pool_get_array(tendSum2ndPool, 'tracers', tracersTendSum2nd)
  
-        call mpas_pool_get_array(tendSum1stPool, 'u', uTendSum1st, 1)
-        call mpas_pool_get_array(tendSum1stPool, 'h', hTendSum1st, 1)
-        call mpas_pool_get_array(tendSum1stPool, 'tracers', tracersTendSum1st, 1)
+        call mpas_pool_get_array(tendSum1stPool, 'u', uTendSum1st)
+        call mpas_pool_get_array(tendSum1stPool, 'h', hTendSum1st)
+        call mpas_pool_get_array(tendSum1stPool, 'tracers', tracersTendSum1st)
           
         call mpas_pool_get_array(statePool, 'u', uOld, 1)
         call mpas_pool_get_array(statePool, 'h', hOld, 1)
@@ -2206,6 +2255,9 @@ call mpas_timer_start("clean-up time LTS")
         end if
 
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
 call mpas_timer_start("last halo update  LTS")
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
 call mpas_timer_stop("last halo update  LTS")
