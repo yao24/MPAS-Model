@@ -648,6 +648,11 @@ call mpas_timer_stop("clean-up time SSPRK")
       !if (domain % dminfo % my_proc_id == 18) then
       !   print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
       !end if
+      !if (onlyCoarse == 1) then
+      !   print*, 'Proc', domain % dminfo % my_proc_id, 'is only coarse'
+      !else if (onlyFine == 1) then
+      !   print*, 'Proc', domain % dminfo % my_proc_id, 'is only fine'
+      !end if
       !END: TO REMOVE
   
       err = 0
@@ -2221,6 +2226,16 @@ call mpas_timer_start("interface correction LTS")
         block => block % next
      end do
 call mpas_timer_stop("interface correction LTS")
+
+call mpas_timer_start("barrier time")
+call MPI_Barrier(domain % dminfo % comm, err)
+call mpas_timer_stop("barrier time")
+call mpas_timer_start("halo updates  LTS")
+        ! --- update halos for prognostic variables
+        call mpas_dmpar_field_halo_exch(domain, 'u')
+        call mpas_dmpar_field_halo_exch(domain, 'h')
+        call mpas_dmpar_field_halo_exch(domain, 'tracers')
+call mpas_timer_stop("halo updates  LTS")
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
      ! END LTS SCHEME

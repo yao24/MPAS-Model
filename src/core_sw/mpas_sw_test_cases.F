@@ -321,20 +321,20 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(statePool, 'u', u, 1)
       call mpas_pool_get_array(statePool, 'h', h, 1)
     
-      xCell = xCell * a
-      yCell = yCell * a
-      zCell = zCell * a
-      xVertex = xVertex * a
-      yVertex = yVertex * a
-      zVertex = zVertex * a
-      xEdge = xEdge * a
-      yEdge = yEdge * a
-      zEdge = zEdge * a
-      dvEdge = dvEdge * a
-      dcEdge = dcEdge * a
-      areaCell = areaCell * a**2.0
-      areaTriangle = areaTriangle * a**2.0
-      kiteAreasOnVertex = kiteAreasOnVertex * a**2.0
+      !xCell = xCell * a
+      !yCell = yCell * a
+      !zCell = zCell * a
+      !xVertex = xVertex * a
+      !yVertex = yVertex * a
+      !zVertex = zVertex * a
+      !xEdge = xEdge * a
+      !yEdge = yEdge * a
+      !zEdge = zEdge * a
+      !dvEdge = dvEdge * a
+      !dcEdge = dcEdge * a
+      !areaCell = areaCell * a**2.0
+      !areaTriangle = areaTriangle * a**2.0
+      !kiteAreasOnVertex = kiteAreasOnVertex * a**2.0
       
 
       !
@@ -726,17 +726,17 @@ call mpas_timer_stop("init LTS")
    ! the loop below initializes the LTS regions for the current processor
    ! TODOL this loop should be done in a more automatic way
    ! 1 = highest resolution possible
-   !LTSRegion(:) = 1
+   LTSRegion(:) = 1
    do iCell = 1, nCells
-      !if (2.0 * sqrt(areaCell(iCell) / pii) .ge. 300000) then
-      !   LTSRegion(iCell) = 2
-      !end if
-      !BEGIN: test initializaton
-      if (latCell(iCell) < 0.) then
-         LTSRegion(iCell) = 1
-      else
+      if (2.0 * sqrt(areaCell(iCell) / pii) .ge. 300000) then
          LTSRegion(iCell) = 2
       end if
+      !BEGIN: test initializaton
+      !if (latCell(iCell) < 0.) then
+      !   LTSRegion(iCell) = 1
+      !else
+      !   LTSRegion(iCell) = 2
+      !end if
       !END: test initialization
    end do
 
