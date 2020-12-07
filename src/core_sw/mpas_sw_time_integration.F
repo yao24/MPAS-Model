@@ -20,7 +20,7 @@ module sw_time_integration
    contains
 
 
-   subroutine sw_timestep(domain, dt, timeStamp)
+   subroutine sw_timestep(domain, dt, timeStamp, totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
    ! Advance model state forward in time by the specified time step
    !
@@ -35,6 +35,7 @@ module sw_time_integration
       type (domain_type), intent(inout) :: domain
       real (kind=RKIND), intent(in) :: dt
       character(len=*), intent(in) :: timeStamp
+      real (kind=RKIND), intent(inout) :: totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface
 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool
@@ -53,9 +54,9 @@ module sw_time_integration
       else if (trim(config_time_integration) == 'FWDEULR') then
          call sw_ssprk(domain, dt, 1)
       else if (trim(config_time_integration) == 'LTS2') then
-         call sw_lts(domain, dt, 2)
+         call sw_lts(domain, dt, 2, totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface)
       else if (trim(config_time_integration) == 'LTS3') then
-         call sw_lts(domain, dt, 3)
+         call sw_lts(domain, dt, 3, totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface)
       else
          call mpas_log_write('Unknown time integration option '//trim(config_time_integration), MPAS_LOG_ERR)
          call mpas_log_write('Currently, only ''RK4'', ''FWDEULR'', ''SSPRK2'', ''SSPRK3'', ''LTS2'' and ''LTS3'' are supported.', MPAS_LOG_CRIT)
@@ -593,7 +594,7 @@ call mpas_timer_stop("clean-up time SSPRK")
 
    end subroutine sw_ssprk
 
-   subroutine sw_lts(domain, dt, lts_order)
+   subroutine sw_lts(domain, dt, lts_order, totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface)
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
    ! Advance model state forward in time by the specified time step using
    !   the local time stepping (LTS) from "Conservative explicit local
@@ -606,8 +607,9 @@ call mpas_timer_stop("clean-up time SSPRK")
       type (domain_type), intent(inout) :: domain
       real (kind=RKIND), intent(in) :: dt
       integer, intent(in) :: lts_order
+      real (kind=RKIND), intent(inout) :: totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface
 
-      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M, onlyFine, onlyCoarse, err 
+      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M, onlyFine, onlyCoarse, haveInterface, nRegions, err 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: firstStagePool, secondStagePool, tendSum1stPool, tendSum2ndPool, tendSum3rdPool
@@ -616,6 +618,7 @@ call mpas_timer_stop("clean-up time SSPRK")
  
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels
 
+      real (kind=RKIND) :: startTendencies, finishTendencies, startAdvance, finishAdvance, startBarrier, finishBarrier, startInterface, finishInterface 
       real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend, uTendSum1st, uTendSum2nd, uTendSum3rd, uFirstStage, uSecondStage
       real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend, hTendSum1st, hTendSum2nd, hTendSum3rd, hFirstStage, hSecondStage
       real (kind=RKIND), dimension(:,:), pointer :: uReconstructX, uReconstructY, uReconstructZ, uReconstructZonal, uReconstructMeridional
@@ -641,12 +644,19 @@ call mpas_timer_stop("clean-up time SSPRK")
 
       call mpas_pool_get_subpool(domain % blocklist % structs, 'LTS', LTSPool)
       call mpas_pool_get_array(LTSPool, 'onlyFineOrCoarse', onlyFineOrCoarse)
+      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
       onlyFine = onlyFineOrCoarse(1)
       onlyCoarse = onlyFineOrCoarse(2)
+      haveInterface = 0
+      nRegions = 1
+      if( (ncellsInLTSHalo(1,2) .ne. 0) .or. (nCellsInLTSHalo(2,2) .ne. 0) ) then
+         haveInterface = 1
+         nRegions = 2
+      end if
 
       !BEGIN: TO REMOVE
-      !if (domain % dminfo % my_proc_id == 18) then
-      !   print*, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse
+      !if (domain % dminfo % my_proc_id == 0) then
+      !   print*, 'Proc', domain % dminfo % my_proc_id, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse, 'haveInterface=', haveInterface
       !end if
       !if (onlyCoarse == 1) then
       !   print*, 'Proc', domain % dminfo % my_proc_id, 'is only coarse'
@@ -873,7 +883,10 @@ call mpas_timer_stop("create extra pools LTS")
      ! --- compute the first stage of SSPRK for interface layer 1, interface layer 2 and coarse 
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
@@ -885,6 +898,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("tendencies LTS")
+call cpu_time(startTendencies)
      ! --- compute tendencies for interface layer 1, interface layer 2 and coarse
      block => domain % blocklist
      do while (associated(block))
@@ -907,10 +921,15 @@ call mpas_timer_start("tendencies LTS")
 
         block => block % next
      end do
+call cpu_time(finishTendencies)
+totalTimeTendencies = totalTimeTendencies + (finishTendencies - startTendencies)
 call mpas_timer_stop("tendencies LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for prognostic variables
@@ -920,6 +939,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
+call cpu_time(startAdvance)
      ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK
      block => domain % blocklist
      do while (associated(block))
@@ -950,24 +970,20 @@ call mpas_timer_start("advance soln LTS")
        
         if (onlyFine == 0) then
         do k =1, nVertLevels
-           if (config_test_case /= 1) then ! For case 1, wind should be fixed
-              do iRegion =1,2
-                 do ie = 1, nEdgesInLTSHalo(iRegion,2)
-                    iEdge = edgesInLTSHalo(iRegion,2,ie)
-                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
-                 end do
-              end do
-              do ie = 1, nEdgesInLTSHalo(2,1)
-                 iEdge = edgesInLTSHalo(2,1,ie)
+           do iRegion =1,nRegions
+              do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                 iEdge = edgesInLTSHalo(iRegion,2,ie)
                  uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
               end do
-           end if
-           do iRegion = 1,2
               do ic = 1, nCellsInLTSHalo(iRegion,2)
                  iCell = cellsInLTSHalo(iRegion,2,ic)
                  hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
-                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell) 
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
               end do
+           end do
+           do ie = 1, nEdgesInLTSHalo(2,1)
+              iEdge = edgesInLTSHalo(2,1,ie)
+              uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
            end do
            do ic = 1, nCellsInLTSHalo(2,1)
                  iCell = cellsInLTSHalo(2,1,ic)
@@ -976,16 +992,14 @@ call mpas_timer_start("advance soln LTS")
            end do
 
            if (lts_order == 3) then
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(2,3) !these are coarse cells that have a region of their own if nLTSHalos=2
-                    iEdge = edgesInLTSHalo(2,3,ie)
-                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(1,3) !these are fine cells that have a region of their own if nLTSHalos=2
-                    iEdge = edgesInLTSHalo(1,3,ie)
-                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(2,3) !these are coarse cells that have a region of their own if nLTSHalos=2
+                 iEdge = edgesInLTSHalo(2,3,ie)
+                 uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
+              end do
+              do ie = 1, nEdgesInLTSHalo(1,3) !these are fine cells that have a region of their own if nLTSHalos=2
+                 iEdge = edgesInLTSHalo(1,3,ie)
+                 uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(2,3)
                  iCell = cellsInLTSHalo(2,3,ic)
                  hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
@@ -999,6 +1013,10 @@ call mpas_timer_start("advance soln LTS")
            end if
 
         end do
+
+        if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uFirstStage(:,:) = uOld(:,:)
+        end if
 
         end if
 
@@ -1018,6 +1036,8 @@ call mpas_timer_start("advance soln LTS")
 
         block => block % next
      end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
 
      ! ---------------------------------------------------------------------------------------------------------------------
@@ -1025,7 +1045,10 @@ call mpas_timer_stop("advance soln LTS")
      ! --- compute the second stage of SSPRK for coarse
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for diagnostic variables
@@ -1037,6 +1060,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("tendencies LTS")
+call cpu_time(startTendencies)
      ! --- compute tendencies for coarse
      block => domain % blocklist
      do while (associated(block))
@@ -1058,10 +1082,15 @@ call mpas_timer_start("tendencies LTS")
 
         block => block % next
      end do
+call cpu_time(finishTendencies)
+totalTimeTendencies = totalTimeTendencies + (finishTendencies - startTendencies)
 call mpas_timer_stop("tendencies LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
      ! --- update halos for prognostic variables
@@ -1071,6 +1100,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
+call cpu_time(startAdvance)
      ! --- advance solution (2nd stage of SSPRK for the coarse using dt)
      block => domain % blocklist
      do while (associated(block))
@@ -1106,12 +1136,10 @@ call mpas_timer_start("advance soln LTS")
 
         if(onlyFine == 0) then
         do k =1, nVertLevels
-           if (config_test_case /= 1) then ! For case 1, wind should be fixed
-              do ie = 1, nEdgesInLTSHalo(2,1)
-                 iEdge = edgesInLTSHalo(2,1,ie)
-                 uSecondStage(k,iEdge) = weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dt * uTend(k,iEdge)
-              end do
-           end if
+           do ie = 1, nEdgesInLTSHalo(2,1)
+              iEdge = edgesInLTSHalo(2,1,ie)
+              uSecondStage(k,iEdge) = weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dt * uTend(k,iEdge)
+           end do
            do ic = 1, nCellsInLTSHalo(2,1)
               iCell = cellsInLTSHalo(2,1,ic)
               hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
@@ -1121,12 +1149,10 @@ call mpas_timer_start("advance soln LTS")
            end do
 
            if (lts_order == 3) then !these are coarse cells that have a region of their own if nLTSHalos=2
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(2,3)
-                    iEdge = edgesInLTSHalo(2,3,ie)
-                    uSecondStage(k,iEdge) = weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dt * uTend(k,iEdge)
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(2,3)
+                 iEdge = edgesInLTSHalo(2,3,ie)
+                 uSecondStage(k,iEdge) = weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dt * uTend(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(2,3)
                  iCell = cellsInLTSHalo(2,3,ic)
                  hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
@@ -1138,6 +1164,11 @@ call mpas_timer_start("advance soln LTS")
            end if
 
         end do
+
+        if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uSecondStage(:,:) = uOld(:,:)
+        end if
+
         end if
 
         !BEGIN: TO REMOVE
@@ -1156,6 +1187,8 @@ call mpas_timer_start("advance soln LTS")
 
         block => block % next
      end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
 
      ! ---------------------------------------------------------------------------------------------------------------------
@@ -1164,6 +1197,7 @@ call mpas_timer_stop("advance soln LTS")
      if (lts_order == 3) then
 
 call mpas_timer_start("advance soln LTS")
+call cpu_time(startAdvance)
         ! --- advance solution for interface layer 1, interface layer 2 with second stage of SSPRK
         block => domain % blocklist
         do while (associated(block))
@@ -1197,17 +1231,14 @@ call mpas_timer_start("advance soln LTS")
            call mpas_pool_get_array(tendPool, 'h', hTend)
            call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-           if (onlyFine == 0 .and. onlyCoarse == 0) then
+           !if (onlyFine == 0 .and. onlyCoarse == 0) then
+           if (haveInterface == 1) then
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do iRegion =1,2
-                    do ie = 1, nEdgesInLTSHalo(iRegion,2)
-                       iEdge = edgesInLTSHalo(iRegion,2,ie)
-                       uSecondStage(k,iEdge) =  0.75 * uOld(k,iEdge) + 0.25 * uFirstStage(k,iEdge) + 0.25 * dt * uTend(k,iEdge)
-                    end do
+              do iRegion =1,nRegions
+                 do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                    iEdge = edgesInLTSHalo(iRegion,2,ie)
+                    uSecondStage(k,iEdge) =  0.75 * uOld(k,iEdge) + 0.25 * uFirstStage(k,iEdge) + 0.25 * dt * uTend(k,iEdge)
                  end do
-              end if
-              do iRegion = 1,2
                  do ic = 1, nCellsInLTSHalo(iRegion,2)
                     iCell = cellsInLTSHalo(iRegion,2,ic)
                     hSecondStage(k,iCell) = 0.75 * hOld(k,iCell) + 0.25 * hFirstStage(k,iCell) + 0.25 * dt * hTend(k,iCell)
@@ -1217,10 +1248,17 @@ call mpas_timer_start("advance soln LTS")
                  end do
               end do
            end do
+
+           if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uSecondStage(:,:) = uOld(:,:)
+           end if
+
            end if
           
            block => block % next
         end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
      end if
 
@@ -1233,6 +1271,7 @@ call mpas_timer_stop("advance soln LTS")
 
 
 call mpas_timer_start("interface prediction LTS")
+call cpu_time(startInterface)
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln old in soln new
         block => domain % blocklist
         do while (associated(block))
@@ -1262,20 +1301,19 @@ call mpas_timer_start("interface prediction LTS")
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-           if (onlyCoarse  == 0) then 
+           !if (onlyCoarse  == 0) then 
+           if (haveInterface == 1) then
            alpha = REAL((im - 1)) / M
            alphaHat = 0.0
            if (lts_order == 3) then
               alphaHat = REAL((im - 1) * (im - 1)) / (M * M)
            end if
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
-                    iEdge = edgesInLTSHalo(1,2,ie)
-                    uNew(k,iEdge) = uOld(k,iEdge) 
-                    uOld(k,iEdge) = (1.0 - alpha - alphaHat) * uOld(k,iEdge) + (alpha - alphaHat) * uFirstStage(k,iEdge) + 2.0 * alphaHat * uSecondStage(k,iEdge)
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
+                 iEdge = edgesInLTSHalo(1,2,ie)
+                 uNew(k,iEdge) = uOld(k,iEdge) 
+                 uOld(k,iEdge) = (1.0 - alpha - alphaHat) * uOld(k,iEdge) + (alpha - alphaHat) * uFirstStage(k,iEdge) + 2.0 * alphaHat * uSecondStage(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
                  hNew(k,iCell) = hOld(k,iCell)
@@ -1286,14 +1324,22 @@ call mpas_timer_start("interface prediction LTS")
                                           2.0 * alphaHat * tracersSecondStage(:,k,iCell) 
               end do
            end do
+           if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uOld(:,:) = uNew(:,:)
+           end if
            end if
 
            block => block % next
         end do
+call cpu_time(finishInterface)
+totalTimeInterface = totalTimeInterface + (finishInterface - startInterface)
 call mpas_timer_stop("interface prediction LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
@@ -1305,6 +1351,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("tendencies LTS")
+call cpu_time(startTendencies)
         ! --- compute tendencies for interface layer 1, interface layer 2 and fine
         block => domain % blocklist
         do while (associated(block))
@@ -1327,10 +1374,15 @@ call mpas_timer_start("tendencies LTS")
 
            block => block % next
         end do
+call cpu_time(finishTendencies)
+totalTimeTendencies = totalTimeTendencies + (finishTendencies - startTendencies)
 call mpas_timer_stop("tendencies LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
@@ -1340,6 +1392,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
+call cpu_time(startAdvance)
         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface layer 2
         ! --- also restore soln old by copying it back from soln new
         block => domain % blocklist
@@ -1380,21 +1433,19 @@ call mpas_timer_start("advance soln LTS")
 
            if (onlyCoarse == 0 ) then
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,2)
-                    iEdge = edgesInLTSHalo(1,2,ie)
-                    uOld(k,iEdge) = uNew(k,iEdge)
-                    uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(2,2)
-                    iEdge = edgesInLTSHalo(2,2,ie)
-                    uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(1,1)
-                    iEdge = edgesInLTSHalo(1,1,ie)
-                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(1,2)
+                 iEdge = edgesInLTSHalo(1,2,ie)
+                 uOld(k,iEdge) = uNew(k,iEdge)
+                 uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
+              end do
+              do ie = 1, nEdgesInLTSHalo(2,2)
+                 iEdge = edgesInLTSHalo(2,2,ie)
+                 uTendSum2nd(k,iEdge) = uTendSum2nd(k,iEdge) + uTend(k,iEdge)
+              end do
+              do ie = 1, nEdgesInLTSHalo(1,1)
+                 iEdge = edgesInLTSHalo(1,1,ie)
+                 uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
+              end do
               do ic = 1, nCellsInLTSHalo(1,2)
                  iCell = cellsInLTSHalo(1,2,ic)
                  hOld(k,iCell) = hNew(k,iCell)
@@ -1414,12 +1465,10 @@ call mpas_timer_start("advance soln LTS")
               end do
 
               if (lts_order == 3) then
-                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                    do ie = 1, nEdgesInLTSHalo(1,3)
-                      iEdge = edgesInLTSHalo(1,3,ie)
-                      uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
-                    end do
-                 end if
+                 do ie = 1, nEdgesInLTSHalo(1,3)
+                    iEdge = edgesInLTSHalo(1,3,ie)
+                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
                     hFirstStage(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
@@ -1428,6 +1477,11 @@ call mpas_timer_start("advance soln LTS")
               end if
 
            end do
+
+           if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uFirstStage(:,:) = uOld(:,:)
+           end if
+
            end if   
 
            !BEGIN: TO REMOVE
@@ -1446,9 +1500,12 @@ call mpas_timer_start("advance soln LTS")
 
            block => block % next
         end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
 
 call mpas_timer_start("interface prediction LTS")
+call cpu_time(startInterface)
         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln first stage in soln new
         block => domain % blocklist
         do while (associated(block))
@@ -1477,20 +1534,19 @@ call mpas_timer_start("interface prediction LTS")
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-           if (onlyCoarse == 0 ) then
+           !if (onlyCoarse == 0 ) then
+           if (haveInterface == 1) then
            beta = REAL(im) / M
            betaHat = 0.0
            if (lts_order == 3) then
               betaHat = REAL((im - 1) * (im + 1)) / (M * M)
            end if
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
-                    iEdge = edgesInLTSHalo(1,2,ie)
-                    uNew(k,iEdge) = uFirstStage(k,iEdge)
-                    uFirstStage(k,iEdge) = (1.0 - beta - betaHat) * uOld(k,iEdge) + (beta - betaHat) * uFirstStage(k,iEdge) + 2.0 * betaHat * uSecondStage(k,iEdge)
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
+                 iEdge = edgesInLTSHalo(1,2,ie)
+                 uNew(k,iEdge) = uFirstStage(k,iEdge)
+                 uFirstStage(k,iEdge) = (1.0 - beta - betaHat) * uOld(k,iEdge) + (beta - betaHat) * uFirstStage(k,iEdge) + 2.0 * betaHat * uSecondStage(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                  iCell = cellsInLTSHalo(1,2,ic)
                  hNew(k,iCell) = hFirstStage(k,iCell)
@@ -1501,14 +1557,22 @@ call mpas_timer_start("interface prediction LTS")
                                           2.0 * betaHat * tracersSecondStage(:,k,iCell)
               end do
            end do
+           if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uFirstStage(:,:) = uOld(:,:)
+           end if
            end if
 
            block => block % next
         end do
+call cpu_time(finishInterface)
+totalTimeInterface = totalTimeInterface + (finishInterface - startInterface)
 call mpas_timer_stop("interface prediction LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
@@ -1520,6 +1584,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("tendencies LTS")
+call cpu_time(startTendencies)
         ! --- compute tendencies for interface layer 1, interface layer 2 and fine
         block => domain % blocklist
         do while (associated(block))
@@ -1541,10 +1606,15 @@ call mpas_timer_start("tendencies LTS")
            end if
            block => block % next
         end do
+call cpu_time(finishTendencies)
+totalTimeTendencies = totalTimeTendencies + (finishTendencies - startTendencies)
 call mpas_timer_stop("tendencies LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
@@ -1554,6 +1624,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
+call cpu_time(startAdvance)
         ! --- advance fine solution (second stage of SSPRK) AND sum up the tendecies above into tendSum1st for interface layer 1 and interface layer 2
         ! --- also restore soln first stage by copying it back from soln new
         block => domain % blocklist
@@ -1599,21 +1670,19 @@ call mpas_timer_start("advance soln LTS")
 
            if( onlyCoarse  == 0 ) then
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,2)
-                    iEdge = edgesInLTSHalo(1,2,ie)
-                    uFirstStage(k,iEdge) = uNew(k,iEdge)
-                    uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(2,2)
-                    iEdge = edgesInLTSHalo(2,2,ie)
-                    uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(1,1)
-                    iEdge = edgesInLTSHalo(1,1,ie)
-                    uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend *  dtFine * uTend(k,iEdge) !soln update for the fine
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(1,2)
+                 iEdge = edgesInLTSHalo(1,2,ie)
+                 uFirstStage(k,iEdge) = uNew(k,iEdge)
+                 uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
+              end do
+              do ie = 1, nEdgesInLTSHalo(2,2)
+                 iEdge = edgesInLTSHalo(2,2,ie)
+                 uTendSum1st(k,iEdge) = uTendSum1st(k,iEdge) + uTend(k,iEdge)
+              end do
+              do ie = 1, nEdgesInLTSHalo(1,1)
+                 iEdge = edgesInLTSHalo(1,1,ie)
+                 uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend *  dtFine * uTend(k,iEdge) !soln update for the fine
+              end do
               do ic = 1, nCellsInLTSHalo(1,2)
                  iCell = cellsInLTSHalo(1,2,ic)
                  hFirstStage(k,iCell) = hNew(k,iCell)
@@ -1637,12 +1706,10 @@ call mpas_timer_start("advance soln LTS")
 
            if (lts_order == 3) then
               do k =1, nVertLevels
-                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                    do ie = 1, nEdgesInLTSHalo(1,3)
-                      iEdge = edgesInLTSHalo(1,3,ie)
-                      uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dtFine * uTend(k,iEdge)!soln update for the fine
-                    end do
-                 end if
+                 do ie = 1, nEdgesInLTSHalo(1,3)
+                   iEdge = edgesInLTSHalo(1,3,ie)
+                   uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dtFine * uTend(k,iEdge)!soln update for the fine
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
                     hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
@@ -1652,6 +1719,11 @@ call mpas_timer_start("advance soln LTS")
                  end do
               end do
            end if
+
+           if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uSecondStage(:,:) = uOld(:,:)
+           end if
+
            end if
 
            !BEGIN: TO REMOVE
@@ -1670,6 +1742,8 @@ call mpas_timer_start("advance soln LTS")
 
            block => block % next
         end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
 
 ! --- copy second stage soln into old soln for the fine
@@ -1700,12 +1774,10 @@ call mpas_timer_start("copy second stage soln into old soln  LTS")
 
               if (onlyCoarse == 0) then
                  do k =1, nVertLevels
-                    if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                       do ie = 1, nEdgesInLTSHalo(1,1)
-                          iEdge = edgesInLTSHalo(1,1,ie)
-                          uOld(k,iEdge) =  uSecondStage(k,iEdge)
-                       end do
-                    end if
+                    do ie = 1, nEdgesInLTSHalo(1,1)
+                       iEdge = edgesInLTSHalo(1,1,ie)
+                       uOld(k,iEdge) =  uSecondStage(k,iEdge)
+                    end do
                     do ic = 1, nCellsInLTSHalo(1,1)
                        iCell = cellsInLTSHalo(1,1,ic)
                        hOld(k,iCell) = hSecondStage(k,iCell)
@@ -1721,6 +1793,7 @@ call mpas_timer_stop("copy second stage soln into old soln  LTS")
         if (lts_order == 3) then
 
 call mpas_timer_start("interface prediction LTS")
+call cpu_time(startInterface)
            ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln second stage in soln new
            block => domain % blocklist
            do while (associated(block))
@@ -1754,17 +1827,16 @@ call mpas_timer_start("interface prediction LTS")
               call mpas_pool_get_array(statePool, 'h', hNew, 2)
               call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
  
-              if (onlyCoarse == 0) then 
+              !if (onlyCoarse == 0) then 
+              if (haveInterface == 1) then
               gam = REAL(2 * (im - 1) + 1) / ( 2 * M )
               gamHat = REAL(2 * (im - 1) * (im - 1) + 2 * (im - 1) + 1) / (2 * M * M)
               do k =1, nVertLevels
-                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                    do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
-                       iEdge = edgesInLTSHalo(1,2,ie)
-                       uNew(k,iEdge) = uSecondStage(k,iEdge)
-                       uSecondStage(k,iEdge) = (1.0 - gam - gamHat) * uOld(k,iEdge) + (gam - gamHat) * uFirstStage(k,iEdge) + 2.0 * gamHat * uSecondStage(k,iEdge)
-                    end do
-                 end if
+                 do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
+                    iEdge = edgesInLTSHalo(1,2,ie)
+                    uNew(k,iEdge) = uSecondStage(k,iEdge)
+                    uSecondStage(k,iEdge) = (1.0 - gam - gamHat) * uOld(k,iEdge) + (gam - gamHat) * uFirstStage(k,iEdge) + 2.0 * gamHat * uSecondStage(k,iEdge)
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
                     iCell = cellsInLTSHalo(1,2,ic)
                     hNew(k,iCell) = hSecondStage(k,iCell)
@@ -1775,14 +1847,22 @@ call mpas_timer_start("interface prediction LTS")
                                              2.0 * gamHat * tracersSecondStage(:,k,iCell)
                  end do
               end do
+              if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uSecondStage(:,:) = uNew(:,:)
+              end if
               end if
 
               block => block % next
            end do
+call cpu_time(finishInterface)
+totalTimeInterface = totalTimeInterface + (finishInterface - startInterface)
 call mpas_timer_stop("interface prediction LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
            ! --- update halos for diagnostic variables
@@ -1794,6 +1874,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("tendencies LTS")
+call cpu_time(startTendencies)
            ! --- compute tendencies for interface layer 1, interface layer 2 and fine
            block => domain % blocklist
            do while (associated(block))
@@ -1813,10 +1894,15 @@ call mpas_timer_start("tendencies LTS")
               end if
               block => block % next
            end do
+call cpu_time(finishTendencies)
+totalTimeTendencies = totalTimeTendencies + (finishTendencies - startTendencies)
 call mpas_timer_stop("tendencies LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
            ! --- update halos for prognostic variables
@@ -1826,6 +1912,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
+call cpu_time(startAdvance)
            ! --- advance fine solution (third stage of SSPRK) AND sum up the tendecies above into tendSum3rd for interface layer 1 and interface layer 2
            ! -- also restore soln second stage by copying it back from soln new
            block => domain % blocklist
@@ -1865,26 +1952,27 @@ call mpas_timer_start("advance soln LTS")
               call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
               if(onlyCoarse == 0) then
+              if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uNew(:,:) = uOld(:,:)
+              end if
               do k =1, nVertLevels
-                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                       do ie = 1, nEdgesInLTSHalo(1,2)
-                          iEdge = edgesInLTSHalo(1,2,ie)
-                          uSecondStage(k,iEdge) = uNew(k,iEdge)
-                          uTendSum3rd(k,iEdge) = uTendSum3rd(k,iEdge) + uTend(k,iEdge)
-                       end do
-                       do ie = 1, nEdgesInLTSHalo(2,2)
-                          iEdge = edgesInLTSHalo(2,2,ie)
-                          uTendSum3rd(k,iEdge) = uTendSum3rd(k,iEdge) + uTend(k,iEdge)
-                       end do
-                    do ie = 1, nEdgesInLTSHalo(1,1)
-                       iEdge = edgesInLTSHalo(1,1,ie)
-                       uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
-                    end do
-                    do ie = 1, nEdgesInLTSHalo(1,3)
-                       iEdge = edgesInLTSHalo(1,3,ie)
-                       uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
-                    end do
-                 end if
+                 do ie = 1, nEdgesInLTSHalo(1,2)
+                    iEdge = edgesInLTSHalo(1,2,ie)
+                    uSecondStage(k,iEdge) = uNew(k,iEdge)
+                    uTendSum3rd(k,iEdge) = uTendSum3rd(k,iEdge) + uTend(k,iEdge)
+                 end do
+                 do ie = 1, nEdgesInLTSHalo(2,2)
+                    iEdge = edgesInLTSHalo(2,2,ie)
+                    uTendSum3rd(k,iEdge) = uTendSum3rd(k,iEdge) + uTend(k,iEdge)
+                 end do
+                 do ie = 1, nEdgesInLTSHalo(1,1)
+                    iEdge = edgesInLTSHalo(1,1,ie)
+                    uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
+                 end do
+                 do ie = 1, nEdgesInLTSHalo(1,3)
+                    iEdge = edgesInLTSHalo(1,3,ie)
+                    uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,2)
                     iCell = cellsInLTSHalo(1,2,ic)
                     hSecondStage(k,iCell) = hNew(k,iCell)
@@ -1914,10 +2002,15 @@ call mpas_timer_start("advance soln LTS")
                     hOld(k,iCell) = hNew(k,iCell)
                  end do
               end do
+              if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uOld(:,:) = uNew(:,:)
+              end if
               end if
  
               block => block % next
            end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
        call mpas_timer_stop("advance soln LTS") 
         end if
 
@@ -1950,12 +2043,10 @@ call mpas_timer_start("copy soln into new soln LTS")
 
            if( onlyCoarse == 0) then
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(1,1)
-                    iEdge = edgesInLTSHalo(1,1,ie)
-                    uNew(k,iEdge) =  uOld(k,iEdge)
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(1,1)
+                 iEdge = edgesInLTSHalo(1,1,ie)
+                 uNew(k,iEdge) =  uOld(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(1,1)
                  iCell = cellsInLTSHalo(1,1,ic)
                  hNew(k,iCell) = hOld(k,iCell)
@@ -1963,12 +2054,10 @@ call mpas_timer_start("copy soln into new soln LTS")
               end do
 
               if (lts_order == 3) then
-                 if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                    do ie = 1, nEdgesInLTSHalo(1,3)
-                       iEdge = edgesInLTSHalo(1,3,ie)
-                       uNew(k,iEdge) =  uOld(k,iEdge)
-                    end do
-                 end if
+                 do ie = 1, nEdgesInLTSHalo(1,3)
+                    iEdge = edgesInLTSHalo(1,3,ie)
+                    uNew(k,iEdge) =  uOld(k,iEdge)
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
                     hNew(k,iCell) = hOld(k,iCell)
@@ -2012,12 +2101,10 @@ call mpas_timer_start("copy soln into new soln LTS")
 
            if (onlyFine == 0) then
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(2,1)
-                    iEdge = edgesInLTSHalo(2,1,ie)
-                    uNew(k,iEdge) =  uSecondStage(k,iEdge)
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(2,1)
+                 iEdge = edgesInLTSHalo(2,1,ie)
+                 uNew(k,iEdge) =  uSecondStage(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(2,1)
                  iCell = cellsInLTSHalo(2,1,ic)
                  hNew(k,iCell) = hSecondStage(k,iCell)
@@ -2036,7 +2123,10 @@ call mpas_timer_stop("copy soln into new soln LTS")
      if (lts_order == 3) then
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
@@ -2048,6 +2138,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("tendencies LTS")
+call cpu_time(startTendencies)
         ! --- compute tendencies for coarse
         block => domain % blocklist
         do while (associated(block))
@@ -2065,10 +2156,15 @@ call mpas_timer_start("tendencies LTS")
            end if
            block => block % next
         end do
+call cpu_time(finishTendencies)
+totalTimeTendencies = totalTimeTendencies + (finishTendencies - startTendencies)
 call mpas_timer_stop("tendencies LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
@@ -2078,6 +2174,7 @@ call mpas_timer_start("halo updates  LTS")
 call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("advance soln LTS")
+call cpu_time(startAdvance)
         ! --- advance solution (3rd stage of SSPRK for the coarse using dt)
         block => domain % blocklist
         do while (associated(block))
@@ -2112,16 +2209,14 @@ call mpas_timer_start("advance soln LTS")
 
            if (onlyFine == 0) then
            do k =1, nVertLevels
-              if (config_test_case /= 1) then ! For case 1, wind should be fixed
-                 do ie = 1, nEdgesInLTSHalo(2,1)
-                    iEdge = edgesInLTSHalo(2,1,ie)
-                    uNew(k,iEdge) = (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) * dt * uTend(k,iEdge)
-                 end do
-                 do ie = 1, nEdgesInLTSHalo(2,3)
-                    iEdge = edgesInLTSHalo(2,3,ie)
-                    uNew(k,iEdge) = (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) * dt * uTend(k,iEdge)
-                 end do
-              end if
+              do ie = 1, nEdgesInLTSHalo(2,1)
+                 iEdge = edgesInLTSHalo(2,1,ie)
+                 uNew(k,iEdge) = (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) * dt * uTend(k,iEdge)
+              end do
+              do ie = 1, nEdgesInLTSHalo(2,3)
+                 iEdge = edgesInLTSHalo(2,3,ie)
+                 uNew(k,iEdge) = (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) * dt * uTend(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(2,1)
                  iCell = cellsInLTSHalo(2,1,ic)
                  hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
@@ -2137,16 +2232,22 @@ call mpas_timer_start("advance soln LTS")
                                            (2.0 / 3.0) * dt * tracersTend(:,k,iCell) ) / hNew(k,iCell)
               end do
            end do
+           if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+                uNew(:,:) = uOld(:,:)
+           end if
            end if
 
            block => block % next
         end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
      end if
 
      ! --- INTERFACE CORRECTION STEP: correct interface layer 1 and interface layer 2 using tendSum2nd and tendSum1st (and tendSum3rd)  
 
 call mpas_timer_start("interface correction LTS")
+call cpu_time(startInterface)
      ! --- correct solution for interface layer 1 and interface layer 2
      block => domain % blocklist
      do while (associated(block))
@@ -2184,29 +2285,29 @@ call mpas_timer_start("interface correction LTS")
         call mpas_pool_get_array(statePool, 'h', hNew, 2)
         call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
-        if(onlyFine == 0 .and. onlyCoarse == 0) then
+        !if(onlyFine == 0 .and. onlyCoarse == 0) then
+        if (haveInterface == 1) then
         do k =1, nVertLevels
-           if (config_test_case /= 1) then ! For case 1, wind should be fixed
-              do iRegion = 1,2
-                 do ie = 1, nEdgesInLTSHalo(iRegion,2)
-                    iEdge = edgesInLTSHalo(iRegion,2,ie)
-                    uNew(k,iEdge) =  uOld(k,iEdge) + weightTendSum2nd * dtFine * uTendSum2nd(k,iEdge) + weightTendSum1st * dtFine * uTendSum1st(k,iEdge) + &
-                                     weightTendSum3rd * dtFine * uTendSum3rd(k,iEdge)
-                 end do
+           do iRegion = 1,nRegions
+              do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                 iEdge = edgesInLTSHalo(iRegion,2,ie)
+                 uNew(k,iEdge) =  uOld(k,iEdge) + weightTendSum2nd * dtFine * uTendSum2nd(k,iEdge) + weightTendSum1st * dtFine * uTendSum1st(k,iEdge) + &
+                                  weightTendSum3rd * dtFine * uTendSum3rd(k,iEdge)
               end do
-           end if
-           do iRegion = 1,2 
               do ic = 1, nCellsInLTSHalo(iRegion,2)
                  iCell = cellsInLTSHalo(iRegion,2,ic)
                  hNew(k,iCell) = hOld(k,iCell) + weightTendSum2nd * dtFine * hTendSum2nd(k,iCell) + weightTendSum1st * dtFine * hTendSum1st(k,iCell) + &
                                  weightTendsum3rd * dtFine * hTendSum3rd(k,iCell)
-                 tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                 tracersNew(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + &
                                            weightTendSum2nd * dtFine * tracersTendSum2nd(:,k,iCell) + &
-                                           weightTendSum1st * dtFine * tracersTendSum1st(:,k,iCell) + & 
+                                           weightTendSum1st * dtFine * tracersTendSum1st(:,k,iCell) + &
                                            weightTendSum3rd * dtFine * tracersTendSum3rd(:,k,iCell) ) / hNew(k,iCell)
               end do
            end do
         end do
+        if (config_test_case == 1) then    ! For case 1, wind field should be fixed
+           uNew(:,:) = uOld(:,:)
+        end if
         end if
 
         !BEGIN: TO REMOVE
@@ -2225,10 +2326,15 @@ call mpas_timer_start("interface correction LTS")
 
         block => block % next
      end do
+call cpu_time(finishInterface)
+totalTimeInterface = totalTimeInterface + (finishInterface - startInterface)
 call mpas_timer_stop("interface correction LTS")
 
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
@@ -2271,7 +2377,10 @@ call mpas_timer_start("clean-up time LTS")
 
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("last halo update  LTS")
         call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)

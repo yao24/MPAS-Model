@@ -685,7 +685,7 @@ call mpas_timer_stop("init LTS")
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
    !integer, dimension(:), allocatable :: isLTSRegionVertexAssigned !TODO: we might be able to get rid of the part on vertices
    integer, pointer :: nLTSRegions, nLTSHalos
-   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
+   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, haveInterface
    integer, pointer :: nCells, nEdges!,nVertices !TODO: we might be able to get rid of the part on vertices
    real (kind=RKIND), dimension(:), pointer :: latCell, areaCell
    integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion, onlyFineOrCoarse
@@ -973,6 +973,15 @@ call mpas_timer_stop("init LTS")
    else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
       call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) cannot be greater than one.')
       stop
+   end if
+
+   if (domain % dminfo % my_proc_id == 20) then
+      haveInterface = 0
+      if ( (nCellsInLTSHalo(1,2) .ne. 0) .or. (nCellsInLTSHalo(2,2) .ne. 0 ) ) then
+         haveInterface = 1
+      end if
+      print*, 'Proc', domain % dminfo % my_proc_id, 'onlyFine=', onlyFineOrCoarse(1), 'onlyCoarse=', onlyFineOrCoarse(2), 'haveInterface=', haveInterface
+      print*, 'nCells=', nCells
    end if
 
    end subroutine mpas_init_LTS
