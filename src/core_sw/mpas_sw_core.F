@@ -210,7 +210,9 @@ module sw_core
       integer :: ierr
 
       integer :: itimestep
-      real (kind=RKIND) :: dt
+      real (kind=RKIND) :: dt, start, finish, totalTime, totalTimeTendencies, totalTimeAdvance, totalTimeBarrier, totalTimeInterface
+      character(len=10) :: file_id
+      character(len=50) :: file_name
       type (block_type), pointer :: block_ptr
       type (mpas_pool_type), pointer :: statePool
 
@@ -239,6 +241,15 @@ module sw_core
       ! During integration, time level 1 stores the model state at the beginning of the
       !   time step, and time level 2 stores the state advanced dt in time by timestep(...)
       itimestep = 0
+ 
+      totalTime = 0
+      totalTimeTendencies = 0
+      totalTimeAdvance = 0
+      totalTimeBarrier = 0
+      totalTimeInterface = 0
+      !write(file_id, '(i0)') domain % dminfo % my_proc_id
+      !file_name = 'time_integration_proc_' // trim(adjustl(file_id)) // '.txt'
+      !open(1, file = trim(file_name), status='new')
       do while (.not. mpas_is_clock_stop_time(clock))
 
          itimestep = itimestep + 1
@@ -246,10 +257,13 @@ module sw_core
 
          currTime = mpas_get_clock_time(clock, MPAS_NOW, ierr)
          call mpas_get_time(curr_time=currTime, dateTimeString=timeStamp, ierr=ierr)         
-         call mpas_log_write('Doing timestep ' // trim(timeStamp))
-
+         !call mpas_log_write('Doing timestep ' // trim(timeStamp))
+         
          call mpas_timer_start("time integration")
-         call mpas_timestep(domain, itimestep, dt, timeStamp)
+         call cpu_time(start)
+         call mpas_timestep(domain, itimestep, dt, timeStamp, totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface)
+         call cpu_time(finish)
+         totalTime = totalTime + (finish-start)
          call mpas_timer_stop("time integration")
 
          ! Move time level 2 fields back into time level 1 for next time step
@@ -265,10 +279,18 @@ module sw_core
 
       end do
 
+      !write(1,*) totalTime
+      !close(1)
+
+      if ( domain % dminfo % my_proc_id == 20 ) then
+         print*, 'Proc', domain % dminfo % my_proc_id, 'Integration:', totalTime, 'Advance:', totalTimeAdvance
+         print*, 'Tendencies:', totalTimeTendencies, 'Barrier:', totalTimeBarrier, 'Interface:', totalTimeInterface
+      end if
+
    end function sw_core_run
    
    
-   subroutine mpas_timestep(domain, itimestep, dt, timeStamp)
+   subroutine mpas_timestep(domain, itimestep, dt, timeStamp, totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface)
    
       use mpas_derived_types
       use mpas_pool_routines
@@ -282,6 +304,7 @@ module sw_core
       integer, intent(in) :: itimestep
       real (kind=RKIND), intent(in) :: dt
       character(len=*), intent(in) :: timeStamp
+      real (kind=RKIND), intent(inout) :: totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface
       
       type (block_type), pointer :: block_ptr
       type (mpas_pool_type), pointer :: statePool, meshPool
@@ -290,7 +313,7 @@ module sw_core
 
       call mpas_pool_get_config(domain % configs, 'config_stats_interval', config_stats_interval)
    
-      call sw_timestep(domain, dt, timeStamp)
+      call sw_timestep(domain, dt, timeStamp, totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface)
    
       if(config_stats_interval .gt. 0) then
           if(mod(itimestep, config_stats_interval) == 0) then
