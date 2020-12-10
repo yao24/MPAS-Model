@@ -609,14 +609,14 @@ call mpas_timer_stop("clean-up time SSPRK")
       integer, intent(in) :: lts_order
       real (kind=RKIND), intent(inout) :: totalTimeAdvance, totalTimeTendencies, totalTimeBarrier, totalTimeInterface
 
-      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M, onlyFine, onlyCoarse, haveInterface, nRegions, err 
+      integer :: iCell, iEdge, iRegion, k, ic, ie, im, M, nRegions, err 
       type (block_type), pointer :: block
       type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
       type (mpas_pool_type), pointer :: firstStagePool, secondStagePool, tendSum1stPool, tendSum2ndPool, tendSum3rdPool
       type (mpas_pool_type), pointer :: prevFirstStagePool, nextFirstStagePool, prevTendSum1stPool, nextTendSum1stPool, prevTendSum2ndPool, nextTendSum2ndPool
       type (mpas_pool_type), pointer :: prevSecondStagePool, nextSecondStagePool, prevTendSum3rdPool, nextTendSum3rdPool
  
-      integer, pointer :: nCells, nEdges, nVertices, nVertLevels
+      integer, pointer :: nCells, nEdges, nVertices, nVertLevels, haveFine, haveCoarse, haveInterface
 
       real (kind=RKIND) :: startTendencies, finishTendencies, startAdvance, finishAdvance, startBarrier, finishBarrier, startInterface, finishInterface 
       real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend, uTendSum1st, uTendSum2nd, uTendSum3rd, uFirstStage, uSecondStage
@@ -626,7 +626,6 @@ call mpas_timer_stop("clean-up time SSPRK")
       real (kind=RKIND), dimension(:,:,:), pointer :: tracersFirstStage, tracersSecondStage
       real (kind=RKIND) :: dtFine, alpha, alphaHat, beta, betaHat, gam, gamHat
 
-      integer, dimension(:), pointer :: onlyFineOrCoarse
       integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
       integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
 
@@ -641,30 +640,8 @@ call mpas_timer_stop("clean-up time SSPRK")
       call mpas_pool_get_config(domain % configs, 'config_h_mom_eddy_visc4', config_h_mom_eddy_visc4)
 
       M = config_dt_scaling_LTS
+      nRegions = 2
 
-      call mpas_pool_get_subpool(domain % blocklist % structs, 'LTS', LTSPool)
-      call mpas_pool_get_array(LTSPool, 'onlyFineOrCoarse', onlyFineOrCoarse)
-      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
-      onlyFine = onlyFineOrCoarse(1)
-      onlyCoarse = onlyFineOrCoarse(2)
-      haveInterface = 0
-      nRegions = 1
-      if( (ncellsInLTSHalo(1,2) .ne. 0) .or. (nCellsInLTSHalo(2,2) .ne. 0) ) then
-         haveInterface = 1
-         nRegions = 2
-      end if
-
-      !BEGIN: TO REMOVE
-      !if (domain % dminfo % my_proc_id == 0) then
-      !   print*, 'Proc', domain % dminfo % my_proc_id, 'onlyFine=', onlyFine, 'onlyCoarse=', onlyCoarse, 'haveInterface=', haveInterface
-      !end if
-      !if (onlyCoarse == 1) then
-      !   print*, 'Proc', domain % dminfo % my_proc_id, 'is only coarse'
-      !else if (onlyFine == 1) then
-      !   print*, 'Proc', domain % dminfo % my_proc_id, 'is only fine'
-      !end if
-      !END: TO REMOVE
-  
       err = 0
 
       dtFine = dt / M
@@ -907,7 +884,10 @@ call cpu_time(startTendencies)
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-        if(onlyFine == 0) then
+        call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+        call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+        if(haveCoarse == 1 .or. haveInterface == 1) then
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
         call sw_compute_tend(tendPool, statePool, meshPool, 1) 
         call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)  
@@ -955,6 +935,8 @@ call cpu_time(startAdvance)
         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+        call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+        call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
         call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
         call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
@@ -968,7 +950,7 @@ call cpu_time(startAdvance)
         call mpas_pool_get_array(tendPool, 'h', hTend)
         call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
        
-        if (onlyFine == 0) then
+        if(haveCoarse == 1 .or. haveInterface == 1) then
         do k =1, nVertLevels
            do iRegion =1,nRegions
               do ie = 1, nEdgesInLTSHalo(iRegion,2)
@@ -1069,8 +1051,9 @@ call cpu_time(startTendencies)
         call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
 
-        if(onlyFine == 0) then
+        if(haveCoarse == 1) then
         call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
         call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
         call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
@@ -1117,6 +1100,7 @@ call cpu_time(startAdvance)
         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+        call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
 
         call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
         call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
@@ -1134,7 +1118,7 @@ call cpu_time(startAdvance)
         call mpas_pool_get_array(tendPool, 'h', hTend)
         call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-        if(onlyFine == 0) then
+        if(haveCoarse == 1) then
         do k =1, nVertLevels
            do ie = 1, nEdgesInLTSHalo(2,1)
               iEdge = edgesInLTSHalo(2,1,ie)
@@ -1196,6 +1180,61 @@ call mpas_timer_stop("advance soln LTS")
      ! --- compute the second stage of SSPRK only for interface 1 and interface 2 (this is needed here only if lts_order = 3)
      if (lts_order == 3) then
 
+call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
+call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
+call mpas_timer_stop("barrier time")
+call mpas_timer_start("halo updates  LTS")
+     ! --- update halos for diagnostic variables
+
+     if (config_h_mom_eddy_visc4 > 0.0) then
+        call mpas_dmpar_field_halo_exch(domain, 'divergence', timeLevel=2)
+        call mpas_dmpar_field_halo_exch(domain, 'vorticity', timeLevel=2)
+     end if
+call mpas_timer_stop("halo updates  LTS")
+
+call mpas_timer_start("tendencies LTS")
+call cpu_time(startTendencies)
+     ! --- compute tendencies for interface
+     block => domain % blocklist
+     do while (associated(block))
+
+        call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+        call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+
+        call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+       if(haveInterface == 1) then
+        call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1)
+        call sw_compute_tend(tendPool, firstStagePool, meshPool, 1)
+        call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1)
+       call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
+        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
+        end if
+
+        block => block % next
+     end do
+call cpu_time(finishTendencies)
+totalTimeTendencies = totalTimeTendencies + (finishTendencies - startTendencies)
+call mpas_timer_stop("tendencies LTS")
+
+call mpas_timer_start("barrier time")
+call cpu_time(startBarrier)
+call MPI_Barrier(domain % dminfo % comm, err)
+call cpu_time(finishBarrier)
+totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
+call mpas_timer_stop("barrier time")
+call mpas_timer_start("halo updates  LTS")
+     ! --- update halos for prognostic variables
+     call mpas_dmpar_field_halo_exch(domain, 'tend_u')
+     call mpas_dmpar_field_halo_exch(domain, 'tend_h')
+     call mpas_dmpar_field_halo_exch(domain, 'tend_tracers')
+call mpas_timer_stop("halo updates  LTS")
+
 call mpas_timer_start("advance soln LTS")
 call cpu_time(startAdvance)
         ! --- advance solution for interface layer 1, interface layer 2 with second stage of SSPRK
@@ -1214,6 +1253,7 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
            call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
@@ -1231,7 +1271,6 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(tendPool, 'h', hTend)
            call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-           !if (onlyFine == 0 .and. onlyCoarse == 0) then
            if (haveInterface == 1) then
            do k =1, nVertLevels
               do iRegion =1,nRegions
@@ -1288,6 +1327,7 @@ call cpu_time(startInterface)
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
            call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
@@ -1301,7 +1341,6 @@ call cpu_time(startInterface)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-           !if (onlyCoarse  == 0) then 
            if (haveInterface == 1) then
            alpha = REAL((im - 1)) / M
            alphaHat = 0.0
@@ -1360,7 +1399,10 @@ call cpu_time(startTendencies)
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           if (onlyCoarse == 0 ) then
+           call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+           call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+           if(haveFine == 1 .or. haveInterface == 1) then
            call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
            call sw_compute_tend(tendPool, statePool, meshPool, 1) 
            call sw_compute_scalar_tend(tendPool, statePool,meshPool, 1) 
@@ -1410,6 +1452,8 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+           call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
            call mpas_pool_get_array(tendPool, 'u', uTend)
            call mpas_pool_get_array(tendPool, 'h', hTend)
@@ -1431,7 +1475,7 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
 
-           if (onlyCoarse == 0 ) then
+           if(haveFine == 1 .or. haveInterface == 1) then
            do k =1, nVertLevels
               do ie = 1, nEdgesInLTSHalo(1,2)
                  iEdge = edgesInLTSHalo(1,2,ie)
@@ -1521,6 +1565,7 @@ call cpu_time(startInterface)
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
            call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
            call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
@@ -1534,7 +1579,6 @@ call cpu_time(startInterface)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-           !if (onlyCoarse == 0 ) then
            if (haveInterface == 1) then
            beta = REAL(im) / M
            betaHat = 0.0
@@ -1593,7 +1637,10 @@ call cpu_time(startTendencies)
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-           if( onlyCoarse  == 0 ) then
+           call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+           call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+           if(haveFine == 1 .or. haveInterface == 1) then
            call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
            call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
            call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
@@ -1643,6 +1690,8 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+           call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
            call mpas_pool_get_array(tendPool, 'u', uTend)
            call mpas_pool_get_array(tendPool, 'h', hTend)
@@ -1667,8 +1716,8 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
-
-           if( onlyCoarse  == 0 ) then
+           
+           if(haveFine == 1 .or. haveInterface == 1) then
            do k =1, nVertLevels
               do ie = 1, nEdgesInLTSHalo(1,2)
                  iEdge = edgesInLTSHalo(1,2,ie)
@@ -1763,6 +1812,7 @@ call mpas_timer_start("copy second stage soln into old soln  LTS")
               call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
               call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
               call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
 
               call mpas_pool_get_array(statePool, 'u', uOld, 1)
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
@@ -1772,7 +1822,7 @@ call mpas_timer_start("copy second stage soln into old soln  LTS")
               call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
               call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
 
-              if (onlyCoarse == 0) then
+              if(haveFine == 1) then
                  do k =1, nVertLevels
                     do ie = 1, nEdgesInLTSHalo(1,1)
                        iEdge = edgesInLTSHalo(1,1,ie)
@@ -1810,6 +1860,7 @@ call cpu_time(startInterface)
               call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
               call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
               call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
               call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
               call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
@@ -1827,7 +1878,6 @@ call cpu_time(startInterface)
               call mpas_pool_get_array(statePool, 'h', hNew, 2)
               call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
  
-              !if (onlyCoarse == 0) then 
               if (haveInterface == 1) then
               gam = REAL(2 * (im - 1) + 1) / ( 2 * M )
               gamHat = REAL(2 * (im - 1) * (im - 1) + 2 * (im - 1) + 1) / (2 * M * M)
@@ -1883,7 +1933,10 @@ call cpu_time(startTendencies)
               call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
               call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
-              if( onlyCoarse == 0 ) then
+              call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+              call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+              if(haveFine == 1 .or. haveInterface == 1) then
               call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) 
               call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) 
               call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) 
@@ -1930,6 +1983,8 @@ call cpu_time(startAdvance)
               call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
               call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
               call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+              call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+              call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
               call mpas_pool_get_array(tendPool, 'u', uTend)
               call mpas_pool_get_array(tendPool, 'h', hTend)
@@ -1951,7 +2006,7 @@ call cpu_time(startAdvance)
               call mpas_pool_get_array(statePool, 'h', hNew, 2)
               call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
-              if(onlyCoarse == 0) then
+              if(haveFine == 1 .or. haveInterface == 1) then
               if (config_test_case == 1) then    ! For case 1, wind field should be fixed
                 uNew(:,:) = uOld(:,:)
               end if
@@ -2032,6 +2087,7 @@ call mpas_timer_start("copy soln into new soln LTS")
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
 
            call mpas_pool_get_array(statePool, 'u', uNew, 2)
            call mpas_pool_get_array(statePool, 'h', hNew, 2)
@@ -2041,7 +2097,7 @@ call mpas_timer_start("copy soln into new soln LTS")
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
 
-           if( onlyCoarse == 0) then
+           if(haveFine == 1) then
            do k =1, nVertLevels
               do ie = 1, nEdgesInLTSHalo(1,1)
                  iEdge = edgesInLTSHalo(1,1,ie)
@@ -2090,6 +2146,7 @@ call mpas_timer_start("copy soln into new soln LTS")
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
 
            call mpas_pool_get_array(statePool, 'u', uNew, 2)
            call mpas_pool_get_array(statePool, 'h', hNew, 2)
@@ -2099,7 +2156,7 @@ call mpas_timer_start("copy soln into new soln LTS")
            call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
 
-           if (onlyFine == 0) then
+           if(haveCoarse == 1) then
            do k =1, nVertLevels
               do ie = 1, nEdgesInLTSHalo(2,1)
                  iEdge = edgesInLTSHalo(2,1,ie)
@@ -2146,8 +2203,9 @@ call cpu_time(startTendencies)
            call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+           call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
 
-           if (onlyFine == 0) then
+           if(haveCoarse == 1) then
            call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) 
            call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) 
            call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) 
@@ -2190,6 +2248,7 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+           call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
 
            call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
            call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
@@ -2207,7 +2266,7 @@ call cpu_time(startAdvance)
            call mpas_pool_get_array(tendPool, 'h', hTend)
            call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
 
-           if (onlyFine == 0) then
+           if(haveCoarse == 1) then
            do k =1, nVertLevels
               do ie = 1, nEdgesInLTSHalo(2,1)
                  iEdge = edgesInLTSHalo(2,1,ie)
@@ -2264,6 +2323,7 @@ call cpu_time(startInterface)
         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+        call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
         call mpas_pool_get_array(tendSum3rdPool, 'u', uTendSum3rd)
         call mpas_pool_get_array(tendSum3rdPool, 'h', hTendSum3rd)
@@ -2285,7 +2345,6 @@ call cpu_time(startInterface)
         call mpas_pool_get_array(statePool, 'h', hNew, 2)
         call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
-        !if(onlyFine == 0 .and. onlyCoarse == 0) then
         if (haveInterface == 1) then
         do k =1, nVertLevels
            do iRegion = 1,nRegions

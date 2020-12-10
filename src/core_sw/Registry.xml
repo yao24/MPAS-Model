@@ -13,7 +13,6 @@
 		<dim name="vertexDegree"/>
 		<dim name="nVertLevels" definition="1"/>
 		<dim name="nTracers" definition="3"/>
-		<dim name="nLTSRegions" definition="2"/> 
 		<dim name="nLTSHalos" definition="2"/>
                 <dim name="nLTSHalosP1" definition="nLTSHalos+1"/>
 	</dims>
@@ -347,6 +346,8 @@
                 <var name="edgesInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalosP1 nEdges"/>
                 <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalosP1"/>
                 <var name="minMaxLTSRegion"                   type="integer"  dimensions="TWO"/>
-                <var name="onlyFineOrCoarse"                  type="integer"  dimensions="TWO"/>
+                <var name="haveFine"                          type="integer"  dimensions=""/>
+                <var name="haveCoarse"                        type="integer"  dimensions=""/>
+                <var name="haveInterface"                     type="integer"  dimensions=""/>
         </var_struct>
 </registry>
