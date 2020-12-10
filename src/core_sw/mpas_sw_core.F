@@ -282,7 +282,7 @@ module sw_core
       !write(1,*) totalTime
       !close(1)
 
-      if ( domain % dminfo % my_proc_id == 20 ) then
+      if ( domain % dminfo % my_proc_id == 0 ) then
          print*, 'Proc', domain % dminfo % my_proc_id, 'Integration:', totalTime, 'Advance:', totalTimeAdvance
          print*, 'Tendencies:', totalTimeTendencies, 'Barrier:', totalTimeBarrier, 'Interface:', totalTimeInterface
       end if

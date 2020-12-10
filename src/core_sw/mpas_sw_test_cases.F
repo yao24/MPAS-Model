@@ -683,20 +683,16 @@ call mpas_timer_stop("init LTS")
    type (domain_type), intent(inout) :: domain
 
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
-   !integer, dimension(:), allocatable :: isLTSRegionVertexAssigned !TODO: we might be able to get rid of the part on vertices
-   integer, pointer :: nLTSRegions, nLTSHalos
-   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, haveInterface
-   integer, pointer :: nCells, nEdges!,nVertices !TODO: we might be able to get rid of the part on vertices
+   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2
+   integer, pointer :: nLTSHalos, nCells, nEdges, haveFine, haveCoarse, haveInterface
    real (kind=RKIND), dimension(:), pointer :: latCell, areaCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion, onlyFineOrCoarse
-   integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo!, nVerticesInLTSHalo
-   integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo!, verticesInLTSHalo
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion
+   integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo
+   integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
    integer, dimension(:), pointer :: mpiRankCell
 
    call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
    call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
-   ! call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices) !TODO: we  might be able to get rid of the part on vertices
-   call mpas_pool_get_dimension(LTSPool, 'nLTSRegions', nLTSRegions)
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
    call mpas_pool_get_array(meshPool, 'latCell', latCell)
@@ -709,22 +705,20 @@ call mpas_timer_stop("init LTS")
    call mpas_pool_get_array(LTSPool, 'LTSRegion', LTSRegion)
    call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
    call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
-   call mpas_pool_get_array(LTSPool, 'onlyFineOrCoarse', onlyFineOrCoarse)
+   call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+   call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+   call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
    call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
    call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
-   !call mpas_pool_get_array(LTSPool, 'verticesInLTSHalo', verticesInLTSHalo) !TODO: we might be able to get rid of the part on vertices
-   !call mpas_pool_get_array(LTSPool, 'nVerticesInLTSHalo', nVerticesInLTSHalo) !TODO: we might be able to get rid of the part on vertices
 
    allocate(isLTSRegionEdgeAssigned(nEdges))
-   !allocate(isLTSRegionVertexAssigned(nVertices)) !TODO: we might be able to get rid of the part on vertices
 
    isLTSRegionEdgeAssigned(:) = 0
-   !isLTSRegionVertexAssigned(:) = 0 !TODO: we might be able to get rid of the part on vertices
 
    ! the loop below initializes the LTS regions for the current processor
-   ! TODOL this loop should be done in a more automatic way
+   ! TODO this loop should be done in a more automatic way
    ! 1 = highest resolution possible
    LTSRegion(:) = 1
    do iCell = 1, nCells
@@ -744,11 +738,11 @@ call mpas_timer_stop("init LTS")
 
    nCellsInLTSHalo(:,:) = 0
    nEdgesInLTSHalo(:,:) = 0
-   !nVerticesInLTSHalo(:,:) = 0 !we might be able to remove the part on vertices 
    LTSRegionLocal(:) = LTSRegion(:) 
 
-   onlyFineOrCoarse(1) = 0 ! first entry is fine (initialized to false)
-   onlyFineOrCoarse(2) = 0 ! second entry is coarse (initialized to false)
+   haveFine = 1
+   haveCoarse = 1
+   haveInterface = 1
 
    mpiRankCell(1:nCells) = domain % dminfo % my_proc_id
 
@@ -853,6 +847,18 @@ call mpas_timer_stop("init LTS")
          end if 
       end do
 
+      if ((nCellsInLTSHalo(1,1) == 0) .and. (nCellsInLTSHalo(1,3) == 0)) then
+         haveFine = 0
+      end if
+
+      if ((nCellsInLTSHalo(2,1) == 0) .and. (nCellsInLTSHalo(2,3) == 0)) then
+         haveCoarse = 0
+      end if
+
+      if ((nCellsInLTSHalo(1,2) == 0) .and. (nCellsInLTSHalo(2,2) == 0)) then
+         haveInterface = 0
+      end if
+
       ! below we fill in the lists for the edges and vertices, according to the LTSRegionLocal that have been assigned to the cells.
       ! we move from the fine to the coarse (i.e. from the fine to the nearest halo
       ! layer, until the coarse is reached). Note that edges and vertices shared between cells of different LTS regions are
@@ -861,40 +867,24 @@ call mpas_timer_stop("init LTS")
     
       do iCell = 1, nCellsInLTSHalo(1,1)
          do i = 1, nEdgesOnCell(cellsInLTSHalo(1,1,iCell))
-            !edges
             iEdge = edgesOnCell(i,cellsInLTSHalo(1,1,iCell))
             if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                nEdgesInLTSHalo(1,1) = nEdgesInLTSHalo(1,1) + 1
                edgesInLTSHalo(1,1, nEdgesInLTSHalo(1,1)) = iEdge
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
-            !vertices !TODO: we might be able to get rid of the part on vertices
-            !iVertex = verticesOnCell(i,cellsInLTSHalo(1,1,iCell))
-            !if (isLTSRegionVertexAssigned(iVertex) == 0) then
-            !   nVerticesInLTSHalo(1,1) = nVerticesInLTSHalo(1,1) + 1
-            !   verticesInLTSHalo(1,1, nVerticesInLTSHalo(1,1)) = iVertex
-            !   isLTSRegionVertexAssigned(iVertex) = 1
-            !end if
          end do
       end do
    
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 2)
             do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
-               !edges
                iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                   nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) + 1
                   edgesInLTSHalo(1, nLTSHalos - iHalo + 2,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2)) = iEdge
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
-               !vertices !TODO: we might be able to get rid of the part on vertices
-               !iVertex = verticesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo +2, iCell))
-               !if (isLTSRegionVertexAssigned(iVertex) == 0) then
-               !   nVerticesInLTSHalo(1, nLTSHalos - iHalo + 2) = nVerticesInLTSHalo(1,nLTSHalos - iHalo + 2) + 1
-               !   verticesInLTSHalo(1, nLTSHalos - iHalo + 2, nVerticesInLTSHalo(1,nLTSHalos - iHalo + 2)) = iVertex
-               !   isLTSRegionVertexAssigned(iVertex) = 1
-               !end if
             end do
          end do
       end do
@@ -902,49 +892,32 @@ call mpas_timer_stop("init LTS")
       do iHalo = 1, nLTSHalos
          do iCell = 1, nCellsInLTSHalo(2, iHalo+1)
             do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
-               !edges
                iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
                if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                   nEdgesInLTSHalo(2, iHalo+1) = nEdgesInLTSHalo(2, iHalo+1) + 1
                   edgesInLTSHalo(2, iHalo+1,  nEdgesInLTSHalo(2, iHalo+1)) = iEdge
                   isLTSRegionEdgeAssigned(iEdge) = 1
                end if
-               !vertices !TODO: we might be able to get rid of the part on vertices
-               !iVertex = verticesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
-               !if (isLTSRegionVertexAssigned(iVertex) == 0) then
-               !   nVerticesInLTSHalo(2, iHalo+1) = nVerticesInLTSHalo(2, iHalo+1) + 1
-               !   verticesInLTSHalo(2, iHalo+1,  nVerticesInLTSHalo(2, iHalo+1)) = iVertex
-               !   isLTSRegionVertexAssigned(iVertex) = 1
-               !end if
             end do
          end do
       end do
  
       do iCell = 1, nCellsInLTSHalo(2,1)
          do i = 1, nEdgesOnCell(cellsInLTSHalo(2,1,iCell))
-            !edges
             iEdge = edgesOnCell(i,cellsInLTSHalo(2,1,iCell))
             if(isLTSRegionEdgeAssigned(iEdge) == 0) then
                nEdgesInLTSHalo(2,1) = nEdgesInLTSHalo(2,1) + 1
                edgesInLTSHalo(2,1,nEdgesInLTSHalo(2,1)) = iEdge
                isLTSRegionEdgeAssigned(iEdge) = 1
             end if
-            !vertices !TODO: we might be able to get rid of the part on vertices
-            !iVertex = verticesOnCell(i,cellsInLTSHalo(2,1,iCell))
-            !if(isLTSRegionVertexAssigned(iVertex) == 0) then
-            !   nVerticesInLTSHalo(2,1) = nVerticesInLTSHalo(2,1) + 1
-            !   verticesInLTSHalo(2,1,nVerticesInLTSHalo(2,1)) = iVertex
-            !   isLTSRegionVertexAssigned(iVertex) = 1
-            !end if
          end do
       end do
         
       deallocate(isLTSRegionEdgeAssigned) 
-      !deallocate(isLTSRegionVertexAssigned)
 
    else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 0) then
  
-      if (minMaxLTSRegion(1) == 1) then !TODO: here we are using that 1 is the fine and 2 is the coarse
+      if (minMaxLTSRegion(1) == 1) then 
          nCellsInLTSHalo(1,1) = nCells
          do iCell = 1, nCells
             cellsInLTSHalo(1,1,iCell) = iCell
@@ -954,7 +927,8 @@ call mpas_timer_stop("init LTS")
             edgesInLTSHalo(1,1,iEdge) = iEdge
          end do
 
-         onlyFineOrCoarse(1) = 1 ! set to true
+         haveCoarse = 0
+         haveInterface = 0
 
       else if (minMaxLTSRegion(1) == 2) then
          nCellsInLTSHalo(2,1) = nCells
@@ -966,7 +940,8 @@ call mpas_timer_stop("init LTS")
             edgesInLTSHalo(2,1,iEdge) = iEdge
          end do
 
-         onlyFineOrcoarse(2) = 1 ! set to true
+         haveFine = 0
+         haveInterface = 0
  
       end if          
 
@@ -975,12 +950,8 @@ call mpas_timer_stop("init LTS")
       stop
    end if
 
-   if (domain % dminfo % my_proc_id == 20) then
-      haveInterface = 0
-      if ( (nCellsInLTSHalo(1,2) .ne. 0) .or. (nCellsInLTSHalo(2,2) .ne. 0 ) ) then
-         haveInterface = 1
-      end if
-      print*, 'Proc', domain % dminfo % my_proc_id, 'onlyFine=', onlyFineOrCoarse(1), 'onlyCoarse=', onlyFineOrCoarse(2), 'haveInterface=', haveInterface
+   if (domain % dminfo % my_proc_id == 0) then
+      print*, 'Proc', domain % dminfo % my_proc_id, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
       print*, 'nCells=', nCells
    end if
 
