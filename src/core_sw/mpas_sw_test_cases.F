@@ -715,10 +715,6 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
 
-      allocate(isLTSRegionEdgeAssigned(nEdges))
-
-      isLTSRegionEdgeAssigned(:) = 0
-
       ! the loop below initializes the LTS regions for the current processor
       ! 1 = highest resolution possible
       LTSRegion(:) = 1
@@ -920,6 +916,9 @@ call mpas_timer_stop("init LTS")
          ! owned by the cell in the LTS region closest to the fine region, see Figure 3 in "Conservative explicit
          ! local time-stepping schemes for the shallow water equations" by Hoang et al.
     
+         allocate(isLTSRegionEdgeAssigned(nEdges))
+         isLTSRegionEdgeAssigned(:) = 0
+
          do iCell = 1, nCellsInLTSHalo(1,1)
             do i = 1, nEdgesOnCell(cellsInLTSHalo(1,1,iCell))
                iEdge = edgesOnCell(i,cellsInLTSHalo(1,1,iCell))
