@@ -257,7 +257,7 @@ module sw_core
 
          currTime = mpas_get_clock_time(clock, MPAS_NOW, ierr)
          call mpas_get_time(curr_time=currTime, dateTimeString=timeStamp, ierr=ierr)         
-         !call mpas_log_write('Doing timestep ' // trim(timeStamp))
+         call mpas_log_write('Doing timestep ' // trim(timeStamp))
          
          call mpas_timer_start("time integration")
          call cpu_time(start)
