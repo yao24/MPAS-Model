@@ -96,7 +96,6 @@ module sw_time_integration
       type (mpas_pool_type), pointer :: meshPool
       type (mpas_pool_type), pointer :: tendPool
       type (mpas_pool_type), pointer :: provisStatePool
-      type (mpas_pool_type), pointer :: prevProvisPool, nextProvisPool
 
       integer :: rk_step
 
@@ -126,12 +125,13 @@ module sw_time_integration
      do while (associated(block))
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+        call mpas_pool_get_subpool(block % structs, 'provisState', provisStatePool)
 
-        allocate(provisStatePool)
-        call mpas_pool_create_pool(provisStatePool)
-        call mpas_pool_clone_pool(statePool, provisStatePool, 1)
-
-        call mpas_pool_add_subpool(block % structs, 'provis_state', provisStatePool)
+        !!! mrp need to copy all of the statePool time 1 variables into provisStatePool
+        !variables here to reproduce action of this line:
+        ! call mpas_pool_clone_pool(statePool, provisStatePool, 1)
+        ! could try this one, I am not sure if it works
+        mpas_pool_copy_pool(statePool, provisStatePool)
 
         call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
         call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -156,38 +156,6 @@ module sw_time_integration
 
         block => block % next
      end do
-
-     block => domain % blocklist
-     do while(associated(block))
-        if (associated(block % prev)) then
-           call mpas_pool_get_subpool(block % prev % structs, 'provis_state', prevProvisPool)
-        else
-           nullify(prevProvisPool)
-        end if
-
-        if (associated(block % next)) then
-           call mpas_pool_get_subpool(block % next % structs, 'provis_state', nextProvisPool)
-        else
-           nullify(nextProvisPool)
-        end if
-
-        call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
-
-        if (associated(prevProvisPool) .and. associated(nextProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, prevProvisPool, nextProvisPool)
-        else if (associated(prevProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, prevProvisPool)
-        else if (associated(nextProvisPool)) then
-           call mpas_pool_link_pools(provisStatePool, nextPool=nextProvisPool)
-        else
-           call mpas_pool_link_pools(provisStatePool)
-        end if
-
-        call mpas_pool_link_parinfo(block, provisStatePool)
-
-        block => block % next
-     end do
-
 
      rk_weights(1) = dt/6.
      rk_weights(2) = dt/3.
@@ -218,7 +186,7 @@ module sw_time_integration
        block => domain % blocklist
        do while (associated(block))
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-          call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
+          call mpas_pool_get_subpool(block % structs, 'provisState', provisStatePool)
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
 
           call sw_compute_tend(tendPool, provisStatePool, meshPool, 1)
@@ -241,7 +209,7 @@ module sw_time_integration
              call mpas_pool_get_subpool(block % structs, 'state', statePool)
              call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
              call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-             call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
+             call mpas_pool_get_subpool(block % structs, 'provisState', provisStatePool)
 
              call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
              call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
@@ -355,18 +323,6 @@ module sw_time_integration
 
          block => block % next
       end do
-
-      block => domain % blocklist
-      do while(associated(block))
-         call mpas_pool_get_subpool(block % structs, 'provis_state', provisStatePool)
-
-         call mpas_pool_destroy_pool(provisStatePool)
-
-         call mpas_pool_remove_subpool(block % structs, 'provis_state')
-         block => block % next
-      end do
-
-
 
    end subroutine sw_rk4
 
