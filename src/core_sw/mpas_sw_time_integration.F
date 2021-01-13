@@ -127,7 +127,6 @@ module sw_time_integration
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'state', statePool)
 
-        allocate(provisStatePool)
         call mpas_pool_create_pool(provisStatePool)
         call mpas_pool_clone_pool(statePool, provisStatePool, 1)
 
