@@ -11,8 +11,8 @@
 		<dim name="FIFTEEN"            definition="15"/>
 		<dim name="TWENTYONE"          definition="21"/>
 		<dim name="vertexDegree"/>
-		<dim name="nVertLevels"/>
-		<dim name="nTracers"/>
+		<dim name="nVertLevels" definition="1"/>
+		<dim name="nTracers" definition="3"/>
 	</dims>
 	<nml_record name="sw_model" in_defaults="true">
 		<nml_option name="config_test_case"                  type="integer"       default_value="5"/>
@@ -305,6 +305,7 @@
 		<var name="cellTangentPlane"                  type="real"     dimensions="R3 TWO nCells"/>
 		<var name="cellsOnCell"                       type="integer"  dimensions="maxEdges nCells"/>
 		<var name="verticesOnCell"                    type="integer"  dimensions="maxEdges nCells"/>
+		<var name="edgeSignOnCell"                    type="integer"  dimensions="maxEdges nCells"/>
 		<var name="verticesOnEdge"                    type="integer"  dimensions="TWO nEdges"/>
 		<var name="edgesOnVertex"                     type="integer"  dimensions="vertexDegree nVertices"/>
 		<var name="cellsOnVertex"                     type="integer"  dimensions="vertexDegree nVertices"/>

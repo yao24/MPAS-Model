@@ -375,14 +375,14 @@ module sw_time_integration
       integer, intent(in), optional :: timeLevelIn
 
       integer :: iEdge, iCell, iVertex, k, cell1, cell2, vertex1, vertex2, eoe, i, j, timeLevel
-      real (kind=RKIND) :: flux, vorticity_abs, workpv, q, upstream_bias
+      real (kind=RKIND) :: flux, vorticity_abs, workpv, q, upstream_bias, invAreaCell
 
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels, nCellsSolve, nEdgesSolve, nVerticesSolve
       real (kind=RKIND), dimension(:), pointer :: h_s, fVertex, fEdge, dvEdge, dcEdge, areaCell, areaTriangle, &
                                                   meshScalingDel2, meshScalingDel4
       real (kind=RKIND), dimension(:,:), pointer :: vh, weightsOnEdge, kiteAreasOnVertex, h_edge, h, u, v, tend_h, tend_u, &
                                                     circulation, vorticity, ke, pv_edge, divergence, h_vertex
-      integer, dimension(:,:), pointer :: cellsOnEdge, cellsOnVertex, verticesOnEdge, edgesOnCell, edgesOnEdge, edgesOnVertex
+      integer, dimension(:,:), pointer :: cellsOnEdge, cellsOnVertex, verticesOnEdge, edgesOnCell, edgesOnEdge, edgesOnVertex, edgeSignOnCell
       integer, dimension(:), pointer :: nEdgesOnCell, nEdgesOnEdge
       real (kind=RKIND) :: r, u_diffusion
 
@@ -426,6 +426,7 @@ module sw_time_integration
       call mpas_pool_get_array(meshPool, 'verticesOnEdge', verticesOnEdge)
       call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
       call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
+      call mpas_pool_get_array(meshPool, 'edgeSignOnCell', edgeSignOnCell)
       call mpas_pool_get_array(meshPool, 'nEdgesOnEdge', nEdgesOnEdge)
       call mpas_pool_get_array(meshPool, 'edgesOnEdge', edgesOnEdge)
       call mpas_pool_get_array(meshPool, 'edgesOnVertex', edgesOnVertex)
@@ -455,21 +456,36 @@ module sw_time_integration
       ! Compute height tendency for each cell
       !
       tend_h(:,:) = 0.0
-      do iEdge = 1, nEdges
-         cell1 = cellsOnEdge(1,iEdge)
-         cell2 = cellsOnEdge(2,iEdge)
-         do k = 1, nVertLevels
-            flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge)
-            tend_h(k,cell1) = tend_h(k,cell1) - flux
-            tend_h(k,cell2) = tend_h(k,cell2) + flux
-         end do
-      end do 
-      do iCell = 1, nCellsSolve
-         do k = 1, nVertLevels
-            tend_h(k,iCell) = tend_h(k,iCell) / areaCell(iCell)
+      !do iEdge = 1, nEdges
+      !   cell1 = cellsOnEdge(1,iEdge)
+      !   cell2 = cellsOnEdge(2,iEdge)
+      !   do k = 1, nVertLevels
+      !      flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge)
+      !      tend_h(k,cell1) = tend_h(k,cell1) - flux
+      !      tend_h(k,cell2) = tend_h(k,cell2) + flux
+      !   end do
+      !end do 
+      !do iCell = 1, nCellsSolve
+      !   do k = 1, nVertLevels
+      !      tend_h(k,iCell) = tend_h(k,iCell) / areaCell(iCell)
+      !   end do
+      !end do
+
+      do iCell = 1, nCells
+         invAreaCell = 1.0_RKIND / areaCell(iCell)
+         do i = 1, nEdgesOnCell(iCell)
+            iEdge = edgesOnCell(i, iCell)
+            if(iCell == cellsOnEdge(1, iEdge)) then !this should be moved on init
+              edgeSignOnCell(i, iCell) = -1
+            else
+              edgeSignOnCell(i, iCell) =  1
+            end if
+            do k = 1, nVertLevels
+               flux = u(k, iEdge) * dvEdge(iEdge) * h_edge(k, iEdge)
+               tend_h(k, iCell) = tend_h(k, iCell) + edgeSignOnCell(i, iCell) * flux * invAreaCell
+           end do
          end do
       end do
-
 
       !
       ! Compute u (normal) velocity tendency for each edge (cell face)
