@@ -111,6 +111,9 @@
 			<var name="boundaryVertex"/>
 			<var name="boundaryCell"/>
 			<var name="u_src"/>
+                        <var name="edgeSignOnCell"/>
+                        <var name="edgeSignOnVertex"/>
+                        <var name="kiteIndexOnCell"/>
 		</stream>
 		<stream name="restart" 
 				type="input;output"
@@ -170,6 +173,9 @@
 			<var name="boundaryVertex"/>
 			<var name="boundaryCell"/>
 			<var name="u_src"/>
+                        <var name="edgeSignOnCell"/>
+                        <var name="edgeSignOnVertex"/>
+                        <var name="kiteIndexOnCell"/>
 		</stream>
 		<stream name="output" 
 				type="output"
@@ -246,6 +252,9 @@
 			<var name="boundaryVertex"/>
 			<var name="boundaryCell"/>
 			<var name="u_src"/>
+                        <var name="edgeSignOnCell"/>
+                        <var name="edgeSignOnVertex"/>
+                        <var name="kiteIndexOnCell"/>
                         <var name="LTSRegion"/>
                         <var name="LTSRegionLocal"/>
 		</stream>
@@ -332,6 +341,9 @@
 		<var name="boundaryVertex"                    type="integer"  dimensions="nVertLevels nVertices"/>
 		<var name="boundaryCell"                      type="integer"  dimensions="nVertLevels nCells"/>
 		<var name="u_src"                             type="real"     dimensions="nVertLevels nEdges"/>
+                <var name="edgeSignOnCell"                    type="integer"  dimensions="maxEdges nCells"/>
+                <var name="edgeSignOnVertex"                  type="integer"  dimensions="maxEdges nVertices"/>
+                <var name="kiteIndexOnCell"                   type="integer"  dimensions="maxEdges nCells"/>
 	</var_struct>
 	<var_struct name="tend" time_levs="1">
 		<var name="tend_u"                            type="real"     dimensions="nVertLevels nEdges Time"           name_in_code="u"/>

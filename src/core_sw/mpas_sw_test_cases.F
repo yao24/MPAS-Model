@@ -458,20 +458,20 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(statePool, 'tracers', tracers, 1)
       nTracers = size(tracers, dim=1)
 
-      xCell = xCell * a
-      yCell = yCell * a
-      zCell = zCell * a
-      xVertex = xVertex * a
-      yVertex = yVertex * a
-      zVertex = zVertex * a
-      xEdge = xEdge * a
-      yEdge = yEdge * a
-      zEdge = zEdge * a
-      dvEdge = dvEdge * a
-      dcEdge = dcEdge * a
-      areaCell = areaCell * a**2.0
-      areaTriangle = areaTriangle * a**2.0
-      kiteAreasOnVertex = kiteAreasOnVertex * a**2.0
+      !xCell = xCell * a
+      !yCell = yCell * a
+      !zCell = zCell * a
+      !xVertex = xVertex * a
+      !yVertex = yVertex * a
+      !zVertex = zVertex * a
+      !xEdge = xEdge * a
+      !yEdge = yEdge * a
+      !zEdge = zEdge * a
+      !dvEdge = dvEdge * a
+      !dcEdge = dcEdge * a
+      !areaCell = areaCell * a**2.0
+      !areaTriangle = areaTriangle * a**2.0
+      !kiteAreasOnVertex = kiteAreasOnVertex * a**2.0
 
       !
       ! Initialize wind field
@@ -680,11 +680,12 @@ call mpas_timer_stop("init LTS")
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
    integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, nLTSHalosCopy, haveFineCounter, haveCoarseCounter
    integer, pointer :: nLTSHalos, nCells, nEdges, haveFine, haveCoarse, haveInterface
-   real (kind=RKIND), dimension(:), pointer :: latCell, areaCell
+   real (kind=RKIND), dimension(:), pointer :: latCell, lonCell, areaCell
    integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion
    integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
    integer, dimension(:), pointer :: mpiRankCell
+   real (kind=RKIND) :: latPoint, lonPoint, distLTS
    
    call mpas_pool_get_subpool(domain % blocklist % structs, 'LTS', LTSPool)
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
@@ -701,6 +702,7 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
       call mpas_pool_get_array(meshPool, 'latCell', latCell)
+      call mpas_pool_get_array(meshPool, 'lonCell', lonCell)
       call mpas_pool_get_array(meshPool, 'areaCell', areaCell)
       call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
       call mpas_pool_get_array(meshPool, 'mpiRankCell', mpiRankCell)
@@ -719,7 +721,16 @@ call mpas_timer_stop("init LTS")
       ! 1 = highest resolution possible
       LTSRegion(:) = 1
       do iCell = 1, nCells
-         if (2.0 * sqrt(areaCell(iCell) / pii) .ge. 300000) then
+         !if (2.0 * sqrt(areaCell(iCell) / pii) .ge. 300000) then
+         !   LTSRegion(iCell) = 2
+         !end if
+
+         latPoint = pii / 6.0
+         lonPoint = 3.0 * pii * 0.5
+         distLTS = sphere_distance(latCell(iCell), lonCell(iCell), latPoint, lonPoint, 1.0)
+         !if (distLTS > 1.2) then  !this was for the convergence test for test 5
+         if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
+         !if (distLTS > 0.2) then   !this is for the speed up test for test 5
             LTSRegion(iCell) = 2
          end if
          !BEGIN: test initializaton
@@ -1007,10 +1018,10 @@ call mpas_timer_stop("init LTS")
       block => block % next
    end do
 
-   if (domain % dminfo % my_proc_id == 0) then
-      print*, 'Proc', domain % dminfo % my_proc_id, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
-      print*, 'nCells=', nCells
-   end if
+   !if (domain % dminfo % my_proc_id == 0) then
+   !   print*, 'Proc', domain % dminfo % my_proc_id, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
+   !   print*, 'nCells=', nCells
+   !end if
 
    end subroutine mpas_init_LTS
 

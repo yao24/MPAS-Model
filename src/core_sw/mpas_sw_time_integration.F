@@ -486,6 +486,7 @@ call mpas_timer_start("tendencies SSPRK")
        do while (associated(block))
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+          call mpas_pool_get_subpool(block % structs, 'state', statePool)
 
           call sw_compute_tend(tendPool, statePool, meshPool, 2)
           call sw_compute_scalar_tend(tendPool, statePool, meshPool, 2)
@@ -1340,6 +1341,9 @@ call cpu_time(startInterface)
            call mpas_pool_get_array(statePool, 'u', uOld, 1)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+           call mpas_pool_get_array(statePool, 'u', uNew, 2)
+           call mpas_pool_get_array(statePool, 'h', hNew, 2)
+           call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
            if (haveInterface == 1) then
            alpha = REAL((im - 1)) / M
@@ -1558,6 +1562,7 @@ call cpu_time(startInterface)
            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
            call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+           call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
 
            call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
@@ -1578,6 +1583,9 @@ call cpu_time(startInterface)
            call mpas_pool_get_array(statePool, 'u', uOld, 1)
            call mpas_pool_get_array(statePool, 'h', hOld, 1)
            call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+           call mpas_pool_get_array(statePool, 'u', uNew, 2)
+           call mpas_pool_get_array(statePool, 'h', hNew, 2)
+           call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
            if (haveInterface == 1) then
            beta = REAL(im) / M
@@ -2505,6 +2513,7 @@ call mpas_timer_stop("clean-up time LTS")
                                                     circulation, vorticity, ke, pv_edge, divergence, h_vertex
       integer, dimension(:,:), pointer :: cellsOnEdge, cellsOnVertex, verticesOnEdge, edgesOnCell, edgesOnEdge, edgesOnVertex
       integer, dimension(:), pointer :: nEdgesOnCell, nEdgesOnEdge
+      integer, dimension(:,:), pointer :: edgeSignOnCell
       real (kind=RKIND) :: r, u_diffusion
 
       real (kind=RKIND), allocatable, dimension(:,:) :: delsq_divergence
@@ -2560,6 +2569,7 @@ call mpas_timer_stop("clean-up time LTS")
       call mpas_pool_get_array(meshPool, 'u_src', u_src)
       call mpas_pool_get_array(meshPool, 'meshScalingDel2', meshScalingDel2)
       call mpas_pool_get_array(meshPool, 'meshScalingDel4', meshScalingDel4)
+      call mpas_pool_get_array(meshPool, 'edgeSignOnCell', edgeSignOnCell)
 
       call mpas_pool_get_array(tendPool, 'h', tend_h)
       call mpas_pool_get_array(tendPool, 'u', tend_u)
@@ -2575,22 +2585,37 @@ call mpas_timer_stop("clean-up time LTS")
       !
       ! Compute height tendency for each cell
       !
+
+      ! THIS IS CORRECT BUT DOES NOT PROVIDE BFB MATCHING AMONG DIFFERENT MPI PARTITIONS
+      ! tend_h(:,:) = 0.0
+      ! do iEdge = 1, nEdges
+      !    cell1 = cellsOnEdge(1,iEdge)
+      !    cell2 = cellsOnEdge(2,iEdge)
+      !    do k = 1, nVertLevels
+      !       flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge)
+      !       tend_h(k,cell1) = tend_h(k,cell1) - flux
+      !       tend_h(k,cell2) = tend_h(k,cell2) + flux
+      !    end do
+      ! end do 
+      ! do iCell = 1, nCellsSolve
+      !    do k = 1, nVertLevels
+      !       tend_h(k,iCell) = tend_h(k,iCell) / areaCell(iCell)
+      !    end do
+      ! end do
+
       tend_h(:,:) = 0.0
-      do iEdge = 1, nEdges
-         cell1 = cellsOnEdge(1,iEdge)
-         cell2 = cellsOnEdge(2,iEdge)
-         do k = 1, nVertLevels
-            flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge)
-            tend_h(k,cell1) = tend_h(k,cell1) - flux
-            tend_h(k,cell2) = tend_h(k,cell2) + flux
+      do iCell = 1, nCells
+         do i = 1, nEdgesOnCell(iCell)
+            iEdge = edgesOnCell(i, iCell)
+            do k = 1, nVertLevels
+               flux = u(k,iEdge) * dvEdge(iEdge) * h_edge(k,iEdge)
+               tend_h(k, iCell) = tend_h(k, iCell) + edgeSignOnCell(i, iCell) * flux
+            end do
          end do
-      end do 
-      do iCell = 1, nCellsSolve
          do k = 1, nVertLevels
             tend_h(k,iCell) = tend_h(k,iCell) / areaCell(iCell)
          end do
       end do
-
 
       !
       ! Compute u (normal) velocity tendency for each edge (cell face)
@@ -2844,6 +2869,9 @@ call mpas_timer_stop("clean-up time LTS")
 
       if (config_tracer_adv_order == 2) then
 
+      !TODO: change this as for the tendency of h in order to have bfb matching
+      !between MPI partitons. Right now it is correct but it does not provide
+      !bfb matching.
       do iEdge = 1, nEdges
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
@@ -3089,14 +3117,15 @@ call mpas_timer_stop("clean-up time LTS")
       integer, intent(in), optional :: timeLevelIn
 
       integer :: iEdge, iCell, iVertex, k, cell1, cell2, vertex1, vertex2, eoe, i, j, cov
-      real (kind=RKIND) :: flux, vorticity_abs, workpv
+      real (kind=RKIND) :: flux, vorticity_abs, workpv, invAreaTri, r_tmp
 
       integer, pointer :: nCells, nEdges, nVertices, nVertLevels, vertexDegree
       real (kind=RKIND), dimension(:), pointer :: h_s, fVertex, fEdge, dvEdge, dcEdge, areaCell, areaTriangle
       real (kind=RKIND), dimension(:,:), pointer :: vh, weightsOnEdge, kiteAreasOnVertex, h_edge, h, u, v, tend_h, tend_u, &
                                                     circulation, vorticity, ke, pv_edge, pv_vertex, pv_cell, gradPVn, gradPVt, divergence, &
                                                     h_vertex, vorticity_cell
-      integer, dimension(:,:), pointer :: cellsOnEdge, cellsOnVertex, verticesOnEdge, edgesOnCell, edgesOnEdge, edgesOnVertex, boundaryEdge, boundaryCell, cellsOnCell
+      integer, dimension(:,:), pointer :: cellsOnEdge, cellsOnVertex, verticesOnEdge, edgesOnCell, edgesOnEdge, edgesOnVertex, boundaryEdge, boundaryCell, & 
+                                          cellsOnCell, edgeSignOnVertex
       integer, dimension(:), pointer :: nEdgesOnCell, nEdgesOnEdge
       real (kind=RKIND) :: r, h1, h2
       real (kind=RKIND) :: d2fdx2_cell1, d2fdx2_cell2
@@ -3157,6 +3186,7 @@ call mpas_timer_stop("clean-up time LTS")
       call mpas_pool_get_array(meshPool, 'fVertex', fVertex)
       call mpas_pool_get_array(meshPool, 'fEdge', fEdge)
       call mpas_pool_get_array(meshPool, 'deriv_two', deriv_two)
+      call mpas_pool_get_array(meshPool, 'edgeSignOnVertex', edgeSignOnVertex)
                   
       call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
       call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
@@ -3308,18 +3338,35 @@ call mpas_timer_stop("clean-up time LTS")
       !
       ! Compute circulation and relative vorticity at each vertex
       !
-      circulation(:,:) = 0.0
-      do iEdge = 1, nEdges
-         do k = 1, nVertLevels
-            circulation(k,verticesOnEdge(1,iEdge)) = circulation(k,verticesOnEdge(1,iEdge)) - dcEdge(iEdge) * u(k,iEdge)
-            circulation(k,verticesOnEdge(2,iEdge)) = circulation(k,verticesOnEdge(2,iEdge)) + dcEdge(iEdge) * u(k,iEdge)
-         end do
-      end do
+
       do iVertex = 1, nVertices
-         do k = 1, nVertLevels
-            vorticity(k,iVertex) = circulation(k,iVertex) / areaTriangle(iVertex)
+        ! circulation(:, iVertex) = 0.0_RKIND
+         vorticity(:, iVertex) = 0.0_RKIND
+         invAreaTri = 1.0_RKIND / areaTriangle(iVertex)
+         do i = 1, vertexDegree
+            iEdge = edgesOnVertex(i, iVertex)
+            do k = 1, nVertLevels
+              r_tmp = dcEdge(iEdge) * u(k, iEdge)
+              !circulation(k, iVertex) = circulation(k, iVertex) +
+              !edgeSignOnVertex(i, iVertex) * r_tmp
+             vorticity(k, iVertex) = vorticity(k, iVertex) + edgeSignOnVertex(i, iVertex) * r_tmp * invAreaTri
+            end do
          end do
       end do
+
+      ! THIS IS CORRECT BUT DOES NOT PROVIDE BFB MATCHING AMONG DIFFERENT MPI PARTITIONS
+      !circulation(:,:) = 0.0
+      !do iEdge = 1, nEdges
+      !   do k = 1, nVertLevels
+      !      circulation(k,verticesOnEdge(1,iEdge)) = circulation(k,verticesOnEdge(1,iEdge)) - dcEdge(iEdge) * u(k,iEdge)
+      !      circulation(k,verticesOnEdge(2,iEdge)) = circulation(k,verticesOnEdge(2,iEdge)) + dcEdge(iEdge) * u(k,iEdge)
+      !   end do
+      !end do
+      !do iVertex = 1, nVertices
+      !   do k = 1, nVertLevels
+      !      vorticity(k,iVertex) = circulation(k,iVertex) / areaTriangle(iVertex)
+      !   end do
+      !end do
 
 
       !
