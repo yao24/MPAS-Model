@@ -286,6 +286,7 @@
 	</var_struct>
 	<var_struct name="mesh" time_levs="1">
 		<var name="mpiRankCell"                       type="integer"  dimensions="nCells"/>
+		<var name="blockPartitionCell"                type="integer"  dimensions="nCells"/>
 		<var name="latCell"                           type="real"     dimensions="nCells"/>
 		<var name="lonCell"                           type="real"     dimensions="nCells"/>
 		<var name="xCell"                             type="real"     dimensions="nCells"/>

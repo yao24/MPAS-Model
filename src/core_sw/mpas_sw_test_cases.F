@@ -678,13 +678,13 @@ call mpas_timer_stop("init LTS")
    type (block_type), pointer :: block
    type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
-   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, nLTSHalosCopy, haveFineCounter, haveCoarseCounter
-   integer, pointer :: nLTSHalos, nCells, nEdges, haveFine, haveCoarse, haveInterface
+   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, nLTSHalosCopy, haveFineCounter, haveCoarseCounter, blockCounter
+   integer, pointer :: nLTSHalos, nCells, nCellsSolve, nEdges, haveFine, haveCoarse, haveInterface
    real (kind=RKIND), dimension(:), pointer :: latCell, lonCell, areaCell
    integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion
    integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
-   integer, dimension(:), pointer :: mpiRankCell
+   integer, dimension(:), pointer :: mpiRankCell, blockPartitionCell
    real (kind=RKIND) :: latPoint, lonPoint, distLTS
    
    call mpas_pool_get_subpool(domain % blocklist % structs, 'LTS', LTSPool)
@@ -692,12 +692,14 @@ call mpas_timer_stop("init LTS")
 
    nLTSHalosCopy = nLTSHalos
 
+   blockCounter = 1
    block => domain % blocklist
    do while (associated(block))
       call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
       call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
       call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+      call mpas_pool_get_dimension(meshPool, 'nCellsSolve', nCellsSolve)
       call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
       call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
@@ -706,6 +708,7 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(meshPool, 'areaCell', areaCell)
       call mpas_pool_get_array(meshPool, 'cellsOnEdge', cellsOnEdge)
       call mpas_pool_get_array(meshPool, 'mpiRankCell', mpiRankCell)
+      call mpas_pool_get_array(meshPool, 'blockPartitionCell', blockPartitionCell)
 
       call mpas_pool_get_array(LTSPool, 'LTSRegion', LTSRegion)
       call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
@@ -754,6 +757,12 @@ call mpas_timer_stop("init LTS")
 
       mpiRankCell(1:nCells) = domain % dminfo % my_proc_id
 
+      ! --- BEGIN: TO REMOVE (THIS IS JUST TO UNDERSTAND THE BLOCK PARTITIONING)
+      do iCell = 1, nCellsSolve
+         blockPartitionCell(iCell) = blockCounter
+      end do
+      ! --- END: TO REMOVE
+      
       minMaxLTSRegion(1) = minval(LTSRegionLocal(1:nCells))  !this is the fine
       minMaxLTSRegion(2) = maxval(LTSRegionLocal(1:nCells))  !this is the coarse
 
@@ -800,6 +809,8 @@ call mpas_timer_stop("init LTS")
          end do
 
       end if   
+
+      blockCounter = blockCounter + 1      
 
       block => block % next
    end do
