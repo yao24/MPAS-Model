@@ -622,6 +622,8 @@ call mpas_timer_stop("clean-up time SSPRK")
       real (kind=RKIND) :: startTendencies, finishTendencies, startAdvance, finishAdvance, startBarrier, finishBarrier, startInterface, finishInterface 
       real (kind=RKIND), dimension(:,:), pointer :: uOld, uNew, uTend, uTendSum1st, uTendSum2nd, uTendSum3rd, uFirstStage, uSecondStage
       real (kind=RKIND), dimension(:,:), pointer :: hOld, hNew, hTend, hTendSum1st, hTendSum2nd, hTendSum3rd, hFirstStage, hSecondStage
+      real (kind=RKIND), dimension(:,:), pointer :: uMPIHaloUpdate, hMPIHaloUpdate
+      real (kind=RKIND), dimension(:,:,:), pointer :: tracersMPIHaloUpdate
       real (kind=RKIND), dimension(:,:), pointer :: uReconstructX, uReconstructY, uReconstructZ, uReconstructZonal, uReconstructMeridional
       real (kind=RKIND), dimension(:,:,:), pointer :: tracersOld, tracersNew, tracersTend, tracersTendSum1st, tracersTendSum2nd, tracersTendSum3rd
       real (kind=RKIND), dimension(:,:,:), pointer :: tracersFirstStage, tracersSecondStage
@@ -885,6 +887,7 @@ call cpu_time(startTendencies)
         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
 
+        call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
         call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
         call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
@@ -892,12 +895,13 @@ call cpu_time(startTendencies)
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
         call sw_compute_tend(tendPool, statePool, meshPool, 1) 
         call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)  
-        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2) !interface layer 1
-        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2) !interface layer 2
-        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1) !coarse
-        if (lts_order == 3) then
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 3) !coarse
-        end if 
+        call sw_enforce_boundary_edge(tendPool, meshPool) 
+        end if
+        if (lts_order == 3 .and. haveFine == 1) then
+        call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
+        call sw_compute_tend(tendPool, statePool, meshPool, 1) 
+        call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)  
+        call sw_enforce_boundary_edge(tendPool, meshPool) 
         end if
 
         block => block % next
@@ -936,6 +940,7 @@ call cpu_time(startAdvance)
         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+        call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
         call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
         call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
@@ -951,7 +956,7 @@ call cpu_time(startAdvance)
         call mpas_pool_get_array(tendPool, 'h', hTend)
         call mpas_pool_get_array(tendPool, 'tracers', tracersTend)
        
-        if(haveCoarse == 1 .or. haveInterface == 1) then
+        if(haveFine == 1 .or. haveCoarse == 1 .or. haveInterface == 1) then
         do k =1, nVertLevels
            do iRegion =1,nRegions
               do ie = 1, nEdgesInLTSHalo(iRegion,2)
@@ -1019,6 +1024,55 @@ call cpu_time(startAdvance)
 
         block => block % next
      end do
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
+        uMPIHaloUpdate(:,:) = uFirstStage(:,:)
+        hMPIHaloUpdate(:,:) = hFirstStage(:,:)
+        tracersMPIHaloUpdate(:,:,:) = tracersFirstStage(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
+     call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+
+     ! BEGIN: copy back for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
+        uFirstStage(:,:) =  uMPIHaloUpdate(:,:)
+        hFirstStage(:,:) = hMPIHaloUpdate(:,:)
+        tracersFirstStage(:,:,:) = tracersMPIHaloUpdate(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy back for MPI halo update of the solution
+
 call cpu_time(finishAdvance)
 totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
@@ -1058,10 +1112,7 @@ call cpu_time(startTendencies)
         call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
         call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
         call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
-        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
-        if (lts_order == 3) then
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 3) !coarse
-        end if
+        call sw_enforce_boundary_edge(tendPool, meshPool)
         end if
 
         block => block % next
@@ -1172,6 +1223,55 @@ call cpu_time(startAdvance)
 
         block => block % next
      end do
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+        uMPIHaloUpdate(:,:) = uSecondStage(:,:)
+        hMPIHaloUpdate(:,:) = hSecondStage(:,:)
+        tracersMPIHaloUpdate(:,:,:) = tracersSecondStage(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
+     call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+        uSecondStage(:,:) = uMPIHaloUpdate(:,:)
+        hSecondStage(:,:) = hMPIHaloUpdate(:,:)
+        tracersSecondStage(:,:,:) = tracersMPIHaloUpdate(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
 call cpu_time(finishAdvance)
 totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
@@ -1297,6 +1397,55 @@ call cpu_time(startAdvance)
           
            block => block % next
         end do
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+        uMPIHaloUpdate(:,:) = uSecondStage(:,:)
+        hMPIHaloUpdate(:,:) = hSecondStage(:,:)
+        tracersMPIHaloUpdate(:,:,:) = tracersSecondStage(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
+     call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+        uSecondStage(:,:) = uMPIHaloUpdate(:,:)
+        hSecondStage(:,:) = hMPIHaloUpdate(:,:)
+        tracersSecondStage(:,:,:) = tracersMPIHaloUpdate(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
 call cpu_time(finishAdvance)
 totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
@@ -1548,6 +1697,55 @@ call cpu_time(startAdvance)
 
            block => block % next
         end do
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
+        uMPIHaloUpdate(:,:) = uFirstStage(:,:)
+        hMPIHaloUpdate(:,:) = hFirstStage(:,:)
+        tracersMPIHaloUpdate(:,:,:) = tracersFirstStage(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
+     call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'first_stage_state', firstStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(firstStagePool, 'u', uFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'h', hFirstStage, 1)
+        call mpas_pool_get_array(firstStagePool, 'tracers', tracersFirstStage, 1)
+
+        uFirstStage(:,:) = uMPIHaloUpdate(:,:)
+        hFirstStage(:,:) = hMPIHaloUpdate(:,:) 
+        tracersFirstStage(:,:,:) = tracersMPIHaloUpdate(:,:,:) 
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
 call cpu_time(finishAdvance)
 totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
@@ -1799,6 +1997,55 @@ call cpu_time(startAdvance)
 
            block => block % next
         end do
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+        uMPIHaloUpdate(:,:) = uSecondStage(:,:)
+        hMPIHaloUpdate(:,:) = hSecondStage(:,:)
+        tracersMPIHaloUpdate(:,:,:) = tracersSecondStage(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
+     call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'second_stage_state', secondStagePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(secondStagePool, 'u', uSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'h', hSecondStage, 1)
+        call mpas_pool_get_array(secondStagePool, 'tracers', tracersSecondStage, 1)
+
+        uSecondStage(:,:) = uMPIHaloUpdate(:,:)
+        hSecondStage(:,:) = hMPIHaloUpdate(:,:)
+        tracersSecondStage(:,:,:) = tracersMPIHaloUpdate(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
 call cpu_time(finishAdvance)
 totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
@@ -2072,6 +2319,55 @@ call cpu_time(startAdvance)
  
               block => block % next
            end do
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'state', statePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(statePool, 'u', uOld, 1)
+        call mpas_pool_get_array(statePool, 'h', hOld, 1)
+        call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+        uMPIHaloUpdate(:,:) = uOld(:,:)
+        hMPIHaloUpdate(:,:) = hOld(:,:)
+        tracersMPIHaloUpdate(:,:,:) = tracersOld(:,:,:)
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
+     call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
+     call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+
+     ! BEGIN: copy for MPI halo update of the solution
+     block => domain % blocklist
+     do while (associated(block))
+        call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+        call mpas_pool_get_subpool(block % structs, 'state', statePool)
+
+        call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+        call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+        call mpas_pool_get_array(statePool, 'u', uOld, 1)
+        call mpas_pool_get_array(statePool, 'h', hOld, 1)
+        call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+        uOld(:,:) = uMPIHaloUpdate(:,:)
+        hOld(:,:) = hMPIHaloUpdate(:,:) 
+        tracersOld(:,:,:) = tracersMPIHaloUpdate(:,:,:) 
+
+        block => block % next
+     end do
+     !END: copy for MPI halo update of the solution
+
 call cpu_time(finishAdvance)
 totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
        call mpas_timer_stop("advance soln LTS") 

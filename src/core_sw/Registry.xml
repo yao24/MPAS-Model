@@ -2,7 +2,9 @@
 <registry model="mpas" core="sw" core_abbrev="sw" version="7.0">
 	<dims>
 		<dim name="nCells"/>
+		<dim name="nCellsSolve"/>
 		<dim name="nEdges"/>
+		<dim name="nEdgesSolve"/>
 		<dim name="maxEdges"/>
 		<dim name="maxEdges2"/>
 		<dim name="nVertices"/>
@@ -354,13 +356,16 @@
         <var_struct name="LTS" time_levs="1">
 		<var name="LTSRegion"                         type="integer"  dimensions="nCells"/>
 		<var name="LTSRegionLocal"                    type="integer"  dimensions="nCells"/>
-                <var name="cellsInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalosP1 nCells"/>
+                <var name="cellsInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalosP1 nCellsSolve"/>
                 <var name="nCellsInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalosP1"/>
-                <var name="edgesInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalosP1 nEdges"/>
+                <var name="edgesInLTSHalo"                    type="integer"  dimensions="TWO nLTSHalosP1 nEdgesSolve"/>
                 <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="TWO nLTSHalosP1"/>
                 <var name="minMaxLTSRegion"                   type="integer"  dimensions="TWO"/>
                 <var name="haveFine"                          type="integer"  dimensions=""/>
                 <var name="haveCoarse"                        type="integer"  dimensions=""/>
                 <var name="haveInterface"                     type="integer"  dimensions=""/>
+		<var name="uMPIHaloUpdate"                    type="real"     dimensions="nVertLevels nEdges"/>
+		<var name="hMPIHaloUpdate"                    type="real"     dimensions="nVertLevels nCells"/>
+		<var name="tracersMPIHaloUpdate"              type="real"     dimensions="nTracers nVertLevels nCells"/>
         </var_struct>
 </registry>
