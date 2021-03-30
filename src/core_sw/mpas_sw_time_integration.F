@@ -388,6 +388,12 @@ module sw_time_integration
       type (mpas_pool_type), pointer :: meshPool
       type (mpas_pool_type), pointer :: tendPool
 
+      ! BEGIN: TO REMOVE
+      type (mpas_pool_type), pointer :: LTSPool
+      integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
+      integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
+      ! END: TO REMOVE
+
       integer :: ssprk_step
 
       real (kind=RKIND), dimension(ssprk_order) :: weights_old, weights_new, weights_tend
@@ -515,6 +521,14 @@ call mpas_timer_start("solution advancement SSPRK")
           call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
           call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
 
+          ! BEGIN: TO REMOVE
+          call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+          call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+          call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+          call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+          call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+          ! END: TO REMOVE
+
           call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
           call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
@@ -542,6 +556,23 @@ call mpas_timer_start("solution advancement SSPRK")
                                           weights_tend(ssprk_step) * tracersTend(:,k,iCell) ) / hNew(k,iCell)
              end do
           end do
+
+
+          ! BEGIN: TO REMOVE
+          if (ssprk_step == 3 .and. block % blockID == 2) then
+             do k =1, nVertLevels
+                do iCell = 1, nCellsInLTSHalo(1,2)
+                   print*, hNew(k,cellsInLTSHalo(1,2,iCell))
+                end do
+          print*, '-----------------------------------'
+                do iCell = 1, nCellsInLTSHalo(2,2)
+                   print*, hNew(k,cellsInLTSHalo(2,2,iCell))
+                end do
+             end do
+          end if
+          ! END: TO REMOVE
+
+
 call mpas_timer_start("tendencies SSPRK")
           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 call mpas_timer_stop("tendencies SSPRK")
@@ -568,6 +599,7 @@ call mpas_timer_start("clean-up time SSPRK")
          call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
 
          call mpas_pool_get_array(statePool, 'h', hNew, 2)
+         call mpas_pool_get_array(statePool, 'u', uNew, 2)
          call mpas_pool_get_array(statePool, 'tracers', tracersNew, 2)
 
          call mpas_pool_get_array(statePool, 'uReconstructX', uReconstructX, 2)
@@ -1009,17 +1041,23 @@ call cpu_time(startAdvance)
         end if
 
         !BEGIN: TO REMOVE
+        !if (block % blockID == 2) then
         !print*, 'LTS - First Stage - Coarse'
         !do k =1, nVertLevels
         !   do ie = 1, nEdgesInLTSHalo(2,1)
         !      iEdge = edgesInLTSHalo(2,1,ie)
         !      !print*, 'u=', uFirstStage(k,iEdge), 'edge=', iEdge
         !   end do
-        !   do ic = 1, nCellsInLTSHalo(2,1)
-        !      iCell = cellsInLTSHalo(2,1,ic)
-        !      print*,  hFirstStage(k,iCell)!, 'cell=', iCell
+        !   do ic = 1, nCellsInLTSHalo(2,2)
+        !       iCell = cellsInLTSHalo(2,2,ic)
+        !      print*,  hFirstStage(k,iCell)
         !   end do 
+        !   do ic = 1, nCellsInLTSHalo(1,2)
+        !       iCell = cellsInLTSHalo(1,2,ic)
+        !      print*,  hFirstStage(k,iCell)
+        !   end do
         !end do
+        !end if
         !END: TO REMOVE
 
         block => block % next
@@ -1208,6 +1246,7 @@ call cpu_time(startAdvance)
         end if
 
         !BEGIN: TO REMOVE
+        !if (block % blockID == 1) then
         !print*, 'LTS - Second Stage - Coarse'
         !do k =1, nVertLevels
         !   do ie = 1, nEdgesInLTSHalo(2,1)
@@ -1216,9 +1255,14 @@ call cpu_time(startAdvance)
         !   end do
         !   do ic = 1, nCellsInLTSHalo(2,1)
         !      iCell = cellsInLTSHalo(2,1,ic)
-        !      print*, 'h=', hSecondStage(k,iCell), 'cell=', iCell
+        !      print*, hSecondStage(k,iCell)
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(2,3)
+        !      iCell = cellsInLTSHalo(2,3,ic)
+        !      print*, hSecondStage(k,iCell)
         !   end do
         !end do
+        !end if
         !END: TO REMOVE
 
         block => block % next
@@ -1313,8 +1357,7 @@ call cpu_time(startTendencies)
         call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1)
         call sw_compute_tend(tendPool, firstStagePool, meshPool, 1)
         call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1)
-       call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
-        call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
+        call sw_enforce_boundary_edge(tendPool, meshPool)
         end if
 
         block => block % next
@@ -1394,6 +1437,26 @@ call cpu_time(startAdvance)
            end if
 
            end if
+
+        !BEGIN: TO REMOVE
+        !if (block % blockID == 2) then
+        !print*, 'LTS - Second Stage - Interface'
+        !do k =1, nVertLevels
+        !   do ie = 1, nEdgesInLTSHalo(2,1)
+        !      iEdge = edgesInLTSHalo(2,1,ie)
+        !      print*, 'u=', uSecondStage(k,iEdge), 'edge=', iEdge
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(2,2)
+        !      iCell = cellsInLTSHalo(2,2,ic)
+        !      print*, hSecondStage(k,iCell)
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(1,2)
+        !      iCell = cellsInLTSHalo(1,2,ic)
+        !      print*, hSecondStage(k,iCell)
+        !   end do
+        !end do
+        !end if
+        !END: TO REMOVE
           
            block => block % next
         end do
@@ -1559,12 +1622,7 @@ call cpu_time(startTendencies)
            call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
            call sw_compute_tend(tendPool, statePool, meshPool, 1) 
            call sw_compute_scalar_tend(tendPool, statePool,meshPool, 1) 
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
-           if (lts_order == 3) then
-              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 3) !fine
-           end if
+           call sw_enforce_boundary_edge(tendPool, meshPool)
            end if
 
            block => block % next
@@ -1682,6 +1740,7 @@ call cpu_time(startAdvance)
            end if   
 
            !BEGIN: TO REMOVE
+           !if (block % blockID == 0) then
            !print*, 'LTS - First Stage - Fine'
            !do k =1, nVertLevels
            !   do ie = 1, nEdgesInLTSHalo(1,1)
@@ -1690,9 +1749,14 @@ call cpu_time(startAdvance)
            !   end do
            !   do ic = 1, nCellsInLTSHalo(1,1)
            !      iCell = cellsInLTSHalo(1,1,ic)
-           !      print*, hCell(k,iCell), 'cell=', iCell
+           !      print*, hFirstStage(k,iCell)
+           !   end do
+           !   do ic = 1, nCellsInLTSHalo(1,3)
+           !      iCell = cellsInLTSHalo(1,3,ic)
+           !      print*, hFirstStage(k,iCell)
            !   end do
            !end do
+           !end if
            !END: TO REMOVE
 
            block => block % next
@@ -1850,12 +1914,7 @@ call cpu_time(startTendencies)
            call sw_compute_solve_diagnostics(dt, firstStagePool, meshPool, 1) 
            call sw_compute_tend(tendPool, firstStagePool, meshPool, 1) 
            call sw_compute_scalar_tend(tendPool, firstStagePool, meshPool, 1) 
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
-           if (lts_order == 3) then
-              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 3) !fine
-           end if
+           call sw_enforce_boundary_edge(tendPool, meshPool)
            end if
            block => block % next
         end do
@@ -1982,6 +2041,7 @@ call cpu_time(startAdvance)
            end if
 
            !BEGIN: TO REMOVE
+           !if (block % blockID == 0) then
            !print*, 'LTS - Second Stage - Fine'
            !do k =1, nVertLevels
            !   do ie = 1, nEdgesInLTSHalo(1,1)
@@ -1990,9 +2050,14 @@ call cpu_time(startAdvance)
            !   end do
            !   do ic = 1, nCellsInLTSHalo(1,1)
            !      iCell = cellsInLTSHalo(1,1,ic)
-           !      print*, 'h=', hNew(k,iCell), 'cell=', iCell
+           !      print*, hSecondStage(k,iCell)
+           !   end do
+           !   do ic = 1, nCellsInLTSHalo(1,3)
+           !      iCell = cellsInLTSHalo(1,3,ic)
+           !      print*, hSecondStage(k,iCell)
            !   end do
            !end do
+           !end if
            !END: TO REMOVE
 
            block => block % next
@@ -2195,10 +2260,7 @@ call cpu_time(startTendencies)
               call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) 
               call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) 
               call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) 
-              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 2)
-              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 2)
-              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 1)
-              call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 1, 3)
+              call sw_enforce_boundary_edge(tendPool, meshPool)
               end if
               block => block % next
            end do
@@ -2316,6 +2378,27 @@ call cpu_time(startAdvance)
                 uOld(:,:) = uNew(:,:)
               end if
               end if
+
+        !BEGIN: TO REMOVE
+        !if (block % blockID == 0) then
+        !print*, 'LTS - New Soln - Fine'
+        !do k =1, nVertLevels
+        !   do ie = 1, nEdgesInLTSHalo(2,1)
+        !      iEdge = edgesInLTSHalo(2,1,ie)
+        !      print*, 'u=', uSecondStage(k,iEdge), 'edge=', iEdge
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(1,1)
+        !      iCell = cellsInLTSHalo(1,1,ic)
+        !      print*, hOld(k,iCell)
+        !   end do
+        !print*, '--------------------------------'
+        !   do ic = 1, nCellsInLTSHalo(1,3)
+        !      iCell = cellsInLTSHalo(1,3,ic)
+        !      print*, hOld(k,iCell)
+        !  end do
+        !end do
+        !end if
+        !END: TO REMOVE
  
               block => block % next
            end do
@@ -2513,8 +2596,7 @@ call cpu_time(startTendencies)
            call sw_compute_solve_diagnostics(dt, secondStagePool, meshPool, 1) 
            call sw_compute_tend(tendPool, secondStagePool, meshPool, 1) 
            call sw_compute_scalar_tend(tendPool, secondStagePool, meshPool, 1) 
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 1)
-           call sw_enforce_boundary_edge_lts(tendPool, meshPool, LTSPool, 2, 3)
+           call sw_enforce_boundary_edge(tendPool, meshPool)
            end if
            block => block % next
         end do
@@ -2600,6 +2682,26 @@ call cpu_time(startAdvance)
            end if
            end if
 
+        !BEGIN: TO REMOVE
+        !if (block % blockID == 1) then
+        !print*, 'LTS - New Soln - Coarse'
+        !do k =1, nVertLevels
+        !   do ie = 1, nEdgesInLTSHalo(2,1)
+        !      iEdge = edgesInLTSHalo(2,1,ie)
+        !      print*, 'u=', uSecondStage(k,iEdge), 'edge=', iEdge
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(2,1)
+        !      iCell = cellsInLTSHalo(2,1,ic)
+        !      print*, hNew(k,iCell)
+        !   end do
+        !   do ic = 1, nCellsInLTSHalo(2,3)
+        !      iCell = cellsInLTSHalo(2,3,ic)
+        !      print*, hNew(k,iCell)
+        !  end do
+        !end do
+        !end if
+        !END: TO REMOVE
+
            block => block % next
         end do
 call cpu_time(finishAdvance)
@@ -2674,17 +2776,24 @@ call cpu_time(startInterface)
         end if
 
         !BEGIN: TO REMOVE
-        !print*, 'LTS - Second Stage - Interface Layer 2'
-        !do k =1, nVertLevels
+        if (block % blockID == 2) then
+        print*, 'LTS - New Soln - Interface Layers'
+        do k =1, nVertLevels
         !  do ie = 1, nEdgesInLTSHalo(2,2)
         !     iEdge = edgesInLTSHalo(2,2,ie)
         !     print*, 'u=',  uNew(k,iEdge), 'edge=', iEdge
         !  end do
-        !  do ic = 1, nCellsInLTSHalo(2,2)
-        !     iCell = cellsInLTSHalo(2,2,ic)
-        !     print*, 'h=', hNew(k,iCell), 'cell=', iCell
-        !  end do
-        !end do
+          do ic = 1, nCellsInLTSHalo(1,2)
+             iCell = cellsInLTSHalo(1,2,ic)
+             print*, hNew(k,iCell)
+          end do
+          print*,'----------------------------------'
+          do ic = 1, nCellsInLTSHalo(2,2)
+             iCell = cellsInLTSHalo(2,2,ic)
+             print*, hNew(k,iCell)
+          end do
+        end do
+        end if
         !END: TO REMOVE
 
         block => block % next
