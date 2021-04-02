@@ -2776,24 +2776,24 @@ call cpu_time(startInterface)
         end if
 
         !BEGIN: TO REMOVE
-        if (block % blockID == 2) then
-        print*, 'LTS - New Soln - Interface Layers'
-        do k =1, nVertLevels
+        !if (block % blockID == 2) then
+        !print*, 'LTS - New Soln - Interface Layers'
+        !do k =1, nVertLevels
         !  do ie = 1, nEdgesInLTSHalo(2,2)
         !     iEdge = edgesInLTSHalo(2,2,ie)
         !     print*, 'u=',  uNew(k,iEdge), 'edge=', iEdge
         !  end do
-          do ic = 1, nCellsInLTSHalo(1,2)
-             iCell = cellsInLTSHalo(1,2,ic)
-             print*, hNew(k,iCell)
-          end do
-          print*,'----------------------------------'
-          do ic = 1, nCellsInLTSHalo(2,2)
-             iCell = cellsInLTSHalo(2,2,ic)
-             print*, hNew(k,iCell)
-          end do
-        end do
-        end if
+        !  do ic = 1, nCellsInLTSHalo(1,2)
+        !     iCell = cellsInLTSHalo(1,2,ic)
+        !     print*, hNew(k,iCell)
+        !  end do
+        !  print*,'----------------------------------'
+        !  do ic = 1, nCellsInLTSHalo(2,2)
+        !     iCell = cellsInLTSHalo(2,2,ic)
+        !     print*, hNew(k,iCell)
+        !  end do
+        !end do
+        !end if
         !END: TO REMOVE
 
         block => block % next

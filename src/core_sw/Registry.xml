@@ -13,7 +13,7 @@
 		<dim name="vertexDegree"/>
 		<dim name="nVertLevels" definition="1"/>
 		<dim name="nTracers" definition="3"/>
-		<dim name="nLTSHalos" definition="2"/>
+		<dim name="nLTSHalos" definition="1"/>
                 <dim name="nLTSHalosP1" definition="nLTSHalos+1"/>
 	</dims>
 	<nml_record name="sw_model" in_defaults="true">
