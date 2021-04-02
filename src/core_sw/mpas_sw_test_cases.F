@@ -692,6 +692,10 @@ call mpas_timer_stop("init LTS")
 
    nLTSHalosCopy = nLTSHalos
 
+   !NOTE:
+   ! to run LTS2, need to set nLTSHalos=1 in the Registry
+   ! to run LTS3, need to set nLTSHalos=3 in the Registry
+
    block => domain % blocklist
    do while (associated(block))
       call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
@@ -743,7 +747,12 @@ call mpas_timer_stop("init LTS")
          !END: test initialization
       end do
 
-      ! the following code is assuming that for each processor we have at most two regions, a fine and a coarse
+      ! NOTE:
+      ! in an effort to be fool proof, the following code assumes that for each processor we begin with two regions, a fine and a coarse.
+      ! technically it could also work with a processor only owning fine or coarse but there is the issue that with the 3rd order LTS scheme the MPI partitioning
+      ! may be such that when filling out the LTS lits, the fine processor does not receive any cells in cellsInLTSHalo(1,7) when it should, and this would compromise
+      ! the third order convergence rate. There is a check in this code that makes sure that if a block is a fine block, then
+      !  both lists for cellsInLTSHalo(1,5) and cellsInLTSHalo(1,7) are owned.
 
       nCellsInLTSHalo(:,:) = 0
       nEdgesInLTSHalo(:,:) = 0
@@ -753,13 +762,13 @@ call mpas_timer_stop("init LTS")
       haveCoarse = 1
       haveInterface = 1
 
+      ! this is to visualize MPI partitions on Paraview
       mpiRankCell(1:nCells) = domain % dminfo % my_proc_id
 
-      ! --- BEGIN: TO REMOVE (THIS IS JUST TO UNDERSTAND THE BLOCK PARTITIONING)
+      ! this is to visualize block partitions on Paraview
       do iCell = 1, nCells
          blockPartitionCell(iCell) = block % blockID
       end do
-      ! --- END: TO REMOVE
       
       minMaxLTSRegion(1) = minval(LTSRegionLocal(1:nCells))  !this is the fine
       minMaxLTSRegion(2) = maxval(LTSRegionLocal(1:nCells))  !this is the coarse
@@ -930,11 +939,18 @@ call mpas_timer_stop("init LTS")
             haveInterface = 0
          end if
 
+         ! check to preserve 3rd order LTS scheme
+         if (haveFine == 1 .and. nLTSHalos == 3) then 
+            if((nCellsInLTSHalo(1,3) == 0) .or. (nCellsInLTSHalo(1,4) == 0)) then
+               call mpas_log_write('A block that has fine cells needs both nCellsInLTSHalo(1,3) and nCellsInLTSHalo(1,4) to be non zero not to compromise LTS3')
+               stop
+            end if
+         end if
+
          ! below we fill in the lists for the edges, according to the LTSRegionLocal that have been assigned to the cells.
-         ! we move from the fine to the coarse (i.e. from the fine to the nearest halo
-         ! layer, until the coarse is reached). Note that edges shared between cells of different LTS regions are
-         ! owned by the cell in the LTS region closest to the fine region, see Figure 3 in "Conservative explicit
-         ! local time-stepping schemes for the shallow water equations" by Hoang et al.
+         ! we move from the fine to the coarse (i.e. from the fine to the nearest LTS region until the coarse is reached). 
+         ! Note that edges shared between cells of different LTS regions are owned by the cell in the LTS region closest to the fine region, 
+         ! see Figure 3 in "Conservative explicit local time-stepping schemes for the shallow water equations" by Hoang et al.
     
          allocate(isLTSRegionEdgeAssigned(nEdgesSolve))
          isLTSRegionEdgeAssigned(:) = 0
@@ -997,45 +1013,46 @@ call mpas_timer_stop("init LTS")
         
          deallocate(isLTSRegionEdgeAssigned) 
 
-      else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 0) then
- 
-         if (minMaxLTSRegion(1) == 1) then 
-            nCellsInLTSHalo(1,1) = nCellsSolve
-            do iCell = 1, nCellsSolve
-               cellsInLTSHalo(1,1,iCell) = iCell
-            end do
-            nEdgesInLTSHalo(1,1) = nEdgesSolve
-            do iEdge = 1, nEdgesSolve
-               edgesInLTSHalo(1,1,iEdge) = iEdge
-            end do
-
-            haveCoarse = 0
-            haveInterface = 0
-
-         else if (minMaxLTSRegion(1) == 2) then
-            nCellsInLTSHalo(2,1) = nCellsSolve
-            do iCell = 1, nCellsSolve
-               cellsInLTSHalo(2,1,iCell) = iCell
-            end do
-            nEdgesInLTSHalo(2,1) = nEdgesSolve
-            do iEdge = 1, nEdgesSolve
-               edgesInLTSHalo(2,1,iEdge) = iEdge
-            end do
-
-            haveFine = 0
-            haveInterface = 0
- 
-         end if          
-
-      else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
-         call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) cannot be greater than one.')
+      !else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 0) then
+      !
+      !   if (minMaxLTSRegion(1) == 1) then 
+      !      nCellsInLTSHalo(1,1) = nCellsSolve
+      !      do iCell = 1, nCellsSolve
+      !         cellsInLTSHalo(1,1,iCell) = iCell
+      !      end do
+      !      nEdgesInLTSHalo(1,1) = nEdgesSolve
+      !      do iEdge = 1, nEdgesSolve
+      !         edgesInLTSHalo(1,1,iEdge) = iEdge
+      !      end do
+      !
+      !      haveCoarse = 0
+      !      haveInterface = 0
+      !
+      !   else if (minMaxLTSRegion(1) == 2) then
+      !      nCellsInLTSHalo(2,1) = nCellsSolve
+      !      do iCell = 1, nCellsSolve
+      !         cellsInLTSHalo(2,1,iCell) = iCell
+      !      end do
+      !      nEdgesInLTSHalo(2,1) = nEdgesSolve
+      !      do iEdge = 1, nEdgesSolve
+      !         edgesInLTSHalo(2,1,iEdge) = iEdge
+      !      end do
+      !
+      !      haveFine = 0
+      !      haveInterface = 0
+      ! 
+      !   end if          
+      ! 
+      !else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
+      else
+         call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) must be equal to 1. Please change MPI partitioning.')
          stop
       end if
 
       block => block % next
    end do
 
-   ! BEGIN: TO REMOVE (just used for testing)
+   ! BEGIN: TO REMOVE (needed for debugging)
    !block => domain % blocklist
    !do while (associated(block))
    !
@@ -1067,6 +1084,8 @@ call mpas_timer_stop("init LTS")
 
    end subroutine mpas_init_LTS
 
+
+   ! THIS ROUTINE WAS INTRODUCED ONLY FOR DEBUGGING REASONS AND SHOULD NOT BE PUSHED ULTIMATELY
    subroutine compute_weightsOnEdgeFortran(meshPool)
 
    !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

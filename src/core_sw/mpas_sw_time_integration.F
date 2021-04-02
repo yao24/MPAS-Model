@@ -559,17 +559,17 @@ call mpas_timer_start("solution advancement SSPRK")
 
 
           ! BEGIN: TO REMOVE
-          if (ssprk_step == 3 .and. block % blockID == 2) then
-             do k =1, nVertLevels
-                do iCell = 1, nCellsInLTSHalo(1,2)
-                   print*, hNew(k,cellsInLTSHalo(1,2,iCell))
-                end do
-          print*, '-----------------------------------'
-                do iCell = 1, nCellsInLTSHalo(2,2)
-                   print*, hNew(k,cellsInLTSHalo(2,2,iCell))
-                end do
-             end do
-          end if
+          !if (ssprk_step == 3 .and. block % blockID == 2) then
+          !   do k =1, nVertLevels
+          !      do iCell = 1, nCellsInLTSHalo(1,2)
+          !         print*, hNew(k,cellsInLTSHalo(1,2,iCell))
+          !      end do
+          !print*, '-----------------------------------'
+          !      do iCell = 1, nCellsInLTSHalo(2,2)
+          !         print*, hNew(k,cellsInLTSHalo(2,2,iCell))
+          !      end do
+          !   end do
+          !end if
           ! END: TO REMOVE
 
 
@@ -1012,21 +1012,39 @@ call cpu_time(startAdvance)
            end do
 
            if (lts_order == 3) then
-              do ie = 1, nEdgesInLTSHalo(2,3) !these are coarse cells that have a region of their own if nLTSHalos=2
+              do ie = 1, nEdgesInLTSHalo(2,3) 
                  iEdge = edgesInLTSHalo(2,3,ie)
                  uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
               end do
-              do ie = 1, nEdgesInLTSHalo(1,3) !these are fine cells that have a region of their own if nLTSHalos=2
+              do ie = 1, nEdgesInLTSHalo(2,4) 
+                 iEdge = edgesInLTSHalo(2,4,ie)
+                 uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
+              end do
+              do ie = 1, nEdgesInLTSHalo(1,3) 
                  iEdge = edgesInLTSHalo(1,3,ie)
                  uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
               end do
-              do ic = 1, nCellsInLTSHalo(2,3)
+              do ie = 1, nEdgesInLTSHalo(1,4) 
+                 iEdge = edgesInLTSHalo(1,4,ie)
+                 uFirstStage(k,iEdge) =  uOld(k,iEdge) + dt * uTend(k,iEdge)
+              end do
+              do ic = 1, nCellsInLTSHalo(2,3) !these are coarse cells that have a region of their own if nLTSHalos=3
                  iCell = cellsInLTSHalo(2,3,ic)
                  hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
                  tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
               end do
-              do ic = 1, nCellsInLTSHalo(1,3)
+              do ic = 1, nCellsInLTSHalo(2,4) !these are coarse cells that have a region of their own if nLTSHalos=3
+                 iCell = cellsInLTSHalo(2,4,ic)
+                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
+              end do
+              do ic = 1, nCellsInLTSHalo(1,3) !these are fine cells that have a region of their own if nLTSHalos=3
                  iCell = cellsInLTSHalo(1,3,ic)
+                 hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
+                 tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
+              end do
+              do ic = 1, nCellsInLTSHalo(1,4) !these are fine cells that have a region of their own if nLTSHalos=3
+                 iCell = cellsInLTSHalo(1,4,ic)
                  hFirstStage(k,iCell) = hOld(k,iCell) + dt * hTend(k,iCell)
                  tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dt * tracersTend(:,k,iCell) ) / hFirstStage(k,iCell)
               end do
@@ -1227,8 +1245,19 @@ call cpu_time(startAdvance)
                  iEdge = edgesInLTSHalo(2,3,ie)
                  uSecondStage(k,iEdge) = weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dt * uTend(k,iEdge)
               end do
+              do ie = 1, nEdgesInLTSHalo(2,4)
+                 iEdge = edgesInLTSHalo(2,4,ie)
+                 uSecondStage(k,iEdge) = weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dt * uTend(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(2,3)
                  iCell = cellsInLTSHalo(2,3,ic)
+                 hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
+                 tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                                   weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + &
+                                                   weightTend * dt * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell)
+              end do
+              do ic = 1, nCellsInLTSHalo(2,4)
+                 iCell = cellsInLTSHalo(2,4,ic)
                  hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dt * hTend(k,iCell)
                  tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
                                                    weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + &
@@ -1724,8 +1753,17 @@ call cpu_time(startAdvance)
                     iEdge = edgesInLTSHalo(1,3,ie)
                     uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
                  end do
+                 do ie = 1, nEdgesInLTSHalo(1,4)
+                    iEdge = edgesInLTSHalo(1,4,ie)
+                    uFirstStage(k,iEdge) =  uOld(k,iEdge) + dtFine * uTend(k,iEdge) !soln update for the fine
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
+                    hFirstStage(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)) / hFirstStage(k,iCell)
+                 end do
+                 do ic = 1, nCellsInLTSHalo(1,4)
+                    iCell = cellsInLTSHalo(1,4,ic)
                     hFirstStage(k,iCell) = hOld(k,iCell) + dtFine * hTend(k,iCell) !soln update for the fine
                     tracersFirstStage(:,k,iCell) = ( tracersOld(:,k,iCell) * hOld(k,iCell) + dtFine * tracersTend(:,k,iCell)) / hFirstStage(k,iCell)
                  end do
@@ -2024,8 +2062,19 @@ call cpu_time(startAdvance)
                    iEdge = edgesInLTSHalo(1,3,ie)
                    uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dtFine * uTend(k,iEdge)!soln update for the fine
                  end do
+                 do ie = 1, nEdgesInLTSHalo(1,4)
+                   iEdge = edgesInLTSHalo(1,4,ie)
+                   uSecondStage(k,iEdge) =  weightOld * uOld(k,iEdge) + weightNew * uFirstStage(k,iEdge) + weightTend * dtFine * uTend(k,iEdge)!soln update for the fine
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
+                    hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                                      weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + & 
+                                                      weightTend * dtFine * tracersTend(:,k,iCell) ) / hSecondStage(k,iCell)
+                 end do
+                 do ic = 1, nCellsInLTSHalo(1,4)
+                    iCell = cellsInLTSHalo(1,4,ic)
                     hSecondStage(k,iCell) = weightOld * hOld(k,iCell) + weightNew * hFirstStage(k,iCell) + weightTend * dtFine * hTend(k,iCell) !soln update for the fine
                     tracersSecondStage(:,k,iCell) = ( weightOld * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
                                                       weightNew * tracersFirstStage(:,k,iCell) * hFirstStage(k,iCell) + & 
@@ -2345,6 +2394,10 @@ call cpu_time(startAdvance)
                     iEdge = edgesInLTSHalo(1,3,ie)
                     uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
                  end do
+                 do ie = 1, nEdgesInLTSHalo(1,4)
+                    iEdge = edgesInLTSHalo(1,4,ie)
+                    uOld(k,iEdge) =  (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) *  dtFine * uTend(k,iEdge)
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,2)
                     iCell = cellsInLTSHalo(1,2,ic)
                     hSecondStage(k,iCell) = hNew(k,iCell)
@@ -2367,6 +2420,14 @@ call cpu_time(startAdvance)
                  end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
+                    hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
+                    tracersOld(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                              (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
+                                              (2.0 / 3.0) * dtFine * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+                    hOld(k,iCell) = hNew(k,iCell)
+                 end do
+                 do ic = 1, nCellsInLTSHalo(1,4)
+                    iCell = cellsInLTSHalo(1,4,ic)
                     hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dtFine * hTend(k,iCell) !soln update for the fine
                     tracersOld(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
                                               (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
@@ -2501,8 +2562,17 @@ call mpas_timer_start("copy soln into new soln LTS")
                     iEdge = edgesInLTSHalo(1,3,ie)
                     uNew(k,iEdge) =  uOld(k,iEdge)
                  end do
+                 do ie = 1, nEdgesInLTSHalo(1,4)
+                    iEdge = edgesInLTSHalo(1,4,ie)
+                    uNew(k,iEdge) =  uOld(k,iEdge)
+                 end do
                  do ic = 1, nCellsInLTSHalo(1,3)
                     iCell = cellsInLTSHalo(1,3,ic)
+                    hNew(k,iCell) = hOld(k,iCell)
+                    tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
+                 end do
+                 do ic = 1, nCellsInLTSHalo(1,4)
+                    iCell = cellsInLTSHalo(1,4,ic)
                     hNew(k,iCell) = hOld(k,iCell)
                     tracersNew(:,k,iCell) = tracersOld(:,k,iCell)
                  end do
@@ -2662,6 +2732,10 @@ call cpu_time(startAdvance)
                  iEdge = edgesInLTSHalo(2,3,ie)
                  uNew(k,iEdge) = (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) * dt * uTend(k,iEdge)
               end do
+              do ie = 1, nEdgesInLTSHalo(2,4)
+                 iEdge = edgesInLTSHalo(2,4,ie)
+                 uNew(k,iEdge) = (1.0 / 3.0) * uOld(k,iEdge) + (2.0 / 3.0) * uSecondStage(k,iEdge) + (2.0 / 3.0) * dt * uTend(k,iEdge)
+              end do
               do ic = 1, nCellsInLTSHalo(2,1)
                  iCell = cellsInLTSHalo(2,1,ic)
                  hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
@@ -2671,6 +2745,13 @@ call cpu_time(startAdvance)
               end do
               do ic = 1, nCellsInLTSHalo(2,3)
                  iCell = cellsInLTSHalo(2,3,ic)
+                 hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
+                 tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
+                                           (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
+                                           (2.0 / 3.0) * dt * tracersTend(:,k,iCell) ) / hNew(k,iCell)
+              end do
+              do ic = 1, nCellsInLTSHalo(2,4)
+                 iCell = cellsInLTSHalo(2,4,ic)
                  hNew(k,iCell) = (1.0 / 3.0) * hOld(k,iCell) + (2.0 / 3.0) * hSecondStage(k,iCell) + (2.0 / 3.0) * dt * hTend(k,iCell)
                  tracersNew(:,k,iCell) = ( (1.0 / 3.0) * tracersOld(:,k,iCell) * hOld(k,iCell) + & 
                                            (2.0 / 3.0) * tracersSecondStage(:,k,iCell) * hSecondStage(k,iCell) + &
