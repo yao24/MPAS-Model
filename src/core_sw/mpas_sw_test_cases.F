@@ -679,9 +679,9 @@ call mpas_timer_stop("init LTS")
    type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
    integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, nLTSHalosCopy, haveFineCounter, haveCoarseCounter
-   integer, pointer :: nLTSHalos, nCells, nCellsSolve, nEdges, nEdgesSolve, haveFine, haveCoarse, haveInterface
+   integer, pointer :: nLTSHalos, nCells, nCellsSolve, nEdges, nEdgesSolve, haveFine, haveCoarse, haveInterface, doExtraLayers
    real (kind=RKIND), dimension(:), pointer :: latCell, lonCell, areaCell
-   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion
+   integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion, minMaxAfterHaloUpdate
    integer, dimension(:,:), pointer :: cellsOnEdge,  edgesOnCell, verticesOnCell, nCellsInLTSHalo, nEdgesInLTSHalo
    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
    integer, dimension(:), pointer :: mpiRankCell, blockPartitionCell
@@ -693,8 +693,19 @@ call mpas_timer_stop("init LTS")
    nLTSHalosCopy = nLTSHalos
 
    !NOTE:
+   ! the word "halo" in LTS instances is not related to the MPI halo.
+
+   !NOTE:
    ! to run LTS2, need to set nLTSHalos=1 in the Registry
    ! to run LTS3, need to set nLTSHalos=3 in the Registry
+
+   !NOTE:
+   ! for performance, LTS should to be run with either one of the following setups:
+   ! 1) N MPI partitions and 3N blocks, each blocks owns an LTS region (fine, coarse or interface)
+   ! 2) N MPI partitions and N blocks,  each blocks owns an LTS region (fine, coarse or interface) 
+   ! the first case is better theoretically because it optimizes the parallel efficiency by minimizing the wait time among processors.
+   ! There are python scripts to modify the graph.info and the graph.info.part.X files to achieve 1) or 2).
+   ! Nevertheless, this code is written so that LTS can run with virtually any graph.info file.
 
    block => domain % blocklist
    do while (associated(block))
@@ -718,12 +729,23 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
       call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
       call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+      call mpas_pool_get_array(LTSPool, 'doExtraLayers', doExtraLayers)
       call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
 
-      ! the loop below initializes the LTS regions for the current processor
-      ! 1 = highest resolution possible
+      ! the loop below initializes the LTS regions for the current processor (or block)
+      ! LTS Regions code:
+      ! 1 = fine
+      ! 2 = coarse
+      ! 3 = interface layer 1
+      ! 4 = interface layer 2
+      ! then if nLTSHalos=3 we also have
+      ! 5 = fine (to advance when doing 1st stage on interface)
+      ! 6 = coarse
+      ! 7 = fine (to advance when doing 1st stage on interface)
+      ! 8 = coarse
+      
       LTSRegion(:) = 1
       do iCell = 1, nCells
          !if (2.0 * sqrt(areaCell(iCell) / pii) .ge. 300000) then
@@ -747,13 +769,6 @@ call mpas_timer_stop("init LTS")
          !END: test initialization
       end do
 
-      ! NOTE:
-      ! in an effort to be fool proof, the following code assumes that for each processor we begin with two regions, a fine and a coarse.
-      ! technically it could also work with a processor only owning fine or coarse but there is the issue that with the 3rd order LTS scheme the MPI partitioning
-      ! may be such that when filling out the LTS lits, the fine processor does not receive any cells in cellsInLTSHalo(1,7) when it should, and this would compromise
-      ! the third order convergence rate. There is a check in this code that makes sure that if a block is a fine block, then
-      !  both lists for cellsInLTSHalo(1,5) and cellsInLTSHalo(1,7) are owned.
-
       nCellsInLTSHalo(:,:) = 0
       nEdgesInLTSHalo(:,:) = 0
       LTSRegionLocal(:) = LTSRegion(:) 
@@ -761,6 +776,7 @@ call mpas_timer_stop("init LTS")
       haveFine = 1
       haveCoarse = 1
       haveInterface = 1
+      doExtraLayers = 0
 
       ! this is to visualize MPI partitions on Paraview
       mpiRankCell(1:nCells) = domain % dminfo % my_proc_id
@@ -770,15 +786,22 @@ call mpas_timer_stop("init LTS")
          blockPartitionCell(iCell) = block % blockID
       end do
       
-      minMaxLTSRegion(1) = minval(LTSRegionLocal(1:nCells))  !this is the fine
-      minMaxLTSRegion(2) = maxval(LTSRegionLocal(1:nCells))  !this is the coarse
+      minMaxLTSRegion(1) = minval(LTSRegionLocal(1:nCells))  
+      minMaxLTSRegion(2) = maxval(LTSRegionLocal(1:nCells))  
 
-      if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 1) then  !this means we have two regions, a fine and a coarse
+      if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then
+         call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1 is not allowed. Change LTSRegion initialization in init_LTS subroutine.')
+         stop
+      end if
+
+      if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 1) then  !this means there are two regions, a fine and a coarse
+
+         doExtraLayers = 1
 
          do iEdge = 1, nEdges
             cell1 = cellsOnEdge(1,iEdge)
             cell2 = cellsOnEdge(2,iEdge)
-            ! here we write the first layers of the halo (interface layer 1 and interface layer 2)
+            ! here we write the first layers of the LTS halo (interface layer 1 and interface layer 2)
             if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
                if (cell1 .le. nCells) then
                   LTSRegionLocal(cell1) = minMaxLTSRegion(1) + 2
@@ -793,8 +816,8 @@ call mpas_timer_stop("init LTS")
                if (cell1 .le. nCells) then
                   LTSRegionLocal(cell1) = minMaxLTSRegion(2) + 2
                end if
-            ! the next if statements are there because we are changing two elements at the
-            ! time above so we have to take into consideration the fact that an edge
+            ! the next if statements are there because above we are possibly changing two LTSRegionLocal at the
+            ! time, so we have to take into consideration the fact that an edge
             ! might be shared by two elements, one of which had its LTSRegionLocal already changed
             else if (LTSRegionLocal(cell1) == minMaxLTSRegion(1) + 2 .and. LTSRegionLocal(cell2) == minMaxLTSRegion(2)) then
                if (cell2 .le. nCells) then
@@ -822,6 +845,36 @@ call mpas_timer_stop("init LTS")
 
    call mpas_dmpar_field_halo_exch(domain, 'LTSRegionLocal')
 
+   ! this below is to see if a processor that started with only fine or only coarse needs to fill out some extra LTS halo layers  
+   block => domain % blocklist
+   do while (associated(block))
+      call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+      call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+
+      call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+
+      call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
+      call mpas_pool_get_array(LTSPool, 'minMaxAfterHaloUpdate', minMaxAfterHaloUpdate)
+      call mpas_pool_get_array(LTSPool, 'doExtraLayers', doExtraLayers)
+      call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
+
+      minMaxAfterHaloUpdate(1) = minval(LTSRegionLocal(1:nCells))  
+      minMaxAfterHaloUpdate(2) = maxval(LTSRegionLocal(1:nCells)) 
+
+      if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 0) then
+
+         if (minMaxAfterHaloUpdate(1) .ne. minMaxAfterHaloUpdate(2)) then
+            doExtraLayers = 1
+         end if
+
+         if (minMaxAfterHaloUpdate(1) .ne. minMaxLTSRegion(1)) then
+            call mpas_log_write('minMaxAfterHaloUpdate(1) not equal to minMaxLTSRegion(1), something is wrong, see init_LTS subroutine')
+         end if
+      end if 
+
+      block => block % next
+   end do
+
    ! this is a loop to change LTSRegionLocal for the extra halo regions that might be
    ! needed for higher order LTS schemes (for instance the 3rd order LTS (scheme))
    do iRegion = 1,2
@@ -838,9 +891,10 @@ call mpas_timer_stop("init LTS")
             call mpas_pool_get_array(meshPool, 'edgesOnCell', edgesOnCell)
             call mpas_pool_get_array(meshPool, 'nEdgesOnCell', nEdgesOnCell)
             call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
+            call mpas_pool_get_array(LTSPool, 'doExtraLayers', doExtraLayers)
             call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
 
-            if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 1) then
+            if (doExtraLayers == 1) then 
 
                do iCell = 1, nCells
                   if (LTSRegionLocal(iCell) == (minMaxLTSRegion(iRegion) + 2 * iHalo)) then
@@ -869,8 +923,43 @@ call mpas_timer_stop("init LTS")
 
          call mpas_dmpar_field_halo_exch(domain, 'LTSRegionLocal')
 
+
+         ! this below is to see if a processor that started with only fine or only coarse needs to fill out some extra LTS halo layers  
+         block => domain % blocklist
+         do while (associated(block))
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+
+            call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+
+            call mpas_pool_get_array(LTSPool, 'minMaxLTSRegion', minMaxLTSRegion)
+            call mpas_pool_get_array(LTSPool, 'minMaxAfterHaloUpdate', minMaxAfterHaloUpdate)
+            call mpas_pool_get_array(LTSPool, 'doExtraLayers', doExtraLayers)
+            call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
+
+            minMaxAfterHaloUpdate(1) = minval(LTSRegionLocal(1:nCells))
+            minMaxAfterHaloUpdate(2) = maxval(LTSRegionLocal(1:nCells))
+
+            if (doExtraLayers == 0) then
+
+               if (minMaxAfterHaloUpdate(1) .ne. minMaxAfterHaloUpdate(2)) then
+                  doExtraLayers = 1
+               end if
+
+               if (minMaxAfterHaloUpdate(1) .ne. minMaxLTSRegion(1)) then
+                  call mpas_log_write('minMaxAfterHaloUpdate(1) not equal to minMaxLTSRegion(1), something is wrong, see init_LTS subroutine')
+                  stop
+               end if
+            end if
+
+            block => block % next
+         end do
+
       end do
    end do
+
+
+   call mpas_dmpar_field_halo_exch(domain, 'LTSRegionLocal')
 
 
    block => domain % blocklist
@@ -897,189 +986,149 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
 
-      if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 1) then
- 
-         ! this is a loop to build the lists of elements in the fine and coarse regions
-         do iCell = 1, nCellsSolve
-            do iRegion = 1,2
-               if(LTSRegionLocal(iCell) == minMaxLTSRegion(iRegion)) then
-                  nCellsInLTSHalo(iRegion,1) = nCellsInLTSHalo(iRegion,1) + 1
-                  cellsInLTSHalo(iRegion,1,nCellsInLTSHalo(iRegion,1)) = iCell
-               end if 
-               do iHalo = 1, nLTSHalos
-                  if(LTSRegionLocal(iCell) == (minMaxLTSRegion(iRegion) + 2 * iHalo) ) then
-                     nCellsInLTSHalo(iRegion,iHalo+1) = nCellsInLTSHalo(iRegion,iHalo+1) + 1
-                     cellsInLTSHalo(iRegion,iHalo+1,nCellsInLTSHalo(iRegion,iHalo+1)) = iCell
-                  end if
-               end do
+      ! this is a loop to build the lists of elements in the fine and coarse regions
+      do iCell = 1, nCellsSolve !this loops up to nCellsSolve because in the time stepping we only want to advance the cells owned by the processor (or block)
+         do iRegion = 1,2
+            if(LTSRegionLocal(iCell) == minMaxLTSRegion(iRegion)) then
+               nCellsInLTSHalo(iRegion,1) = nCellsInLTSHalo(iRegion,1) + 1
+               cellsInLTSHalo(iRegion,1,nCellsInLTSHalo(iRegion,1)) = iCell
+            end if 
+            do iHalo = 1, nLTSHalos
+               if(LTSRegionLocal(iCell) == (minMaxLTSRegion(iRegion) + 2 * iHalo) ) then
+                  nCellsInLTSHalo(iRegion,iHalo+1) = nCellsInLTSHalo(iRegion,iHalo+1) + 1
+                  cellsInLTSHalo(iRegion,iHalo+1,nCellsInLTSHalo(iRegion,iHalo+1)) = iCell
+               end if
             end do
          end do
+      end do
 
-         haveFineCounter = 0
-         do iHalo = 1, nLTSHalos+1
-            if ((nCellsInLTSHalo(1,iHalo) == 0) .and. (iHalo .ne. 2)  ) then
-               haveFineCounter = haveFineCounter + 1
-            end if
-         end do
-         if (haveFineCounter == nLTSHalos) then
-            haveFine = 0
+      haveFineCounter = 0
+      do iHalo = 1, nLTSHalos+1
+         if ((nCellsInLTSHalo(1,iHalo) == 0) .and. (iHalo .ne. 2)  ) then
+            haveFineCounter = haveFineCounter + 1
          end if
+      end do
+      if (haveFineCounter == nLTSHalos) then
+         haveFine = 0
+      end if
 
-         haveCoarseCounter = 0
-         do iHalo = 1, nLTSHalos+1
-            if ((nCellsInLTSHalo(2,iHalo) == 0) .and. (iHalo .ne. 2)  ) then
-               haveCoarseCounter = haveCoarseCounter + 1
-            end if
-         end do
-         if (haveCoarseCounter == nLTSHalos) then
-            haveCoarse = 0
+      haveCoarseCounter = 0
+      do iHalo = 1, nLTSHalos+1
+         if ((nCellsInLTSHalo(2,iHalo) == 0) .and. (iHalo .ne. 2)  ) then
+            haveCoarseCounter = haveCoarseCounter + 1
          end if
+      end do
+      if (haveCoarseCounter == nLTSHalos) then
+         haveCoarse = 0
+      end if
 
-         if ((nCellsInLTSHalo(1,2) == 0) .and. (nCellsInLTSHalo(2,2) == 0)) then
-            haveInterface = 0
-         end if
+      if ((nCellsInLTSHalo(1,2) == 0) .and. (nCellsInLTSHalo(2,2) == 0)) then
+         haveInterface = 0
+      end if
 
-         ! check to preserve 3rd order LTS scheme
-         if (haveFine == 1 .and. nLTSHalos == 3) then 
-            if((nCellsInLTSHalo(1,3) == 0) .or. (nCellsInLTSHalo(1,4) == 0)) then
-               call mpas_log_write('A block that has fine cells needs both nCellsInLTSHalo(1,3) and nCellsInLTSHalo(1,4) to be non zero not to compromise LTS3')
-               stop
-            end if
-         end if
-
-         ! below we fill in the lists for the edges, according to the LTSRegionLocal that have been assigned to the cells.
-         ! we move from the fine to the coarse (i.e. from the fine to the nearest LTS region until the coarse is reached). 
-         ! Note that edges shared between cells of different LTS regions are owned by the cell in the LTS region closest to the fine region, 
-         ! see Figure 3 in "Conservative explicit local time-stepping schemes for the shallow water equations" by Hoang et al.
+      ! below we fill out the lists for the edges, according to the LTSRegionLocal that have been assigned to the cells.
+      ! we move from the fine to the coarse (i.e. from the fine to the nearest LTS region in the direction of the coarse). 
+      ! Note that edges shared between cells of different LTS regions are owned by the cell in the LTS region closest to the fine region, 
+      ! see Figure 3 in "Conservative explicit local time-stepping schemes for the shallow water equations" by Hoang et al.
     
-         allocate(isLTSRegionEdgeAssigned(nEdgesSolve))
-         isLTSRegionEdgeAssigned(:) = 0
+      allocate(isLTSRegionEdgeAssigned(nEdgesSolve))
+      isLTSRegionEdgeAssigned(:) = 0
 
-         do iCell = 1, nCellsInLTSHalo(1,1)
-            do i = 1, nEdgesOnCell(cellsInLTSHalo(1,1,iCell))
-               iEdge = edgesOnCell(i,cellsInLTSHalo(1,1,iCell))
+      do iCell = 1, nCellsInLTSHalo(1,1)
+         do i = 1, nEdgesOnCell(cellsInLTSHalo(1,1,iCell))
+            iEdge = edgesOnCell(i,cellsInLTSHalo(1,1,iCell))
+            if (iEdge .le. nEdgesSolve) then
+               if (isLTSRegionEdgeAssigned(iEdge) == 0) then
+                  nEdgesInLTSHalo(1,1) = nEdgesInLTSHalo(1,1) + 1
+                  edgesInLTSHalo(1,1, nEdgesInLTSHalo(1,1)) = iEdge
+                  isLTSRegionEdgeAssigned(iEdge) = 1
+               end if
+            end if
+         end do
+      end do
+   
+      do iHalo = 1, nLTSHalos
+         do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 2)
+            do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
+               iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
+               if(domain % dminfo % my_proc_id == 1 .and. nLTSHalos - iHalo + 2 == 3) then
+                  print*, 'nEdgesOnCell=', nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell)) 
+               end if
+               if (iEdge .le. nEdgesSolve) then
+               if(domain % dminfo % my_proc_id == 1 .and. nLTSHalos - iHalo + 2 == 3) then
+                  print*, iEdge, isLTSRegionEdgeAssigned(iEdge), LTSRegionLocal(cellsOnEdge(1,iEdge)), LTSRegionLocal(cellsOnEdge(2,iEdge))
+               end if
+                  if (isLTSRegionEdgeAssigned(iEdge) == 0) then
+                     nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) + 1
+                     edgesInLTSHalo(1, nLTSHalos - iHalo + 2,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2)) = iEdge
+                     isLTSRegionEdgeAssigned(iEdge) = 1
+                  end if
+               end if
+            end do
+         end do
+      end do
+
+      do iHalo = 1, nLTSHalos
+         do iCell = 1, nCellsInLTSHalo(2, iHalo+1)
+            do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
+               iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
                if (iEdge .le. nEdgesSolve) then
                   if (isLTSRegionEdgeAssigned(iEdge) == 0) then
-                     nEdgesInLTSHalo(1,1) = nEdgesInLTSHalo(1,1) + 1
-                     edgesInLTSHalo(1,1, nEdgesInLTSHalo(1,1)) = iEdge
+                     nEdgesInLTSHalo(2, iHalo+1) = nEdgesInLTSHalo(2, iHalo+1) + 1
+                     edgesInLTSHalo(2, iHalo+1,  nEdgesInLTSHalo(2, iHalo+1)) = iEdge
                      isLTSRegionEdgeAssigned(iEdge) = 1
                   end if
                end if
             end do
          end do
-   
-         do iHalo = 1, nLTSHalos
-            do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 2)
-               do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
-                  iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
-                  if (iEdge .le. nEdgesSolve) then
-                     if (isLTSRegionEdgeAssigned(iEdge) == 0) then
-                        nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) + 1
-                        edgesInLTSHalo(1, nLTSHalos - iHalo + 2,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2)) = iEdge
-                        isLTSRegionEdgeAssigned(iEdge) = 1
-                     end if
-                  end if
-               end do
-            end do
-         end do
-
-         do iHalo = 1, nLTSHalos
-            do iCell = 1, nCellsInLTSHalo(2, iHalo+1)
-               do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
-                  iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
-                  if (iEdge .le. nEdgesSolve) then
-                     if (isLTSRegionEdgeAssigned(iEdge) == 0) then
-                        nEdgesInLTSHalo(2, iHalo+1) = nEdgesInLTSHalo(2, iHalo+1) + 1
-                        edgesInLTSHalo(2, iHalo+1,  nEdgesInLTSHalo(2, iHalo+1)) = iEdge
-                        isLTSRegionEdgeAssigned(iEdge) = 1
-                     end if
-                  end if
-               end do
-            end do
-         end do
+      end do
  
-         do iCell = 1, nCellsInLTSHalo(2,1)
-            do i = 1, nEdgesOnCell(cellsInLTSHalo(2,1,iCell))
-               iEdge = edgesOnCell(i,cellsInLTSHalo(2,1,iCell))
-               if (iEdge .le. nEdgesSolve) then
-                  if(isLTSRegionEdgeAssigned(iEdge) == 0) then
-                     nEdgesInLTSHalo(2,1) = nEdgesInLTSHalo(2,1) + 1
-                     edgesInLTSHalo(2,1,nEdgesInLTSHalo(2,1)) = iEdge
-                     isLTSRegionEdgeAssigned(iEdge) = 1
-                  end if
+      do iCell = 1, nCellsInLTSHalo(2,1)
+         do i = 1, nEdgesOnCell(cellsInLTSHalo(2,1,iCell))
+            iEdge = edgesOnCell(i,cellsInLTSHalo(2,1,iCell))
+            if (iEdge .le. nEdgesSolve) then
+               if(isLTSRegionEdgeAssigned(iEdge) == 0) then
+                  nEdgesInLTSHalo(2,1) = nEdgesInLTSHalo(2,1) + 1
+                  edgesInLTSHalo(2,1,nEdgesInLTSHalo(2,1)) = iEdge
+                  isLTSRegionEdgeAssigned(iEdge) = 1
                end if
-            end do
+            end if
          end do
+      end do
         
-         deallocate(isLTSRegionEdgeAssigned) 
-
-      !else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 0) then
-      !
-      !   if (minMaxLTSRegion(1) == 1) then 
-      !      nCellsInLTSHalo(1,1) = nCellsSolve
-      !      do iCell = 1, nCellsSolve
-      !         cellsInLTSHalo(1,1,iCell) = iCell
-      !      end do
-      !      nEdgesInLTSHalo(1,1) = nEdgesSolve
-      !      do iEdge = 1, nEdgesSolve
-      !         edgesInLTSHalo(1,1,iEdge) = iEdge
-      !      end do
-      !
-      !      haveCoarse = 0
-      !      haveInterface = 0
-      !
-      !   else if (minMaxLTSRegion(1) == 2) then
-      !      nCellsInLTSHalo(2,1) = nCellsSolve
-      !      do iCell = 1, nCellsSolve
-      !         cellsInLTSHalo(2,1,iCell) = iCell
-      !      end do
-      !      nEdgesInLTSHalo(2,1) = nEdgesSolve
-      !      do iEdge = 1, nEdgesSolve
-      !         edgesInLTSHalo(2,1,iEdge) = iEdge
-      !      end do
-      !
-      !      haveFine = 0
-      !      haveInterface = 0
-      ! 
-      !   end if          
-      ! 
-      !else if (minMaxLTSRegion(2) - minMaxLTSRegion(1) > 1) then 
-      else
-         call mpas_log_write('minMaxLTSRegion(2) - minMaxLTSRegion(1) must be equal to 1. Please change MPI partitioning.')
-         stop
-      end if
+      deallocate(isLTSRegionEdgeAssigned) 
 
       block => block % next
    end do
 
    ! BEGIN: TO REMOVE (needed for debugging)
-   !block => domain % blocklist
-   !do while (associated(block))
-   !
-   !   call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-   !
-   !   call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
-   !   call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
-   !   call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
-   !
-   !   call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
-   !   call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
-   !   call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-   !   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
-   !
-   !   if(block % blockID == 0) then 
-   !
-   !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
-   !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1)!, 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3)
-   !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1)!, 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3)
-   !   print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
-   !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1)!, 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3)
-   !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1)!, 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3)
-   !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
-   !   end if
-   !
-   !   block => block % next
-   !end do
+   block => domain % blocklist
+   do while (associated(block))
+   
+      call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+  
+      call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+      call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+      call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+   
+      call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
+   
+      if(block % blockID == 1) then 
+   
+      print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
+      print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
+      print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1), 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
+      print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
+      print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1), 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
+      print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1), 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
+      print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
+      end if
+   
+      block => block % next
+   end do
    ! END: TO REMOVE
 
    end subroutine mpas_init_LTS
