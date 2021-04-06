@@ -864,9 +864,6 @@ call mpas_timer_stop("init LTS")
       if (minMaxLTSRegion(2) - minMaxLTSRegion(1) == 0) then
 
          if (minMaxAfterHaloUpdate(1) .ne. minMaxAfterHaloUpdate(2)) then
-            if (block % blockID == 33) then
-               print*, '---------------here'
-            end if
             doExtraLayers = 1
          end if
 
@@ -946,9 +943,6 @@ call mpas_timer_stop("init LTS")
             if (doExtraLayers == 0) then
 
                if (minMaxAfterHaloUpdate(1) .ne. minMaxAfterHaloUpdate(2)) then
-            if (block % blockID == 33) then
-               print*, '---------------here'
-            end if
                   doExtraLayers = 1
                end if
 
@@ -997,9 +991,6 @@ call mpas_timer_stop("init LTS")
          do iRegion = 1,2
             if (iRegion == minMaxLTSRegion(iRegion)) then
                if(LTSRegionLocal(iCell) == minMaxLTSRegion(iRegion)) then
-                  if (block % blockID == 33) then
-                     print*, iRegion, LTSRegionLocal(iCell), minMaxLTSRegion(iRegion)
-                  end if
                   nCellsInLTSHalo(iRegion,1) = nCellsInLTSHalo(iRegion,1) + 1
                   cellsInLTSHalo(iRegion,1,nCellsInLTSHalo(iRegion,1)) = iCell
                end if 
@@ -1063,9 +1054,6 @@ call mpas_timer_stop("init LTS")
             do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
                iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
                if (iEdge .le. nEdgesSolve) then
-               if(domain % dminfo % my_proc_id == 1 .and. nLTSHalos - iHalo + 2 == 3) then
-                  print*, iEdge, isLTSRegionEdgeAssigned(iEdge), LTSRegionLocal(cellsOnEdge(1,iEdge)), LTSRegionLocal(cellsOnEdge(2,iEdge))
-               end if
                   if (isLTSRegionEdgeAssigned(iEdge) == 0) then
                      nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) + 1
                      edgesInLTSHalo(1, nLTSHalos - iHalo + 2,  nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2)) = iEdge
@@ -1110,33 +1098,33 @@ call mpas_timer_stop("init LTS")
    end do
 
    ! BEGIN: TO REMOVE (needed for debugging)
-   block => domain % blocklist
-   do while (associated(block))
+   !block => domain % blocklist
+   !do while (associated(block))
    
-      call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+   !   call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
   
-      call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
-      call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
-      call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+   !   call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+   !   call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+   !   call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
    
-      call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
-      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
-      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
+   !   call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
+   !   call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
+   !   call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+   !   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
    
-      if(block % blockID == 33) then 
+   !   if(block % blockID == 33) then 
    
-      print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
-      print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
-      print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1), 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
-      print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
-      print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1), 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
-      print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1), 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
-      print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
-      end if
+   !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
+   !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
+   !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1), 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
+   !   print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
+   !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1), 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
+   !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1), 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
+   !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
+   !   end if
    
-      block => block % next
-   end do
+   !   block => block % next
+   !end do
    ! END: TO REMOVE
 
    end subroutine mpas_init_LTS
