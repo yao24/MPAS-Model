@@ -2154,6 +2154,10 @@ call mpas_timer_start("copy second stage soln into old soln  LTS")
               call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
               call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
 
+              call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+              call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+              call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
               call mpas_pool_get_array(statePool, 'u', uOld, 1)
               call mpas_pool_get_array(statePool, 'h', hOld, 1)
               call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
@@ -2175,8 +2179,41 @@ call mpas_timer_start("copy second stage soln into old soln  LTS")
                     end do
                  end do
               end if
+
+              uMPIHaloUpdate(:,:) = uOld(:,:)
+              hMPIHaloUpdate(:,:) = hOld(:,:)
+              tracersMPIHaloUpdate(:,:,:) = tracersOld(:,:,:)
+
               block => block % next
            end do
+
+
+           call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
+           call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
+           call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+
+           ! BEGIN: copy for MPI halo update of the solution
+           block => domain % blocklist
+           do while (associated(block))
+              call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+              call mpas_pool_get_subpool(block % structs, 'state', statePool)
+
+              call mpas_pool_get_array(LTSPool, 'uMPIHaloUpdate', uMPIHaloUpdate)
+              call mpas_pool_get_array(LTSPool, 'hMPIHaloUpdate', hMPIHaloUpdate)
+              call mpas_pool_get_array(LTSPool, 'tracersMPIHaloUpdate', tracersMPIHaloUpdate)
+
+              call mpas_pool_get_array(statePool, 'u', uOld, 1)
+              call mpas_pool_get_array(statePool, 'h', hOld, 1)
+              call mpas_pool_get_array(statePool, 'tracers', tracersOld, 1)
+
+              uOld(:,:) = uMPIHaloUpdate(:,:)
+              hOld(:,:) = hMPIHaloUpdate(:,:)
+              tracersOld(:,:,:) = tracersMPIHaloUpdate(:,:,:)
+
+              block => block % next
+           end do
+          !END: copy for MPI halo update of the solution
+
          end if
 call mpas_timer_stop("copy second stage soln into old soln  LTS")
 
@@ -2850,9 +2887,9 @@ totalTimeBarrier = totalTimeBarrier + (finishBarrier - startBarrier)
 call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for prognostic variables
-        call mpas_dmpar_field_halo_exch(domain, 'u')
-        call mpas_dmpar_field_halo_exch(domain, 'h')
-        call mpas_dmpar_field_halo_exch(domain, 'tracers')
+        call mpas_dmpar_field_halo_exch(domain, 'u', timeLevel=2)
+        call mpas_dmpar_field_halo_exch(domain, 'h', timeLevel=2)
+        call mpas_dmpar_field_halo_exch(domain, 'tracers', timeLevel=2)
 call mpas_timer_stop("halo updates  LTS")
 
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
