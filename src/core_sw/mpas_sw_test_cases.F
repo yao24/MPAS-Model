@@ -678,7 +678,7 @@ call mpas_timer_stop("init LTS")
    type (block_type), pointer :: block
    type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
    integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
-   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, nLTSHalosCopy, haveFineCounter, haveCoarseCounter
+   integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, nLTSHalosCopy, haveFineCounter, haveCoarseCounter, moreCellsOnInterface
    integer, pointer :: nLTSHalos, nCells, nCellsSolve, nEdges, nEdgesSolve, haveFine, haveCoarse, haveInterface, doExtraLayers
    real (kind=RKIND), dimension(:), pointer :: latCell, lonCell, areaCell
    integer, dimension(:), pointer :: LTSRegion, LTSRegionLocal, nEdgesOnCell, minMaxLTSRegion, minMaxAfterHaloUpdate
@@ -690,7 +690,13 @@ call mpas_timer_stop("init LTS")
    call mpas_pool_get_subpool(domain % blocklist % structs, 'LTS', LTSPool)
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
+   ! set to 1 if need more cells in interface layers (for load balancing)
+   moreCellsOnInterface = 1
+
    nLTSHalosCopy = nLTSHalos
+   if (moreCellsOnInterface == 1) then
+      nLTSHalosCopy = 10
+   end if
 
    !NOTE:
    ! the word "halo" in LTS instances is not related to the MPI halo.
@@ -714,7 +720,6 @@ call mpas_timer_stop("init LTS")
 
       call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
       call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
-      call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
       call mpas_pool_get_array(meshPool, 'latCell', latCell)
       call mpas_pool_get_array(meshPool, 'lonCell', lonCell)
@@ -755,8 +760,10 @@ call mpas_timer_stop("init LTS")
          latPoint = pii / 6.0
          lonPoint = 3.0 * pii * 0.5
          distLTS = sphere_distance(latCell(iCell), lonCell(iCell), latPoint, lonPoint, 1.0)
-         if (distLTS > 1.2) then  !this was for the convergence test for test 5
+         ! NOTE: the number on the right hand side of the inequality dictates where is the interface between coarse and fine on the mesh
+         !if (distLTS > 1.2) then  !this was for the convergence test for test 5
          !if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
+         if (distLTS > 1.6) then  !this was for the CPU ratio test with multiple interface layers for test 5
          !if (distLTS > 0.2) then   !this is for the speed up test for test 5
             LTSRegion(iCell) = 2
          end if
@@ -961,6 +968,53 @@ call mpas_timer_stop("init LTS")
 
    call mpas_dmpar_field_halo_exch(domain, 'LTSRegionLocal')
 
+   if (moreCellsOnInterface == 1) then
+      block => domain % blocklist
+      do while (associated(block))
+         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+
+         call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+         call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
+         call mpas_pool_get_array(LTSPool, 'LTSRegionLocal', LTSRegionLocal)
+    
+         if (nLTSHalos == 1) then !this means we are using LTS2 
+            do iCell = 1, nCells
+               if( (mod(LTSRegionLocal(iCell),2) == 1) .and. (LTSRegionLocal(iCell) .ne. 1) ) then !if it's odd and not 1(fine) then must be 3(interface layer 1)
+                  LTSRegionLocal(iCell) = 3
+               else if ( (mod(LTSRegionLocal(iCell),2) == 0) .and. (LTSRegionLocal(iCell) .ne. 2) ) then !if it's even and not 2(coarse) then must be 4(interface layer 2)
+                  LTSRegionLocal(iCell) = 4
+               end if
+            end do
+         else if (nLTSHalos == 3) then !this means we are using LTS3
+            do iCell = 1, nCells
+               if( (mod(LTSRegionLocal(iCell),2) == 1) .and. (LTSRegionLocal(iCell) .ne. 1) ) then 
+                  ! if we are here it could be either interface 1 or those two layers of fine we need for the third order         
+                  if (LTSRegionLocal(iCell) == 2 * nLTSHalosCopy + 1) then
+                     LTSRegionLocal(iCell) = 7 !this goes in cellsInLTSHalo(1,4)
+                  else if (LTSRegionLocal(iCell) == 2 * nLTSHalosCopy - 1) then
+                     LTSRegionLocal(iCell) = 5 !this goes in cellsInLTSHalo(1,3)
+                  else
+                      LTSRegionLocal(iCell) = 3 !this goes in cellsInLTSHalo(1,2)
+                  end if
+               else if ( (mod(LTSRegionLocal(iCell),2) == 0) .and. (LTSRegionLocal(iCell) .ne. 2) ) then
+                  ! if we are here it could be either interface 2 or those two layers of coarse
+                  if (LTSRegionLocal(iCell) == 2 * nLTSHalosCopy + 2) then
+                     LTSRegionLocal(iCell) = 8 !this goes in cellsInLTSHalo(2,4)
+                  else if (LTSRegionLocal(iCell) == 2 * nLTSHalosCopy) then
+                     LTSRegionLocal(iCell) = 6 !this goes in cellsInLTSHalo(2,3)
+                  else
+                      LTSRegionLocal(iCell) = 4 !this goes in cellsInLTSHalo(2,2)
+                  end if
+               end if
+            end do
+         end if
+
+         block => block % next
+      end do
+
+   call mpas_dmpar_field_halo_exch(domain, 'LTSRegionLocal')
+   end if
 
    block => domain % blocklist
    do while (associated(block))
@@ -986,7 +1040,7 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
 
-      ! this is a loop to build the lists of elements in the fine and coarse regions
+      ! this is a loop to build the lists of elements in the fine, coarse, and interface regions
       do iCell = 1, nCellsSolve !this loops up to nCellsSolve because in the time stepping we only want to advance the cells owned by the processor (or block)
          do iRegion = 1,2
             if (iRegion == minMaxLTSRegion(iRegion)) then
@@ -1098,33 +1152,36 @@ call mpas_timer_stop("init LTS")
    end do
 
    ! BEGIN: TO REMOVE (needed for debugging)
-   !block => domain % blocklist
-   !do while (associated(block))
+   block => domain % blocklist
+   do while (associated(block))
    
-   !   call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+      call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
   
-   !   call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
-   !   call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
-   !   call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+      call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+      call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+      call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
    
-   !   call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
-   !   call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
-   !   call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-   !   call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo', cellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo', nCellsInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
    
-   !   if(block % blockID == 33) then 
+      if(haveInterface == 1) then 
+      !print*, block % blockID
+      !print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
+      !print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1)!, 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
+      !print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1)!, 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
+      !print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
+      !print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1)!, 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
+      !print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1)!, 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
+      !print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
+         if (nCellsInLTSHalo(1,2) + nCellsInLTSHalo(2,2) < 100) then
+            print*, 'WARNING: interface block', block % blockID, 'has', nCellsInLTSHalo(1,2) + nCellsInLTSHalo(2,2), 'cells'
+         end if
+      end if
    
-   !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
-   !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
-   !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1), 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
-   !   print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
-   !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1), 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
-   !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1), 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
-   !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
-   !   end if
-   
-   !   block => block % next
-   !end do
+      block => block % next
+   end do
    ! END: TO REMOVE
 
    end subroutine mpas_init_LTS
