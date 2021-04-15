@@ -1151,7 +1151,7 @@ call mpas_timer_stop("init LTS")
       block => block % next
    end do
 
-   ! BEGIN: TO REMOVE (needed for debugging)
+   ! BEGIN: CHECK TO SEE IF THE INTERFACE BLOCKS HAVE ENOUGH CELLS
    block => domain % blocklist
    do while (associated(block))
    
@@ -1166,15 +1166,18 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
    
+      !if(block % blockID == 11) then 
+      !   print*, block % blockID
+      !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
+      !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
+      !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1), 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
+      !   print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
+      !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1), 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
+      !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1), 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
+      !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
+      !end if
+
       if(haveInterface == 1) then 
-      !print*, block % blockID
-      !print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
-      !print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1)!, 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
-      !print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1)!, 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
-      !print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
-      !print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1)!, 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
-      !print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1)!, 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
-      !print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
          if (nCellsInLTSHalo(1,2) + nCellsInLTSHalo(2,2) < 100) then
             print*, 'WARNING: interface block', block % blockID, 'has', nCellsInLTSHalo(1,2) + nCellsInLTSHalo(2,2), 'cells'
          end if
@@ -1182,7 +1185,7 @@ call mpas_timer_stop("init LTS")
    
       block => block % next
    end do
-   ! END: TO REMOVE
+   ! END: CHECK TO SEE IF THE INTERFACE BLOCKS HAVE ENOUGH CELLS
 
    end subroutine mpas_init_LTS
 
