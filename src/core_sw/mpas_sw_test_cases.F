@@ -695,7 +695,7 @@ call mpas_timer_stop("init LTS")
 
    nLTSHalosCopy = nLTSHalos
    if (moreCellsOnInterface == 1) then
-      nLTSHalosCopy = 10
+      nLTSHalosCopy = 80 !for CPU test with multiple interface layers for test 5
    end if
 
    !NOTE:
@@ -763,7 +763,8 @@ call mpas_timer_stop("init LTS")
          ! NOTE: the number on the right hand side of the inequality dictates where is the interface between coarse and fine on the mesh
          !if (distLTS > 1.2) then  !this was for the convergence test for test 5
          !if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
-         if (distLTS > 1.6) then  !this was for the CPU ratio test with multiple interface layers for test 5
+         !if (distLTS > 1.6) then  !this was for the CPU ratio test with multiple interface layers for test 5
+         if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
          !if (distLTS > 0.2) then   !this is for the speed up test for test 5
             LTSRegion(iCell) = 2
          end if
@@ -1166,7 +1167,7 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
    
-      !if(block % blockID == 11) then 
+      !if(block % blockID == 0) then 
       !   print*, block % blockID
       !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
       !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
