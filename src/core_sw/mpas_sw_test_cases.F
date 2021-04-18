@@ -695,7 +695,8 @@ call mpas_timer_stop("init LTS")
 
    nLTSHalosCopy = nLTSHalos
    if (moreCellsOnInterface == 1) then
-      nLTSHalosCopy = 80 !for CPU test with multiple interface layers for test 5
+      !nLTSHalosCopy = 80 !for CPU test with multiple interface layers for test 5 (it's 78 for LTS2)
+      nLTSHalosCopy = 48 !for speed up test with multiple interface layers for test 5
    end if
 
    !NOTE:
@@ -763,9 +764,9 @@ call mpas_timer_stop("init LTS")
          ! NOTE: the number on the right hand side of the inequality dictates where is the interface between coarse and fine on the mesh
          !if (distLTS > 1.2) then  !this was for the convergence test for test 5
          !if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
-         !if (distLTS > 1.6) then  !this was for the CPU ratio test with multiple interface layers for test 5
-         if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
+         !if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
          !if (distLTS > 0.2) then   !this is for the speed up test for test 5
+         if (distLTS > 0.9) then   !this is for the speed up test with multiple interface layers for test 5
             LTSRegion(iCell) = 2
          end if
          !BEGIN: test initializaton
