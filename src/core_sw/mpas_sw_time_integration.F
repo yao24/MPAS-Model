@@ -1075,7 +1075,11 @@ call cpu_time(startAdvance)
 
         block => block % next
      end do
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
+call mpas_timer_stop("advance soln LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1097,11 +1101,15 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
+call mpas_timer_start("halo updates  LTS")
      call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy back for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1123,10 +1131,7 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy back for MPI halo update of the solution
-
-call cpu_time(finishAdvance)
-totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
-call mpas_timer_stop("advance soln LTS")
+call mpas_timer_stop("copy for halo update  LTS")
 
      ! ---------------------------------------------------------------------------------------------------------------------
 
@@ -1286,6 +1291,11 @@ call cpu_time(startAdvance)
         block => block % next
      end do
 
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
+call mpas_timer_stop("advance soln LTS")
+
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1307,11 +1317,15 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
+call mpas_timer_start("halo updates  LTS")
      call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1333,10 +1347,7 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
-
-call cpu_time(finishAdvance)
-totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
-call mpas_timer_stop("advance soln LTS")
+call mpas_timer_stop("copy for halo update  LTS")
 
      ! ---------------------------------------------------------------------------------------------------------------------
 
@@ -1473,6 +1484,11 @@ call cpu_time(startAdvance)
            block => block % next
         end do
 
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
+call mpas_timer_stop("advance soln LTS")
+
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1494,11 +1510,15 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
+call mpas_timer_start("halo updates  LTS")
      call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1520,10 +1540,8 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
-call cpu_time(finishAdvance)
-totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
-call mpas_timer_stop("advance soln LTS")
      end if
 
      ! ---------------------------------------------------------------------------------------------------------------------
@@ -1777,6 +1795,11 @@ call cpu_time(startAdvance)
            block => block % next
         end do
 
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
+call mpas_timer_stop("advance soln LTS")
+
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1798,11 +1821,15 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
+call mpas_timer_start("halo updates  LTS")
      call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -1824,10 +1851,7 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
-
-call cpu_time(finishAdvance)
-totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
-call mpas_timer_stop("advance soln LTS")
+call mpas_timer_stop("copy for halo update  LTS")
 
 call mpas_timer_start("interface prediction LTS")
 call cpu_time(startInterface)
@@ -2083,6 +2107,11 @@ call cpu_time(startAdvance)
            block => block % next
         end do
 
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
+call mpas_timer_stop("advance soln LTS")
+
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -2104,11 +2133,15 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
+call mpas_timer_start("halo updates  LTS")
      call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -2130,10 +2163,7 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
-
-call cpu_time(finishAdvance)
-totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
-call mpas_timer_stop("advance soln LTS")
+call mpas_timer_stop("copy for halo update  LTS")
 
 ! --- copy second stage soln into old soln for the fine
 call mpas_timer_start("copy second stage soln into old soln  LTS")
@@ -2187,11 +2217,13 @@ call mpas_timer_start("copy second stage soln into old soln  LTS")
               block => block % next
            end do
 
-
+call mpas_timer_start("halo updates  LTS")
            call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
            call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
            call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
            ! BEGIN: copy for MPI halo update of the solution
            block => domain % blocklist
            do while (associated(block))
@@ -2213,6 +2245,7 @@ call mpas_timer_start("copy second stage soln into old soln  LTS")
               block => block % next
            end do
           !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
          end if
 call mpas_timer_stop("copy second stage soln into old soln  LTS")
@@ -2466,6 +2499,11 @@ call cpu_time(startAdvance)
               block => block % next
            end do
 
+call cpu_time(finishAdvance)
+totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
+call mpas_timer_stop("advance soln LTS")
+
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -2487,11 +2525,15 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
+call mpas_timer_start("halo updates  LTS")
      call mpas_dmpar_field_halo_exch(domain, 'uMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'hMPIHaloUpdate')
      call mpas_dmpar_field_halo_exch(domain, 'tracersMPIHaloUpdate')
+call mpas_timer_stop("halo updates  LTS")
 
+call mpas_timer_start("copy for halo update  LTS")
      ! BEGIN: copy for MPI halo update of the solution
      block => domain % blocklist
      do while (associated(block))
@@ -2513,10 +2555,8 @@ call cpu_time(startAdvance)
         block => block % next
      end do
      !END: copy for MPI halo update of the solution
+call mpas_timer_stop("copy for halo update  LTS")
 
-call cpu_time(finishAdvance)
-totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
-       call mpas_timer_stop("advance soln LTS") 
         end if
 
      end do  ! end of substepping

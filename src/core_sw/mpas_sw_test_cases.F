@@ -695,8 +695,8 @@ call mpas_timer_stop("init LTS")
 
    nLTSHalosCopy = nLTSHalos
    if (moreCellsOnInterface == 1) then
-      nLTSHalosCopy = 80 !for CPU test with multiple interface layers for test 5 (it's 78 for LTS2, 80 for LTS3)
-      !nLTSHalosCopy = 14 !for speed up test with multiple interface layers for test 5 (it's 14 for LTS2, 16 for LTS3)
+      nLTSHalosCopy = 78 !for CPU test with multiple interface layers for test 5 (it's 78 for LTS2, 80 for LTS3)
+      !nLTSHalosCopy = 16 !for speed up test with multiple interface layers for test 5 (it's 14 for LTS2, 16 for LTS3)
    end if
 
    !NOTE:
@@ -1158,7 +1158,7 @@ call mpas_timer_stop("init LTS")
    do while (associated(block))
    
       call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-  
+
       call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
       call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
       call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
@@ -1169,13 +1169,14 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
    
       !if(block % blockID == 0) then 
+      !if(haveInterface  == 1) then 
       !   print*, block % blockID
       !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
-      !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1)!, 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
-      !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1)!, 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
+      !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
+      !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1), 'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3), 'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
       !   print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2), 'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
-      !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1)!, 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
-      !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1)!, 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
+      !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1), 'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
+      !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1), 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
       !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
       !end if
 
