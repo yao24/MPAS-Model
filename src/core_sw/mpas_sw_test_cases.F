@@ -695,8 +695,8 @@ call mpas_timer_stop("init LTS")
 
    nLTSHalosCopy = nLTSHalos
    if (moreCellsOnInterface == 1) then
-      nLTSHalosCopy = 78 !for CPU test with multiple interface layers for test 5 (it's 78 for LTS2, 80 for LTS3)
-      !nLTSHalosCopy = 16 !for speed up test with multiple interface layers for test 5 (it's 14 for LTS2, 16 for LTS3)
+      !nLTSHalosCopy = 78 !for CPU test with multiple interface layers for test 5 (it's 78 for LTS2, 80 for LTS3)
+      nLTSHalosCopy = 40 !for speed up test with multiple interface layers for test 5 (it's 18 (or 38) for LTS2, 20 (or 40) for LTS3)
    end if
 
    !NOTE:
@@ -764,9 +764,9 @@ call mpas_timer_stop("init LTS")
          ! NOTE: the number on the right hand side of the inequality dictates where is the interface between coarse and fine on the mesh
          !if (distLTS > 1.2) then  !this was for the convergence test for test 5
          !if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
-         if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
+         !if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
          !if (distLTS > 0.2) then   !this is for the speed up test for test 5
-         !if (distLTS > 0.4) then   !this is for the speed up test with multiple interface layers for test 5 
+         if (distLTS > 0.55) then   !this is for the speed up test with multiple interface layers for test 5 (the other value that goes with 38 or 40 layers is 0.55)
             LTSRegion(iCell) = 2
          end if
          !BEGIN: test initializaton
@@ -1179,6 +1179,16 @@ call mpas_timer_stop("init LTS")
       !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1), 'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
       !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2), 'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
       !end if
+
+      !TO ERASE
+      !if(haveFine == 1) then 
+      !   if (nCellsInLTSHalo(1,1) + nCellsInLTSHalo(1,3) + nCellsInLTSHalo(1,4)  < 100) then
+      !   !if (nCellsInLTSHalo(1,1) < 100) then
+      !      print*, 'WARNING: fine block', block % blockID, 'has', nCellsInLTSHalo(1,1) + nCellsInLTSHalo(1,3) + nCellsInLTSHalo(1,4), 'cells'
+      !      !print*, 'WARNING: fine block', block % blockID, 'has', nCellsInLTSHalo(1,1), 'cells'
+      !   end if
+      !end if
+      !END
 
       if(haveInterface == 1) then 
          if (nCellsInLTSHalo(1,2) + nCellsInLTSHalo(2,2) < 100) then
