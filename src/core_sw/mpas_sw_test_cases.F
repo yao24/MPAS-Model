@@ -696,7 +696,7 @@ call mpas_timer_stop("init LTS")
    nLTSHalosCopy = nLTSHalos
    if (moreCellsOnInterface == 1) then
       !nLTSHalosCopy = 78 !for CPU test with multiple interface layers for test 5 (it's 78 for LTS2, 80 for LTS3)
-      nLTSHalosCopy = 40 !for speed up test with multiple interface layers for test 5 (it's 18 (or 38) for LTS2, 20 (or 40) for LTS3)
+      nLTSHalosCopy = 20 !for speed up test with multiple interface layers for test 5 (it's 18 (or 38) for LTS2, 20 (or 40) for LTS3)
    end if
 
    !NOTE:
@@ -766,7 +766,8 @@ call mpas_timer_stop("init LTS")
          !if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
          !if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
          !if (distLTS > 0.2) then   !this is for the speed up test for test 5
-         if (distLTS > 0.55) then   !this is for the speed up test with multiple interface layers for test 5 (the other value that goes with 38 or 40 layers is 0.55)
+         !if (distLTS > 0.55) then   !this is for the speed up test with multiple interface layers for test 5 (this goes with 38 or 40 layers)
+         if (distLTS > 0.3) then   !this is for the speed up test with multiple interface layers for test 5 (this goes with 18 or 20 layers)
             LTSRegion(iCell) = 2
          end if
          !BEGIN: test initializaton
@@ -1168,8 +1169,9 @@ call mpas_timer_stop("init LTS")
       call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
       call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo', nEdgesInLTSHalo)
    
-      !if(block % blockID == 0) then 
+      !if(block % blockID == 5) then 
       !if(haveInterface  == 1) then 
+      !if (domain % dminfo % my_proc_id == 0) then
       !   print*, block % blockID
       !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
       !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1), 'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3), 'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
