@@ -11,7 +11,7 @@
 		<dim name="FIFTEEN"            definition="15"/>
 		<dim name="TWENTYONE"          definition="21"/>
 		<dim name="vertexDegree"/>
-		<dim name="nVertLevels" definition="1"/>
+		<dim name="nVertLevels" definition="50"/>
 		<dim name="nTracers" definition="3"/>
 		<dim name="nLTSHalos" definition="3"/>
                 <dim name="nLTSHalosP1" definition="nLTSHalos+1"/>

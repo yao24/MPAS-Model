@@ -403,8 +403,8 @@ call mpas_timer_stop("init LTS")
       real (kind=RKIND), parameter :: rr = pii/9.0
       real (kind=RKIND), parameter :: alpha = 0.0
 
-      integer :: iCell, iEdge, iVtx, nTracers
-      integer, pointer :: nVertices, nEdges, nCells
+      integer :: iCell, iEdge, iVtx, nTracers, k
+      integer, pointer :: nVertices, nEdges, nCells, nVertLevels
       real (kind=RKIND) :: r, v
       real (kind=RKIND), allocatable, dimension(:) :: psiVertex
 
@@ -425,6 +425,7 @@ call mpas_timer_stop("init LTS")
       !
 
       call mpas_pool_get_dimension(meshPool, 'nVertices', nVertices)
+      call mpas_pool_get_dimension(meshPool, 'nVertLevels', nVertLevels)
       call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
       call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
 
@@ -483,11 +484,14 @@ call mpas_timer_stop("init LTS")
                                        cos(lonVertex(iVtx)) * cos(latVertex(iVtx)) * sin(alpha) &
                                      )
       end do
-      do iEdge = 1, nEdges
-         u(1,iEdge) = -1.0 * ( &
+      
+      do k = 1, nVertLevels 
+         do iEdge = 1, nEdges
+            u(k,iEdge) = -1.0 * ( &
                                                psiVertex(verticesOnEdge(2,iEdge)) - &
                                                psiVertex(verticesOnEdge(1,iEdge)) &
                                              ) / dvEdge(iEdge)
+         end do
       end do
       deallocate(psiVertex)
 
@@ -519,31 +523,36 @@ call mpas_timer_stop("init LTS")
       !
       ! Initialize tracer fields
       !
-      do iCell = 1, nCells
-         r = sqrt(min(rr**2.0, (lonCell(iCell) - lambda_c)**2.0 + (latCell(iCell) - theta_c)**2.0))
-         tracers(1,1,iCell) = 1.0 - r/rr
-      end do
-      if (nTracers > 1) then
+      do k = 1, nVertLevels
          do iCell = 1, nCells
-            r = sqrt(min(rr**2.0, (lonCell(iCell) - lambda_c)**2.0 + &
+               r = sqrt(min(rr**2.0, (lonCell(iCell) - lambda_c)**2.0 + (latCell(iCell) - theta_c)**2.0))
+               tracers(1,k,iCell) = 1.0 - r/rr
+         end do
+         if (nTracers > 1) then
+            do iCell = 1, nCells
+               r = sqrt(min(rr**2.0, (lonCell(iCell) - lambda_c)**2.0 + &
                          (latCell(iCell) - theta_c - pii/6.0)**2.0 &
                         ) &
                     )
-            tracers(2,1,iCell) = 1.0 - r/rr
-         end do
-      end if
+               tracers(2,k,iCell) = 1.0 - r/rr
+            end do
+         end if
+      end do
 
       !
       ! Initialize height field (actually, fluid thickness field)
       !
-      do iCell = 1, nCells
-         h(1,iCell) = (gh0 - (a * omega * u0 + 0.5 * u0**2.0) * &
+
+      do k = 1, nVertLevels
+         do iCell = 1, nCells
+            h(k,iCell) = (gh0 - (a * omega * u0 + 0.5 * u0**2.0) * &
                                          (-cos(lonCell(iCell)) * cos(latCell(iCell)) * sin(alpha) + &
                                            sin(latCell(iCell)) * cos(alpha) &
                                          )**2.0 &
                                       ) / &
                                       gravity
-         h(1,iCell) = h(1,iCell) - h_s(iCell)
+            h(k,iCell) = h(k,iCell) - h_s(iCell)
+         end do
       end do
 
    end subroutine sw_test_case_5
@@ -691,12 +700,12 @@ call mpas_timer_stop("init LTS")
    call mpas_pool_get_dimension(LTSPool, 'nLTSHalos', nLTSHalos)
 
    ! set to 1 if need more cells in interface layers (for load balancing)
-   moreCellsOnInterface = 1
+   moreCellsOnInterface = 0
 
    nLTSHalosCopy = nLTSHalos
    if (moreCellsOnInterface == 1) then
       !nLTSHalosCopy = 78 !for CPU test with multiple interface layers for test 5 (it's 78 for LTS2, 80 for LTS3)
-      nLTSHalosCopy = 20 !for speed up test with multiple interface layers for test 5 (it's 18 (or 38) for LTS2, 20 (or 40) for LTS3)
+      nLTSHalosCopy = 40 !for speed up test with multiple interface layers for test 5 (it's 18 (or 38) for LTS2, 20 (or 40) for LTS3)
    end if
 
    !NOTE:
@@ -765,9 +774,9 @@ call mpas_timer_stop("init LTS")
          !if (distLTS > 1.2) then  !this was for the convergence test for test 5
          !if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
          !if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
-         !if (distLTS > 0.2) then   !this is for the speed up test for test 5
+         if (distLTS > 0.2) then   !this is for the speed up test for test 5
          !if (distLTS > 0.55) then   !this is for the speed up test with multiple interface layers for test 5 (this goes with 38 or 40 layers)
-         if (distLTS > 0.3) then   !this is for the speed up test with multiple interface layers for test 5 (this goes with 18 or 20 layers)
+         !if (distLTS > 0.3) then   !this is for the speed up test with multiple interface layers for test 5 (this goes with 18 or 20 layers)
             LTSRegion(iCell) = 2
          end if
          !BEGIN: test initializaton
