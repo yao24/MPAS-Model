@@ -472,9 +472,6 @@ module sw_time_integration
      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! 
      do ssprk_step = 1, ssprk_order
    
-call mpas_timer_start("barrier time")
-call MPI_Barrier(domain % dminfo % comm, err)
-call mpas_timer_stop("barrier time")
 call mpas_timer_start("halo updates SSPRK")
 ! --- update halos for diagnostic variables
         !call mpas_dmpar_field_halo_exch(domain, 'pv_edge', timeLevel=1)
