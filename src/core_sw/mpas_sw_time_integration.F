@@ -605,7 +605,7 @@ call mpas_timer_start("clean-up time SSPRK")
          call mpas_pool_get_array(statePool, 'uReconstructZonal', uReconstructZonal, 2)
          call mpas_pool_get_array(statePool, 'uReconstructMeridional', uReconstructMeridional, 2)
 
-         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+         !call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !DON'T NEED THIS
 
 call mpas_timer_start("barrier time")
 call MPI_Barrier(domain % dminfo % comm, err)
@@ -2961,7 +2961,7 @@ call mpas_timer_start("clean-up time LTS")
            uNew(:,:) = uOld(:,:)
         end if
 
-        call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
+        !call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2) !DON'T NEED THIS
 call mpas_timer_start("barrier time")
 call cpu_time(startBarrier)
 call MPI_Barrier(domain % dminfo % comm, err)
