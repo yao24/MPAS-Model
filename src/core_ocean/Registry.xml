@@ -38,6 +38,9 @@
 		<dim name="FOUR" definition="4" units="unitless"
 			 description="The number four as a dimension."
 		/>
+		<dim name="FIVE" definition="5" units="unitless"
+			 description="The number five as a dimension."
+		/>
 		<dim name="SIX" definition="6" units="unitless"
 			 description="The number six as a dimension."
 		/>
@@ -187,8 +190,14 @@
 		/>
 		<nml_option name="config_time_integrator" type="character" default_value="split_explicit" units="unitless"
 					description="Time integration method."
-					possible_values="'split_explicit', 'RK4', 'unsplit_explicit'"
+					possible_values="'split_explicit', 'RK4', 'unsplit_explicit', 'LTS3', 'SSPRK3'"
 		/>
+                <nml_option name="config_use_local_time_stepping"                 type="logical"       default_value="false"
+                                        description="If true, the LTS objects (LTSRegions, lists etc.) are initialized"
+                />
+                <nml_option name="config_dt_scaling_LTS"                          type="integer"       default_value="4"
+                                        description="This is the positive integer M that defines dtFine for LTS, dtFine = dt / M"
+                />
 	</nml_record>
 	<nml_record name="ALE_vertical_grid" mode="forward">
 		<nml_option name="config_vert_coord_movement" type="character" default_value="uniform_stretching" units="unitless"
@@ -2019,6 +2028,12 @@
 		/>
 	</var_struct>
 	<var_struct name="mesh" time_levs="1">
+                <var name="mpiRankCell"                       type="integer"  dimensions="nCells" units="unitless"
+                         description="MPI rank of cell"
+                />
+                <var name="blockPartitionCell"                type="integer"  dimensions="nCells" units="unitless"
+                         description="block partition of cell"
+                />
 		<var name="latCell" type="real" dimensions="nCells" units="radians"
 			 description="Latitude location of cell centers in radians."
 		/>
@@ -3735,6 +3750,22 @@
 			description="The name for each transect group."
 			/>
 	</var_struct>
+        <var_struct name="LTS" time_levs="1">
+                <var name="LTSRegion"                         type="integer"  dimensions="nCells"/>
+                <var name="LTSRegionLocal"                    type="integer"  dimensions="nCells"/>
+                <var name="cellsInLTSHalo"                    type="integer"  dimensions="TWO FIVE nCells"/>
+                <var name="nCellsInLTSHalo"                   type="integer"  dimensions="TWO FIVE"/>
+                <var name="edgesInLTSHalo"                    type="integer"  dimensions="TWO FIVE nEdges"/>
+                <var name="nEdgesInLTSHalo"                   type="integer"  dimensions="TWO FIVE"/>
+                <var name="minMaxLTSRegion"                   type="integer"  dimensions="TWO"/>
+                <var name="minMaxAfterHaloUpdate"             type="integer"  dimensions="TWO"/>
+                <var name="doExtraLayers"                     type="integer"  dimensions=""/>
+                <var name="haveFine"                          type="integer"  dimensions=""/>
+                <var name="haveCoarse"                        type="integer"  dimensions=""/>
+                <var name="haveInterface"                     type="integer"  dimensions=""/>
+                <var name="uMPIHaloUpdate"                    type="real"     dimensions="nVertLevels nEdges"/>
+                <var name="hMPIHaloUpdate"                    type="real"     dimensions="nVertLevels nCells"/>
+        </var_struct>
 
 <!-- Include registry files from subdirectories -->
 #include "tracer_groups/Registry_tracers.xml"

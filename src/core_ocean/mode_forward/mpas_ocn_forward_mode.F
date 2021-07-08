@@ -36,6 +36,8 @@ module ocn_forward_mode
 
    use ocn_time_integration
    use ocn_time_integration_split
+   use ocn_time_integration_lts3
+   use ocn_time_integration_ssprk3
    use ocn_tendency
    use ocn_diagnostics
    use ocn_test
@@ -127,7 +129,7 @@ module ocn_forward_mode
       type (MPAS_TimeInterval_type) :: timeStep
       type (MPAS_TimeInterval_type) :: alarmTimeStep
 
-      logical, pointer :: config_do_restart, config_read_nearest_restart, config_filter_btr_mode, config_conduct_tests
+      logical, pointer :: config_do_restart, config_read_nearest_restart, config_filter_btr_mode, config_conduct_tests, config_use_local_time_stepping
       character (len=StrKIND), pointer :: config_vert_coord_movement, config_pressure_gradient_type
       character (len=StrKIND), pointer :: config_surface_salinity_monthly_restoring_compute_interval
 
@@ -159,6 +161,7 @@ module ocn_forward_mode
                                 config_use_surface_salinity_monthly_restoring)
       call mpas_pool_get_config(domain % configs, 'config_surface_salinity_monthly_restoring_compute_interval', &
               config_surface_salinity_monthly_restoring_compute_interval)
+      call mpas_pool_get_config(domain % configs, 'config_use_local_time_stepping', config_use_local_time_stepping)
       !
       ! Read input data for model
       !
@@ -283,6 +286,10 @@ module ocn_forward_mode
 
       call ocn_time_integration_split_init(domain)
 
+      if(config_use_local_time_stepping) then
+         call ocn_time_integration_lts3_init(domain)
+      end if
+
       call mpas_log_write(' Vertical coordinate movement is: ' // trim(config_vert_coord_movement))
 
       if (config_vert_coord_movement.ne.'fixed'.and. &
@@ -389,7 +396,7 @@ module ocn_forward_mode
       call mpas_dmpar_exch_group_add_field(domain, 'subcycleFields', 'normalBarotropicVelocitySubcycle')
       call mpas_dmpar_exch_group_build_reusable_buffers(domain, 'subcycleFields')
 
-   end function ocn_forward_mode_init!}}}
+    end function ocn_forward_mode_init!}}}
 
 !***********************************************************************
 !

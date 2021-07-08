@@ -1,0 +1,50 @@
+# This file is the ocean core's configuration file. It is specific to the ocean
+# core, and a specific machine. Each machine will configure this file
+# differently, but it can be used to point on version of the testing
+# infrastructure at a different version of the model.
+
+
+# The namelists section defines paths to template namelists that will be used
+# to generate specific namelists. Typically these will point to the forward and
+# init namelists in the default_inputs directory after a successful build of
+# the ocean model.
+[namelists]
+forward = /usr/projects/climate/gcapodaglio/repos/ocean_lts/namelist.ocean.forward 
+init    = /usr/projects/climate/gcapodaglio/repos/ocean_lts/namelist.ocean.init
+
+# The streams section defines paths to template streams files that will be used
+# to generate specific streams files. Typically these will point to the forward and
+# init streams files in the default_inputs directory after a successful build of
+# the ocean model.
+[streams]
+forward = /usr/projects/climate/gcapodaglio/repos/ocean_lts/streams.ocean.forward
+init    = /usr/projects/climate/gcapodaglio/repos/ocean_lts/streams.ocean.init 
+
+# The executables section defines paths to required executables. These
+# executables are provided for use by specific test cases.
+# Full paths should be provided in order to access the executables from
+# anywhere on the machine.
+[executables]
+model = /usr/projects/climate/gcapodaglio/repos/ocean_lts/ocean_model
+
+# The paths section describes paths that are used within the ocean core test
+# cases.
+[paths]
+
+# The mesh_database and the initial_condition_database are locations where
+# meshes / initial conditions might be found on a specific machine. They can be
+# the same directory, or different directory. Additionally, if they are empty
+# some test cases might download data into them, which will then be reused if
+# the test case is run again later.
+mpas_model = /usr/projects/climate/gcapodaglio/repos/ocean_lts
+mesh_database = /usr/projects/regionalclimate/COMMON_MPAS/ocean/grids/mesh_database
+initial_condition_database = /usr/projects/regionalclimate/COMMON_MPAS/ocean/grids/initial_condition_database
+bathymetry_database = /lustre/scratch4/turquoise/mpeterse/bathymetry_database
+
+# The options in this section relate to configuring and running with a compass
+# conda environment
+[conda]
+
+# Whether a link to load_compass_env.sh should be included with each test case
+# (can also be specified with the --link_load_compass flag)
+link_load_compass = False

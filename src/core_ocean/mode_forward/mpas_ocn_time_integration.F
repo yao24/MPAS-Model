@@ -33,13 +33,14 @@ module ocn_time_integration
    use ocn_constants
    use ocn_time_integration_rk4
    use ocn_time_integration_split
+   use ocn_time_integration_lts3
+   use ocn_time_integration_ssprk3
 
    implicit none
    private
    save
 
-   public :: ocn_timestep, &
-             ocn_timestep_init
+   public :: ocn_timestep, ocn_timestep_init
 
    !--------------------------------------------------------------------
    !
@@ -59,7 +60,7 @@ module ocn_time_integration
    !
    !--------------------------------------------------------------------
 
-    logical :: rk4On, splitOn
+    logical :: rk4On, splitOn, lts3On, ssprk3On
 
    contains
 
@@ -108,7 +109,11 @@ module ocn_time_integration
          call ocn_time_integrator_rk4(domain, dt)
       elseif (splitOn) then
          call ocn_time_integrator_split(domain, dt)
-     endif
+      elseif (lts3On) then
+         call ocn_time_integrator_lts3(domain, dt)
+      elseif (ssprk3On) then
+         call ocn_time_integrator_ssprk3(domain, dt)
+      endif
 
      block => domain % blocklist
      do while (associated(block))
@@ -148,16 +153,22 @@ module ocn_time_integration
 
       rk4On = .false.
       splitOn = .false.
+      lts3On = .false.
+      ssprk3On = .false.
 
       if (trim(config_time_integrator) == 'RK4') then
           rk4On = .true.
       elseif (trim(config_time_integrator) == 'split_explicit' &
           .or.trim(config_time_integrator) == 'unsplit_explicit') then
           splitOn = .true.
+      elseif (trim(config_time_integrator) == 'LTS3') then
+          lts3On = .true. 
+      elseif (trim(config_time_integrator) == 'SSPRK3') then
+          ssprk3On = .true.
       else
           err = 1
           call mpas_log_write('Incorrect choice for config_time_integrator:' // trim(config_time_integrator) // &
-             '   choices are: RK4, split_explicit, unsplit_explicit', MPAS_LOG_CRIT)
+             '   choices are: RK4, split_explicit, unsplit_explicit, LTS3, SSPRK3', MPAS_LOG_CRIT)
       endif
 
 
