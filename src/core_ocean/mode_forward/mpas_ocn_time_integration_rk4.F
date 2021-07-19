@@ -1323,7 +1323,7 @@ module ocn_time_integration_rk4
 
       call mpas_pool_get_array(tendPool, 'highFreqThickness', highFreqThicknessTend)
       call mpas_pool_get_array(tendPool, 'lowFreqDivergence', lowFreqDivergenceTend)
-     call mpas_pool_get_array(diagnosticsPool, 'wettingVelocity', wettingVelocity)
+      call mpas_pool_get_array(diagnosticsPool, 'wettingVelocity', wettingVelocity)
 
       call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
 

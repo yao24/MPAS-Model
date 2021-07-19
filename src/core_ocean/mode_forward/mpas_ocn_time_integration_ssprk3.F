@@ -213,6 +213,8 @@ module ocn_time_integration_ssprk3
        call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
        call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
        call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+       call mpas_pool_get_array(statePool, 'ssh', sshCur, 1)
+       call mpas_pool_get_array(statePool, 'ssh', sshNew, 2)
 
        call mpas_pool_get_array(statePool, 'highFreqThickness', highFreqThicknessCur, 1)
        call mpas_pool_get_array(statePool, 'highFreqThickness', highFreqThicknessNew, 2)
@@ -232,6 +234,7 @@ module ocn_time_integration_ssprk3
 
        !$omp do schedule(runtime) private(k)
        do iCell = 1, nCells
+          sshNew(iCell) = sshCur(iCell)
           do k = 1, maxLevelCell(iCell)
              layerThicknessNew(k, iCell) = layerThicknessCur(k, iCell)
           end do
@@ -280,16 +283,19 @@ module ocn_time_integration_ssprk3
     call mpas_threading_barrier() !do we need this here?
 
     weights_old(1) = 1.0
-    weights_old(2) = 0.75
-    weights_old(3) = 1.0 / 3.0
+    weights_old(2) = 0.75 !use this for SSPRK3
+    !weights_old(2) = 0.5   !use this for SSPRK2
+    weights_old(3) = 1./3.
 
     weights_new(1) = 0.0
-    weights_new(2) = 0.25
-    weights_new(3) = 2.0 / 3.0
+    weights_new(2) = 0.25 !use this for SSPRK3
+    !weights_new(2) = 0.5   !use this for SSPRK2
+    weights_new(3) = 2./3.
 
     weights_tend(1) = dt * 1.0
-    weights_tend(2) = dt * 0.25
-    weights_tend(3) = dt * 2.0 / 3.0
+    weights_tend(2) = dt * 0.25 !use this for SSPRK3
+    !weights_tend(2) = dt * 0.5   !use this for SSPRK2
+    weights_tend(3) = dt * 2./3.
 
     err = 0 ! for MPI_Barrier tests
 
@@ -300,7 +306,6 @@ module ocn_time_integration_ssprk3
     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     do ssprk_step = 1, 3
 
-      
       if (config_disable_thick_all_tend .and. config_disable_vel_all_tend .and. config_disable_tr_all_tend) then
           exit ! don't compute in loop meant to update velocity, thickness, and tracers
       end if
@@ -368,7 +373,7 @@ module ocn_time_integration_ssprk3
             block => block % next
          end do
 
-      endif
+      end if
 
 
       ! require that cells don't dry out
@@ -385,18 +390,6 @@ module ocn_time_integration_ssprk3
            call ocn_time_integrator_compute_vel_tends(block, dt, err, statePool, 2)
            call ocn_time_integrator_compute_thick_tends(block, dt, err, statePool, 2)
            call ocn_time_integrator_compute_tracer_tends( block, dt, err, statePool, 2)
-
-!BEGIN REMOVE
-          call mpas_pool_get_dimension(block % dimensions, 'nCells', nCells)
-          call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-          call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-          do iCell = 1, nCells
-             do k = 1, maxLevelCell(iCell)
-                print*, layerThicknessTend(k,iCell)
-             end do
-          end do
-!END REMOVE
-
          block => block % next
       end do
       call mpas_timer_stop("SSPRK3 vel/thick/tracers tendency computations")
@@ -418,7 +411,7 @@ module ocn_time_integration_ssprk3
          end if
       end do
       call mpas_timer_stop("SSPRK3 vel/thick/tracers prognostic halo update")
-      call mpas_threading_barrier() !HOW TO WE PLACE THESE BARRIERS?
+      call mpas_threading_barrier() !HOW DO WE PLACE THESE BARRIERS?
 
 
       call mpas_timer_start("SSPRK3 advance soln")
@@ -464,11 +457,38 @@ module ocn_time_integration_ssprk3
          end do
          !$omp end do
 
-         !do iCell = 1, nCells
-         !   do k = 1, maxLevelCell(iCell)
-         !      print*, layerThicknessTend(k,iCell)
-         !   end do 
-         !end do
+         call mpas_pool_begin_iteration(tracersPool)
+         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+               configName = 'config_use_' // trim(groupItr % memberName)
+               call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+               if ( config_use_tracerGroup ) then 
+                  call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+
+                  if ( associated(tracersGroupNew) ) then
+                     !$omp do schedule(runtime) private(k)
+                     do iCell = 1, nCells
+                        do k = 1, maxLevelCell(iCell)
+                           tracersGroupNew(:, k, iCell) = tracersGroupNew(:, k,iCell) * layerThicknessNew(k,iCell)
+                        end do
+                     end do
+                     !$omp end do
+                  end if
+               end if
+            end if
+         end do
+
+        !$omp do schedule(runtime)
+        do iCell = 1, nCells
+           do k = 1, maxLevelCell(iCell)
+              layerThicknessNew(k,iCell) = weights_old(ssprk_step) * layerThicknessCur(k,iCell) &
+                                        + weights_new(ssprk_step) * layerThicknessNew(k,iCell) &
+                                        + weights_tend(ssprk_step) * layerThicknessTend(k,iCell)
+           end do
+        end do
+        !$omp end do
+
 
          call mpas_pool_begin_iteration(tracersPool)
          do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
@@ -486,11 +506,6 @@ module ocn_time_integration_ssprk3
                      !$omp do schedule(runtime) private(k)
                      do iCell = 1, nCells
                         do k = 1, maxLevelCell(iCell)
-                           tracersGroupNew(:, k, iCell) = tracersGroupNew(:, k,iCell) * layerThicknessNew(k,iCell)
-                           layerThicknessNew(k,iCell) = weights_old(ssprk_step) * layerThicknessCur(k,iCell) &
-                                                        + weights_new(ssprk_step) * layerThicknessNew(k,iCell) & 
-                                                        + weights_tend(ssprk_step) * layerThicknessTend(k,iCell)
-                           !print*, "layer=", k, "cell=", iCell, "tend=", layerThicknessTend(k,iCell) 
                            tracersGroupNew(:,k,iCell) = ( weights_old(ssprk_step) * tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell)  &
                                                           + weights_new(ssprk_step) * tracersGroupNew(:,k,iCell) &
                                                           + weights_tend(ssprk_step) * tracersGroupTend(:,k,iCell) ) / layerThicknessNew(k,iCell)
@@ -502,7 +517,7 @@ module ocn_time_integration_ssprk3
             end if
          end do
 
-         !if (associated(highFreqThicknessNew)) then    !WHY IS THIS ADVANCED HERE BUT ALSO ABOVE FOR THE SAME TENDENCY?
+         !if (associated(highFreqThicknessNew)) then    !TODO: WHY IS THIS ADVANCED HERE BUT ALSO ABOVE FOR THE SAME TENDENCY?
          !   !$omp do schedule(runtime)
          !   do iCell = 1, nCells
          !      highFreqThicknessNew(:, iCell) = weights_old(ssprk_step) * highFreqThicknessCur(:,iCell) &
@@ -512,7 +527,7 @@ module ocn_time_integration_ssprk3
          !   !$omp end do
          !end if
 
-         if (associated(lowFreqDivergenceNew)) then ! WHERE IS lowFreqDivergenceTend COMPUTED?
+         if (associated(lowFreqDivergenceNew)) then ! TODO: WHERE IS lowFreqDivergenceTend COMPUTED?
             !$omp do schedule(runtime)
             do iCell = 1, nCells
                lowFreqDivergenceNew(:, iCell) = weights_old(ssprk_step) * lowFreqDivergenceCur(:,iCell) &
@@ -533,25 +548,58 @@ module ocn_time_integration_ssprk3
       block => domain % blocklist
       do while (associated(block))
 
-            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-            call mpas_pool_get_subpool(block % structs, 'state', statePool)
-            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
-            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
-            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
-            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+         call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+         call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+         call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
 
-            call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 2)
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+         call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+         call mpas_pool_get_array(diagnosticsPool, 'normalGMBolusVelocity', normalGMBolusVelocity)
+
+         call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 2)
+         call mpas_threading_barrier()
+
+
+         ! TODO: DO WE NEED THIS "ACCUMULATING" THING HERE? CAN IT BE MOVED?
+         ! ------------------------------------------------------------------
+         ! Accumulating various parametrizations of the transport velocity
+         ! ------------------------------------------------------------------
+         !$omp do schedule(runtime)
+         do iEdge = 1, nEdges
+            normalTransportVelocity(:, iEdge) = normalVelocityNew(:, iEdge)
+         end do
+         !$omp end do
+
+         ! Compute normalGMBolusVelocity, relativeSlope and RediDiffVertCoef if
+         ! respective flags are turned on
+         if (config_use_GM) then
+            call ocn_gm_compute_Bolus_velocity(statePool, diagnosticsPool, meshPool, scratchPool, timeLevelIn=2)
+         end if
+         call mpas_threading_barrier()
+
+         if (config_use_GM) then
+         !$omp do schedule(runtime)
+         do iEdge = 1, nEdges
+            normalTransportVelocity(:, iEdge) = normalTransportVelocity(:,iEdge) + normalGMBolusVelocity(:,iEdge)
+         end do
+         !$omp end do
+         end if
+         ! ------------------------------------------------------------------
+         ! End: Accumulating various parametrizations of the transport velocity
+         ! ------------------------------------------------------------------
 
          block => block % next
       end do
       call mpas_timer_stop("SSPRK3-update diagnostic variables")
       call mpas_threading_barrier()
 
-
-      end do
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      ! END SSPRK loop
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   end do
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   ! END SSPRK loop
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
       ! verify that cells are not dry at conclusion of time step
       if (config_use_wetting_drying) then
@@ -564,12 +612,32 @@ module ocn_time_integration_ssprk3
       !
       !  A little clean up at the end
       !
+
+      call mpas_timer_start("SSPRK3-compute vmix")
+      block => domain % blocklist
+      do while (associated(block))
+
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+         call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+         call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+
+
+         call ocn_vmix_implicit(dt, meshPool, diagnosticsPool, statePool, forcingPool, scratchPool, err, 2)
+         call mpas_threading_barrier()
+
+         block => block % next
+      end do
+      call mpas_timer_stop("SSPRK3-compute vmix")
+      call mpas_threading_barrier()
+
       call mpas_timer_start("SSPRK3-cleanup phase") 
 
       call mpas_timer_start("SSPRK3-implicit vert mix")
       ! Update halo on u and tracers, which were just updated for implicit
       ! vertical mixing.  If not done, this leads to lack of volume conservation.  It is required because halo
-      ! updates in RK4 (IS IT THE SAME HERE?) are only  conducted on tendencies, not on the velocity and tracer fields.  So this
+      ! updates in SSPRK3 are only  conducted on tendencies, not on the velocity and tracer fields.  So this
       ! update is required to communicate the change due to implicit vertical mixing across the boundary.
       call mpas_timer_start("SSPRK3-implicit vert mix halos")
 
@@ -633,11 +701,6 @@ module ocn_time_integration_ssprk3
          call mpas_pool_get_array(forcingPool, 'tidalInputMask', tidalInputMask)
          call mpas_pool_get_array(forcingPool, 'tidalBCValue', tidalBCValue)
 
-         err = 0
-
-         call ocn_vmix_implicit(dt, meshPool, diagnosticsPool, statePool, forcingPool, scratchPool, err, 2)
-         call mpas_threading_barrier()
-
          if (config_prescribe_velocity) then
             !$omp do schedule(runtime)
             do iEdge = 1, nEdges
@@ -653,6 +716,34 @@ module ocn_time_integration_ssprk3
             end do
             !$omp end do
          end if
+
+         ! TODO: DO WE NEED THIS "ACCUMULATING" THING HERE? CAN IT BE MOVED?
+         ! ------------------------------------------------------------------
+         ! Accumulating various parametrizations of the transport velocity
+         ! ------------------------------------------------------------------
+         !$omp do schedule(runtime)
+         do iEdge = 1, nEdges
+            normalTransportVelocity(:, iEdge) = normalVelocityNew(:, iEdge)
+         end do
+         !$omp end do
+
+         ! Compute normalGMBolusVelocity, relativeSlope and RediDiffVertCoef if
+         ! respective flags are turned on
+         if (config_use_GM) then
+            call ocn_gm_compute_Bolus_velocity(statePool, diagnosticsPool, meshPool, scratchPool, timeLevelIn=2)
+         end if
+         call mpas_threading_barrier()
+
+         if (config_use_GM) then
+         !$omp do schedule(runtime)
+         do iEdge = 1, nEdges
+            normalTransportVelocity(:, iEdge) = normalTransportVelocity(:,iEdge) + normalGMBolusVelocity(:,iEdge)
+         end do
+         !$omp end do
+         end if
+         ! ------------------------------------------------------------------
+         ! End: Accumulating various parametrizations of the transport velocity
+         ! ------------------------------------------------------------------
 
          ! direct application of tidal boundary condition
          if (config_use_tidal_forcing .and. trim(config_tidal_forcing_type) == 'direct') then
@@ -681,16 +772,6 @@ module ocn_time_integration_ssprk3
          ! Update the effective desnity in land ice if we're coupling to land
          ! ice
          call ocn_effective_density_in_land_ice_update(meshPool, forcingPool, statePool, scratchPool, err)
-
-         ! ------------------------------------------------------------------
-         ! Accumulating various parameterizations of the transport velocity
-         ! ------------------------------------------------------------------
-
-         !TODO: MISSING FOR NOW
-
-         ! ------------------------------------------------------------------
-         ! End: Accumulating various parameterizations of the transport velocity
-         ! ------------------------------------------------------------------
 
          call mpas_reconstruct(meshPool,  normalVelocityNew, &
                           velocityX, velocityY, velocityZ,   &
@@ -756,7 +837,7 @@ module ocn_time_integration_ssprk3
       real (kind=RKIND), dimension(:), pointer :: ssh
       real (kind=RKIND), dimension(:, :), pointer :: layerThickness, normalVelocity
       real (kind=RKIND), dimension(:, :), pointer :: layerThicknessEdge, vertAleTransportTop
-      real (kind=RKIND), dimension(:, :), pointer :: normalTransportVelocity, highFreqThickness
+      real (kind=RKIND), dimension(:, :), pointer :: highFreqThickness
 
       logical, pointer :: config_filter_btr_mode
 
@@ -769,8 +850,6 @@ module ocn_time_integration_ssprk3
       else
          timeLevel = 1
       end if
-
-      call mpas_pool_get_config(block % configs, 'config_filter_btr_mode', config_filter_btr_mode)
 
       call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
       call mpas_pool_get_subpool(block % structs, 'verticalMesh', verticalMeshPool)
@@ -785,7 +864,6 @@ module ocn_time_integration_ssprk3
 
       call mpas_pool_get_array(diagnosticsPool, 'layerThicknessEdge', layerThicknessEdge)
       call mpas_pool_get_array(diagnosticsPool, 'vertAleTransportTop', vertAleTransportTop)
-      call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
 
       call mpas_pool_get_array(statePool, 'highFreqThickness', highFreqThickness, timeLevel)
 
