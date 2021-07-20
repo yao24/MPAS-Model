@@ -223,7 +223,7 @@ contains
 
       if ( config_disable_vel_coriolis ) hadvAndCoriolisOn = .false.
 
-      if ( trim( config_time_integrator ) == 'RK4') then
+      if ( trim( config_time_integrator ) == 'RK4' .or. trim(config_time_integrator ) == 'forward_euler') then
          ! For RK4, coriolis tendency term includes f: (eta+f)/h.
          RK4On = 1
       elseif ( trim( config_time_integrator ) == 'split_explicit' &

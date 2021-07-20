@@ -1304,7 +1304,7 @@ contains
          ke_cell_flag = 1
       endif
 
-      if (trim(config_time_integrator) == 'RK4') then
+      if (trim(config_time_integrator) == 'RK4' .or. trim(config_time_integrator) == 'forward_euler') then
          ! For RK4, PV includes f: PV = (eta+f)/h.
          fCoef = 1
       elseif (trim(config_time_integrator) == 'split_explicit' &
