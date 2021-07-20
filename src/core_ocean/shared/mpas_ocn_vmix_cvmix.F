@@ -307,11 +307,6 @@ contains
             do k = 1, nVertLevelsP1
                vertViscTopOfCell(k, iCell) = vertViscTopOfCell(k, iCell) + config_cvmix_background_viscosity
                vertDiffTopOfCell(k, iCell) = vertDiffTopOfCell(k, iCell) + config_cvmix_background_diffusion
-               !BEGIN: TO REMOVE
-               !if (k==15) then
-               !   print*, vertViscTopOfCell(k, iCell), config_cvmix_background_viscosity
-               !end if
-               !END: TO REMOVE
             end do
          end do
          !$omp end do
@@ -445,18 +440,8 @@ contains
             endif
 
             do k = 1, maxLevelCell(iCell)
-               !BEGIN: TO REMOVE
-               !if (k==15) then
-               !   print*, vertViscTopOfCell(k, iCell)
-               !end if
-               !END: TO REMOVE
                vertViscTopOfCell(k, iCell) = vertViscTopOfCell(k, iCell) + cvmix_variables % Mdiff_iface(k)
                vertDiffTopOfCell(k, iCell) = vertDiffTopOfCell(k, iCell) + cvmix_variables % Tdiff_iface(k)
-               !BEGIN: TO REMOVE
-               !if (k==15) then
-               !   print*, cvmix_variables % Mdiff_iface(k) !,vertViscTopOfCell(k, iCell)
-               !end if
-               !END: TO REMOVE
             end do
 
          endif ! if (config_use_cvmix_shear)

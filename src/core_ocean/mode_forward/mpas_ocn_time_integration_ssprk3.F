@@ -280,7 +280,7 @@ module ocn_time_integration_ssprk3
        block => block % next
     end do
 
-    call mpas_threading_barrier() !do we need this here?
+    call mpas_threading_barrier() !TODO do we need this here?
 
     weights_old(1) = 1.0
     weights_old(2) = 0.75 !use this for SSPRK3
@@ -563,7 +563,6 @@ module ocn_time_integration_ssprk3
          call mpas_threading_barrier()
 
 
-         ! TODO: DO WE NEED THIS "ACCUMULATING" THING HERE? CAN IT BE MOVED?
          ! ------------------------------------------------------------------
          ! Accumulating various parametrizations of the transport velocity
          ! ------------------------------------------------------------------
@@ -717,7 +716,6 @@ module ocn_time_integration_ssprk3
             !$omp end do
          end if
 
-         ! TODO: DO WE NEED THIS "ACCUMULATING" THING HERE? CAN IT BE MOVED?
          ! ------------------------------------------------------------------
          ! Accumulating various parametrizations of the transport velocity
          ! ------------------------------------------------------------------

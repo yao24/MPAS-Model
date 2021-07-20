@@ -439,11 +439,6 @@ contains
          cell2 = cellsOnEdge(2,iEdge)
          do k = 1, N
             layerThicknessEdge(k,iEdge) = 0.5_RKIND * (layerThickness(k,cell1) + layerThickness(k,cell2))
-            ! BEGIN - TO REMOVE:
-            !if (k == 15) then
-             !  print*, layerThicknessEdge(k,iEdge)
-            !end if
-            ! END - TO REMOVE
          end do
 
          ! A is lower diagonal term
@@ -451,11 +446,6 @@ contains
             A(k) = -2.0_RKIND*dt*vertViscTopOfEdge(k,iEdge) &
                / (layerThicknessEdge(k-1,iEdge) + layerThicknessEdge(k,iEdge)) &
                / layerThicknessEdge(k,iEdge)
-            ! BEGIN: TO REMOVE
-            !if (k == 15) then
-            !   print*, vertViscTopOfEdge(k,iEdge)
-            !end if
-            ! END: TO REMOVE
          enddo
 
          ! C is upper diagonal term
@@ -480,16 +470,6 @@ contains
 
          normalVelocity(1:N,iEdge) = velTemp(1:N)
          normalVelocity(N+1:nVertLevels,iEdge) = 0.0_RKIND
-
-        !BEGIN TO REMOVE
-
-         !do k= 1,N
-
-         !   print*, normalVelocity(1,iEdge)
-
-         !end do
-
-        !END TO REMOVE
 
         end if
       end do
@@ -730,15 +710,6 @@ contains
 
 
       nCells = nCellsArray(1)
-      !BEGIN : TO REMOVE
-
-      !do iEdge = 1, nCells
-
-      !   print*, layerThickness(1,iEdge)
-
-      !end do
-
-      !END : TO REMOVE
       call mpas_pool_get_array(diagnosticsPool, 'vertNonLocalFlux', vertNonLocalFlux)
       ! if using CVMix, then viscosity has to be averaged from cell centers to cell edges
       if ( config_use_cvmix ) then
@@ -752,11 +723,6 @@ contains
             cell2 = cellsOnEdge(2,iEdge)
             do k=1,maxLevelEdgeTop(iEdge)
                vertViscTopOfEdge(k,iEdge) = 0.5_RKIND*(vertViscTopOfCell(k,cell2)+vertViscTopOfCell(k,cell1))
-            ! BEGIN: TO REMOVE
-            ! if (k == 15) then
-            !    print*, vertViscTopOfCell(k,cell2)
-            ! end if
-            ! END: TO REMOVE
             end do
          end do
          !$omp end do

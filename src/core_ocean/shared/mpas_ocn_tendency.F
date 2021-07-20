@@ -342,6 +342,8 @@ contains
       !   Then point zMid to work array so the tidal potential terms are included inside the grad computed in ocn_vel_pressure_grad_tend
       !   zMid is pointed back to the typical value afterward, so the work array is not used in place of zMid elsewhere.
       !
+
+      ! TODO: do we have to do this also for SSPRK3 and LTS3?
       if (config_use_tidal_potential_forcing) then
         call ocn_compute_tidal_potential_forcing(meshPool, forcingPool, diagnosticsPool, err)
       end if
