@@ -141,7 +141,7 @@ module ocn_time_integration_ssprk3
 
     ! Tend Array Pointers
     real (kind=RKIND), dimension(:,:), pointer :: highFreqThicknessTend, lowFreqDivergenceTend, normalVelocityTend, layerThicknessTend
-    real (kind=RKIND), dimension(:,:,:), pointer :: TracersGroupTend
+    real (kind=RKIND), dimension(:,:,:), pointer :: tracersGroupTend
 
     ! Diagnostics Array Pointers
     real (kind=RKIND), dimension(:,:), pointer :: layerThicknessEdge
@@ -166,7 +166,7 @@ module ocn_time_integration_ssprk3
     type (field1DReal), pointer :: boundaryLayerDepthField, effectiveDensityField
     type (field2DReal), pointer :: normalizedRelativeVorticityEdgeField, divergenceField, relativeVorticityField
 
-    ! Tracer Group Iteartion
+    ! Tracer Group Iteration
     type (mpas_pool_iterator_type) :: groupItr
     character (len=StrKIND) :: modifiedGroupName
     character (len=StrKIND) :: configName
@@ -280,7 +280,7 @@ module ocn_time_integration_ssprk3
        block => block % next
     end do
 
-    call mpas_threading_barrier() !TODO do we need this here?
+    call mpas_threading_barrier() 
 
     weights_old(1) = 1.0
     weights_old(2) = 0.75 !use this for SSPRK3
@@ -411,7 +411,7 @@ module ocn_time_integration_ssprk3
          end if
       end do
       call mpas_timer_stop("SSPRK3 vel/thick/tracers prognostic halo update")
-      call mpas_threading_barrier() !HOW DO WE PLACE THESE BARRIERS?
+      call mpas_threading_barrier() 
 
 
       call mpas_timer_start("SSPRK3 advance soln")
@@ -865,7 +865,7 @@ module ocn_time_integration_ssprk3
 
       call mpas_pool_get_array(statePool, 'highFreqThickness', highFreqThickness, timeLevel)
 
-      ! advection of u uses u, while advection of layerThickness and tracers use normalTransportVelocity. (???)
+      ! advection of u uses u, while advection of layerThickness and tracers use normalTransportVelocity. 
       if (associated(highFreqThickness)) then
          call ocn_vert_transport_velocity_top(meshPool, verticalMeshPool, scratchPool, &
             layerThickness,layerThicknessEdge, normalVelocity, &
@@ -935,7 +935,7 @@ module ocn_time_integration_ssprk3
       call mpas_pool_get_array(statePool, 'highFreqThickness', highFreqThickness, timeLevel)
 
 
-      ! advection of u uses u, while advection of layerThickness and tracers use normalTransportVelocity. (why??????)
+      ! advection of u uses u, while advection of layerThickness and tracers use normalTransportVelocity. 
       if (associated(highFreqThickness)) then
          call ocn_vert_transport_velocity_top(meshPool, verticalMeshPool, scratchPool, &
             layerThickness, layerThicknessEdge, normalTransportVelocity, &

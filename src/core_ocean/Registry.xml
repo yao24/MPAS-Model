@@ -3765,6 +3765,7 @@
                 <var name="haveInterface"                     type="integer"  dimensions=""/>
                 <var name="normalVelocityMPIHaloUpdate"       type="real"     dimensions="nVertLevels nEdges"/>
                 <var name="layerThicknessMPIHaloUpdate"       type="real"     dimensions="nVertLevels nCells"/>
+                <var name="tracersGroupMPIHaloUpdate"         type="real"     dimensions="nVertLevels nCells"/>
         </var_struct>
 
 <!-- Include registry files from subdirectories -->
