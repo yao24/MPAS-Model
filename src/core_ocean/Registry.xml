@@ -3763,8 +3763,8 @@
                 <var name="haveFine"                          type="integer"  dimensions=""/>
                 <var name="haveCoarse"                        type="integer"  dimensions=""/>
                 <var name="haveInterface"                     type="integer"  dimensions=""/>
-                <var name="uMPIHaloUpdate"                    type="real"     dimensions="nVertLevels nEdges"/>
-                <var name="hMPIHaloUpdate"                    type="real"     dimensions="nVertLevels nCells"/>
+                <var name="normalVelocityMPIHaloUpdate"       type="real"     dimensions="nVertLevels nEdges"/>
+                <var name="layerThicknessMPIHaloUpdate"       type="real"     dimensions="nVertLevels nCells"/>
         </var_struct>
 
 <!-- Include registry files from subdirectories -->

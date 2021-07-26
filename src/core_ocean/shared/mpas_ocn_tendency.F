@@ -343,12 +343,11 @@ contains
       !   zMid is pointed back to the typical value afterward, so the work array is not used in place of zMid elsewhere.
       !
 
-      ! TODO: do we have to do this also for SSPRK3 and LTS3?
       if (config_use_tidal_potential_forcing) then
         call ocn_compute_tidal_potential_forcing(meshPool, forcingPool, diagnosticsPool, err)
       end if
 
-      if (config_use_tidal_potential_forcing .and. config_time_integrator == 'RK4') then
+      if (config_use_tidal_potential_forcing .and. (config_time_integrator == 'RK4' .or. config_time_integrator == 'SSPRK3' .or. config_time_integrator == 'LTS3')) then
         call mpas_pool_get_array(forcingPool, 'tidalPotentialZMid', tidalPotentialZMid)
         call mpas_pool_get_array(forcingPool, 'tidalPotentialEta', tidalPotentialEta)
         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
