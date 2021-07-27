@@ -47,8 +47,8 @@
 		<package name="MacroMoleculesTracersTTDPKG" description="This package includes variables required to compute transit-time distribution forcing on the MacroMolecules tracer group."/>
 	</packages>
 
-	<var_struct name="state" time_levs="2">
-		<var_struct name="tracers" time_levs="2">
+	<var_struct name="state" time_levs="4">
+		<var_struct name="tracers" time_levs="4">
 			<var_array name="MacroMoleculesTracers" dimensions="nVertLevels nCells Time" type="real" packages="MacroMoleculesTracersPKG" >
 				<!-- Add constituents of tracer group -->
 			<var name="PROT" array_group="MacroMoleculesGRP" units="mmol m^{-3}"

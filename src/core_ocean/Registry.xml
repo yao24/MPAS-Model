@@ -1957,7 +1957,7 @@
 
 	</streams>
 
-	<var_struct name="state" time_levs="2">
+	<var_struct name="state" time_levs="4">
 		<var name="normalVelocity" type="real" dimensions="nVertLevels nEdges Time" units="m s^{-1}"
 			 description="horizonal velocity, normal component to an edge"
 		/>
@@ -3763,9 +3763,6 @@
                 <var name="haveFine"                          type="integer"  dimensions=""/>
                 <var name="haveCoarse"                        type="integer"  dimensions=""/>
                 <var name="haveInterface"                     type="integer"  dimensions=""/>
-                <var name="normalVelocityMPIHaloUpdate"       type="real"     dimensions="nVertLevels nEdges"/>
-                <var name="layerThicknessMPIHaloUpdate"       type="real"     dimensions="nVertLevels nCells"/>
-                <var name="tracersGroupMPIHaloUpdate"         type="real"     dimensions="nVertLevels nCells"/>
         </var_struct>
 
 <!-- Include registry files from subdirectories -->

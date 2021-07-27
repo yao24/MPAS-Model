@@ -83,8 +83,8 @@
 		<package name="ecosysTracersTTDPKG" description="This package includes variables required to compute transit-time distribution forcing on the ecosys tracer group."/>
 	</packages>
 
-	<var_struct name="state" time_levs="2">
-		<var_struct name="tracers" time_levs="2">
+	<var_struct name="state" time_levs="4">
+		<var_struct name="tracers" time_levs="4">
 			<var_array name="ecosysTracers" dimensions="nVertLevels nCells Time" type="real" packages="ecosysTracersPKG" >
 				<!-- Add constituents of tracer group -->
 				<var name="PO4" array_group="ecosysGRP" units="mmol P m^{-3}"

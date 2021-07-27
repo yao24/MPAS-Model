@@ -47,8 +47,8 @@
 		<package name="debugTracersTTDPKG" description="This package includes variables required to compute transit-time distribution forcing on the debugTracers group."/>
 	</packages>
 
-	<var_struct name="state" time_levs="2">
-		<var_struct name="tracers" time_levs="2">
+	<var_struct name="state" time_levs="4">
+		<var_struct name="tracers" time_levs="4">
 			<var_array name="debugTracers" dimensions="nVertLevels nCells Time" type="real" packages="debugTracersPKG" default_value="1.0">
 				<var name="tracer1" array_group="debugGRP" units="tracer1"
 			 description="tracer for debugging purposes"
