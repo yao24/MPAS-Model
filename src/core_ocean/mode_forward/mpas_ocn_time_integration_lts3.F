@@ -165,7 +165,6 @@ module ocn_time_integration_lts3
     real (kind=RKIND), dimension(:,:), pointer :: surfaceVelocity, sshGradient
 
     ! State Array Pointers
-    real (kind=RKIND), dimension(:,:), pointer :: normalVelocityMPIHaloUpdate, layerThicknessMPIHaloUpdate, tracersGroupMPIHaloUpdate
     real (kind=RKIND), dimension(:,:), pointer :: normalVelocityCur, normalVelocityNew, normalVelocityFirstStage, normalVelocitySecondStage
     real (kind=RKIND), dimension(:,:), pointer :: layerThicknessCur, layerThicknessNew, layerThicknessFirstStage, layerThicknessSecondStage
     real (kind=RKIND), dimension(:,:), pointer :: highFreqThicknessCur, highFreqThicknessNew, highFreqThicknessFirstStage, highFreqThicknessSecondStage
@@ -236,75 +235,76 @@ module ocn_time_integration_lts3
     call mpas_timer_start("create extra pools LTS and init variables")
     block => domain % blocklist
     do while (associated(block))
-    call mpas_pool_get_subpool(block % structs, 'state', statePool)
-    call mpas_pool_get_subpool(block % structs, 'tracers', tracersPool)
-    call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+       call mpas_pool_get_subpool(block % structs, 'state', statePool)
+       call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+       call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+       call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
 
-    call mpas_pool_create_pool(tendSum1stPool)
-    call mpas_pool_clone_pool(tendPool, tendSum1stPool, 1)
-    call mpas_pool_create_pool(tendSum2ndPool)
-    call mpas_pool_clone_pool(tendPool, tendSum2ndPool, 1)
-    call mpas_pool_create_pool(tendSum3rdPool)
-    call mpas_pool_clone_pool(tendPool, tendSum3rdPool, 1)
+       call mpas_pool_create_pool(tendSum1stPool)
+       call mpas_pool_clone_pool(tendPool, tendSum1stPool, 1)
+       call mpas_pool_create_pool(tendSum2ndPool)
+       call mpas_pool_clone_pool(tendPool, tendSum2ndPool, 1)
+       call mpas_pool_create_pool(tendSum3rdPool)
+       call mpas_pool_clone_pool(tendPool, tendSum3rdPool, 1)
 
-    call mpas_pool_add_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
-    call mpas_pool_add_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
-    call mpas_pool_add_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
+       call mpas_pool_add_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
+       call mpas_pool_add_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
+       call mpas_pool_add_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
 
-    call mpas_pool_get_dimension(block % dimensions, 'nCells', nCells)
-    call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
+       call mpas_pool_get_dimension(block % dimensions, 'nCells', nCells)
+       call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
 
-    call mpas_pool_get_array(tendSum1stPool, 'normalVelocity', normalVelocityTendSum1st)
-    call mpas_pool_get_array(tendSum1stPool, 'layerThickness', layerThicknessTendSum1st)
-    call mpas_pool_get_subpool(tendSum1stPool, 'tracersTend', tracersTendSum1stPool)
+       call mpas_pool_get_array(tendSum1stPool, 'normalVelocity', normalVelocityTendSum1st)
+       call mpas_pool_get_array(tendSum1stPool, 'layerThickness', layerThicknessTendSum1st)
+       call mpas_pool_get_subpool(tendSum1stPool, 'tracersTend', tracersTendSum1stPool)
 
-    call mpas_pool_get_array(tendSum2ndPool, 'normalVelocity', normalVelocityTendSum2nd)
-    call mpas_pool_get_array(tendSum2ndPool, 'layerThickness', layerThicknessTendSum2nd)
-    call mpas_pool_get_subpool(tendSum2ndPool, 'tracersTend', tracersTendSum2ndPool)
+       call mpas_pool_get_array(tendSum2ndPool, 'normalVelocity', normalVelocityTendSum2nd)
+       call mpas_pool_get_array(tendSum2ndPool, 'layerThickness', layerThicknessTendSum2nd)
+       call mpas_pool_get_subpool(tendSum2ndPool, 'tracersTend', tracersTendSum2ndPool)
 
-    call mpas_pool_get_array(tendSum3rdPool, 'normalVelocity', normalVelocityTendSum3rd)
-    call mpas_pool_get_array(tendSum3rdPool, 'layerThickness', layerThicknessTendSum3rd)
-    call mpas_pool_get_subpool(tendSum3rdPool, 'tracersTend', tracersTendSum3rdPool)
+       call mpas_pool_get_array(tendSum3rdPool, 'normalVelocity', normalVelocityTendSum3rd)
+       call mpas_pool_get_array(tendSum3rdPool, 'layerThickness', layerThicknessTendSum3rd)
+       call mpas_pool_get_subpool(tendSum3rdPool, 'tracersTend', tracersTendSum3rdPool)
 
-    call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
-    call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
-    call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+       call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+       call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+       call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
 
-    call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
-    call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
-    call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+       call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+       call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+       call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
 
-    call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-    call mpas_pool_get_array(meshPool, 'maxLevelEdgeTop', maxLevelEdgeTop)
+       call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+       call mpas_pool_get_array(meshPool, 'maxLevelEdgeTop', maxLevelEdgeTop)
 
-    !$omp do schedule(runtime) private(k)
-    do iEdge = 1, nEdges
-       do k = 1, maxLevelEdgeTop(iEdge)
-          normalVelocityFirstStage(k, iEdge) = normalVelocityCur(k, iEdge)
-          normalVelocitySecondStage(k, iEdge) = normalVelocityCur(k, iEdge)
+       !$omp do schedule(runtime) private(k)
+       do iEdge = 1, nEdges
+          do k = 1, maxLevelEdgeTop(iEdge)
+             normalVelocityFirstStage(k, iEdge) = normalVelocityCur(k, iEdge)
+             normalVelocitySecondStage(k, iEdge) = normalVelocityCur(k, iEdge)
+          end do
        end do
-    end do
-    !$omp end do
+       !$omp end do
 
-    !$omp do schedule(runtime) private(k)
-    do iCell = 1, nCells
-       do k = 1, maxLevelCell(iCell)
-          layerThicknessFirstStage(k, iCell) = layerThicknessCur(k, iCell)
-          layerThicknessSecondStage(k, iCell) = layerThicknessCur(k, iCell)
+       !$omp do schedule(runtime) private(k)
+       do iCell = 1, nCells
+          do k = 1, maxLevelCell(iCell)
+             layerThicknessFirstStage(k, iCell) = layerThicknessCur(k, iCell)
+             layerThicknessSecondStage(k, iCell) = layerThicknessCur(k, iCell)
+          end do
        end do
-    end do
-    !$omp end do
+       !$omp end do
 
-    normalVelocityTendSum1st(:,:) = 0.0
-    layerThicknessTendSum1st(:,:) = 0.0
+       normalVelocityTendSum1st(:,:) = 0.0
+       layerThicknessTendSum1st(:,:) = 0.0
 
-    normalVelocityTendSum2nd(:,:) = 0.0
-    layerThicknessTendSum2nd(:,:) = 0.0
+       normalVelocityTendSum2nd(:,:) = 0.0
+       layerThicknessTendSum2nd(:,:) = 0.0
 
-    normalVelocityTendSum3rd(:,:) = 0.0
-    layerThicknessTendSum3rd(:,:) = 0.0
+       normalVelocityTendSum3rd(:,:) = 0.0
+       layerThicknessTendSum3rd(:,:) = 0.0
 
-    call mpas_pool_begin_iteration(tracersPool)
+       call mpas_pool_begin_iteration(tracersPool)
        do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
           if ( groupItr % memberType == MPAS_POOL_FIELD ) then
              configName = 'config_use_' // trim(groupItr % memberName)
@@ -425,16 +425,6 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3-diagnostic halo update")
       call mpas_threading_barrier()
 
-      ! --- compute tendencies for high frequency thickness
-      if (config_use_freq_filtered_thickness) then
-         !TODO: MISSING FOR NOW (it would add too much complexity to something already complex)
-      end if
-
-      ! --- require that cells don't dry out
-      if (config_use_wetting_drying) then
-         !TODO: MISSING FOR NOW
-      end if
-
       ! --- compute diagnostics and tendencies for velocity, thickness, and tracers
       call mpas_timer_start("LTS3-update diagnostic variables and compute tendencies")
       block => domain % blocklist
@@ -447,10 +437,10 @@ module ocn_time_integration_lts3
          call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
          call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool) 
 
+         call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
 
          call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
          call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
-         call mpas_pool_get_array(diagnosticsPool, 'normalGMBolusVelocity', normalGMBolusVelocity)
 
          ! DIAGNOSTICS UPDATE ---
 
@@ -463,19 +453,10 @@ module ocn_time_integration_lts3
          end do
          !$omp end do
 
-         ! --- compute normalGMBolusVelocity, relativeSlope and RediDiffVertCoef if respective flags are turned on
-         if (config_use_GM) then
-            call ocn_gm_compute_Bolus_velocity(statePool, diagnosticsPool, meshPool, scratchPool, timeLevelIn=1)
-         end if
-         call mpas_threading_barrier()
-
-         if (config_use_GM) then
-         !$omp do schedule(runtime)
-         do iEdge = 1, nEdges
-            normalTransportVelocity(:, iEdge) = normalTransportVelocity(:,iEdge) + normalGMBolusVelocity(:,iEdge)
-         end do
-         !$omp end do
-         end if
+         !! TODO: not sure yet if this is needed
+         !call mpas_timer_start("halo updates  LTS")
+         !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
+         !call mpas_timer_stop("halo updates  LTS")
 
          ! TENDENCIES COMPUTATION ---
 
@@ -488,7 +469,7 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3-update diagnostic variables and compute tendencies")
       call mpas_threading_barrier()
 
-      call mpas_timer_start("LTS advance soln")
+      call mpas_timer_start("LTS3 advance soln")
       ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK
       block => domain % blocklist
       do while (associated(block))
@@ -514,8 +495,6 @@ module ocn_time_integration_lts3
 
          call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
          call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-
-         call mpas_pool_get_array(diagnosticsPool, 'wettingVelocity', wettingVelocity)
 
          ! --- NORMAL VELOCITY
 
@@ -616,8 +595,10 @@ module ocn_time_integration_lts3
       call mpas_threading_barrier()
 
       call mpas_timer_start("halo updates  LTS")
+      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
       call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=3)
-      call mpas_dmpar_field_halo_exch(domain, 'layerThicknessMPIHaloUpdate', timeLevel=3)
+      call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=3)
       call mpas_pool_begin_iteration(tracersPool)
       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
@@ -646,23 +627,13 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3-diagnostic halo update")
       call mpas_threading_barrier()
 
-      ! --- compute tendencies for high frequency thickness
-      if (config_use_freq_filtered_thickness) then
-         !TODO: MISSING FOR NOW (it would add too much complexity to something
-         !already complex)
-      end if
-
-      ! --- require that cells don't dry out
-      if (config_use_wetting_drying) then
-         !TODO: MISSING FOR NOW
-      end if
-
       ! --- compute diagnostics and tendencies for velocity, thickness, and tracers
       call mpas_timer_start("LTS3-update diagnostic variables and compute tendencies")
       block => domain % blocklist
       do while (associated(block))
 
          call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
          call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
          call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
          call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
@@ -670,10 +641,11 @@ module ocn_time_integration_lts3
          call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
          call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
          call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
 
          call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
          call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
-         call mpas_pool_get_array(diagnosticsPool, 'normalGMBolusVelocity', normalGMBolusVelocity)
 
          if(haveCoarse == 1 .or. haveInterface == 1) then
 
@@ -683,24 +655,22 @@ module ocn_time_integration_lts3
             call mpas_threading_barrier()
 
             !$omp do schedule(runtime)
-            do iEdge = 1, nEdges
+            do ie = 1, nEdgesInLTSHalo(2,1)
+               iEdge = edgesInLTSHalo(2,1,ie)
                normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
             end do
-            !$omp end do
-
-            ! --- compute normalGMBolusVelocity, relativeSlope and RediDiffVertCoef if respective flags are turned on
-            if (config_use_GM) then
-               call ocn_gm_compute_Bolus_velocity(statePool, diagnosticsPool, meshPool, scratchPool, timeLevelIn=3)
-            end if
-            call mpas_threading_barrier()
-
-            if (config_use_GM) then
-            !$omp do schedule(runtime)
-            do iEdge = 1, nEdges
-               normalTransportVelocity(:, iEdge) = normalTransportVelocity(:,iEdge) + normalGMBolusVelocity(:,iEdge)
+            do iRegion =1, nRegions
+               do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                  iEdge = edgesInLTSHalo(iRegion,2,ie)
+                  normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+               end do
             end do
             !$omp end do
-            end if
+
+            !! TODO: not sure yet if this is needed
+            !call mpas_timer_start("halo updates  LTS")
+            !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
+            !call mpas_timer_stop("halo updates  LTS")
 
             ! TENDENCIES COMPUTATION ---
 
@@ -715,7 +685,7 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3-update diagnostic variables and compute tendencies")
       call mpas_threading_barrier()
 
-      call mpas_timer_start("LTS advance soln")
+      call mpas_timer_start("LTS3 advance soln")
       ! --- advance solution (2nd stage of SSPRK for the coarse using dt)
       block => domain % blocklist
       do while (associated(block))
@@ -745,8 +715,6 @@ module ocn_time_integration_lts3
 
          call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
          call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-
-         call mpas_pool_get_array(diagnosticsPool, 'wettingVelocity', wettingVelocity)
 
          if(haveCoarse == 1 .or. haveInterface == 1) then
 
@@ -842,8 +810,10 @@ module ocn_time_integration_lts3
       call mpas_threading_barrier()
 
       call mpas_timer_start("halo updates  LTS")
+      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
       call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=4)
-      call mpas_dmpar_field_halo_exch(domain, 'layerThicknessMPIHaloUpdate', timeLevel=4)
+      call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=4)
       call mpas_pool_begin_iteration(tracersPool)
       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
@@ -858,15 +828,1020 @@ module ocn_time_integration_lts3
 
       do im =1, M
 
+         call mpas_timer_start("interface prediction LTS")
+         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln cur in soln new
+         block => domain % blocklist
+         do while (associated(block))
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
 
-      call mpas_timer_start("interface prediction LTS")
-      ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln cur in soln new
+            call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+            if (haveInterface == 1) then
+               alpha = REAL((im - 1)) / M
+               alphaHat = REAL((im - 1) * (im - 1)) / (M * M)
+               do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
+                  iEdge = edgesInLTSHalo(1,2,ie)
+                  normalVelocityNew(:,iEdge) = normalVelocityCur(:,iEdge)
+                  normalVelocityCur(:,iEdge) = (1.0 - alpha - alphaHat) * normalVelocityCur(:,iEdge) + (alpha - alphaHat) * normalVelocityFirstStage(:,iEdge) &
+                                             + 2.0 * alphaHat *normalVelocitySecondStage(:,iEdge)
+               end do
+               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
+                  iCell = cellsInLTSHalo(1,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessNew(k,iCell) = layerThicknessCur(k,iCell)
+                     layerThicknessCur(k,iCell) = (1.0 - alpha - alphaHat) * layerThicknessCur(k,iCell) + (alpha - alphaHat) * layerThicknessFirstStage(k,iCell) &
+                                               + 2.0 * alphaHat * layerThicknessSecondStage(k,iCell) 
+                  end do
+               end do
+            end if
+
+            call mpas_pool_begin_iteration(tracersPool)
+            do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+               if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                  configName = 'config_use_' // trim(groupItr % memberName)
+                  call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+                  if ( config_use_tracerGroup ) then
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
+                     !$omp do schedule(runtime) private(k)
+                     do ic = 1, nCellsInLTSHalo(1,2)
+                        do k = 1, maxLevelCell(iCell)
+                           tracersGroupNew(:, k, iCell) = tracersGroupCur(:, k, iCell)
+                           tracersGroupCur(:, k, iCell) = (1.0 - alpha - alphaHat) * tracersGroupCur(:,k,iCell) + &
+                                                          (alpha - alphaHat) * tracersGroupFirstStage(:,k,iCell) + 2.0 * alphaHat * tracersGroupSecondStage(:,k,iCell)
+                        end do
+                     end do
+                     !$omp end do
+                  end if
+               end if
+            end do
+
+            block => block % next
+         end do
+         call mpas_timer_stop("interface prediction LTS")
+
+         ! --- update halos for diagnostic variables
+         if (config_use_cvmix_kpp) then
+            call mpas_timer_start("LTS3-boundary layer depth halo update")
+            call mpas_dmpar_field_halo_exch(domain, 'boundaryLayerDepth')
+            call mpas_timer_stop("LTS3-boundary layer depth halo update")
+         end if
+
+         call mpas_timer_start("LTS3-diagnostic halo update")
+         call mpas_dmpar_field_halo_exch(domain, 'normalizedRelativeVorticityEdge')
+         if (config_mom_del4 > 0.0_RKIND) then
+            call mpas_dmpar_field_halo_exch(domain, 'divergence')
+            call mpas_dmpar_field_halo_exch(domain, 'relativeVorticity')
+         end if
+         call mpas_timer_stop("LTS3-diagnostic halo update")
+         call mpas_threading_barrier()
+
+
+         ! --- compute diagnostics and tendencies for velocity, thickness, and tracers
+         call mpas_timer_start("LTS3-update diagnostic variables and compute tendencies")
+         block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+
+               ! DIAGNOSTICS UPDATE ---
+
+               call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 1)
+               call mpas_threading_barrier()
+
+               !$omp do schedule(runtime)
+               do ie = 1, nEdgesInLTSHalo(1,1)
+                  iEdge = edgesInLTSHalo(1,1,ie)
+                  normalTransportVelocity(:, iEdge) = normalVelocityCur(:, iEdge)
+               end do
+               do iRegion =1, nRegions
+                  do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                     iEdge = edgesInLTSHalo(iRegion,2,ie)
+                     normalTransportVelocity(:, iEdge) = normalVelocityCur(:, iEdge)
+                  end do
+               end do
+               !$omp end do
+
+               !! TODO: not sure yet if this is needed
+               !call mpas_timer_start("halo updates  LTS")
+               !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
+               !call mpas_timer_stop("halo updates  LTS")
+
+               ! TENDENCIES COMPUTATION ---
+
+               call ocn_time_integrator_compute_vel_tends(block, dt, err, statePool, 1)
+               call ocn_time_integrator_compute_thick_tends(block, dt, err, statePool, 1)
+               call ocn_time_integrator_compute_tracer_tends( block, dt, err, statePool, 1)
+
+            end if
+
+            block => block % next
+         end do
+         call mpas_timer_stop("LTS3-update diagnostic variables and compute tendencies")
+         call mpas_threading_barrier()
+
+
+         call mpas_timer_start("advance soln LTS")
+         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface
+         ! layer 2 also restore soln cur by copying it back from soln new
+         block => domain % blocklist
+         do while (associated(block))
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(tendPool, 'tracersTend', tracersTendPool)
+
+            call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+
+            call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
+            call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
+
+            call mpas_pool_get_array(tendSum2ndPool, 'normalVelocity', normalVelocityTendSum2nd)
+            call mpas_pool_get_array(tendSum2ndPool, 'layerThickness', layerThicknessTendSum2nd)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+
+               ! --- NORMAL VELOCITY
+
+               ! --- interface layer 1 (correction)
+               do ie = 1, nEdgesInLTSHalo(1,2)
+                  iEdge = edgesInLTSHalo(1,2,ie)
+                  normalVelocityCur(:,iEdge) = normalVelocityNew(:,iEdge)
+                  normalVelocityTendSum2nd(:,iEdge) = normalVelocityTendSum2nd(:,iEdge) + normalVelocityTend(:,iEdge)
+               end do
+               ! --- interface layer 2 (correction)
+               do ie = 1, nEdgesInLTSHalo(2,2)
+                  iEdge = edgesInLTSHalo(2,2,ie)
+                  normalVelocityTendSum2nd(:,iEdge) = normalVelocityTendSum2nd(:,iEdge) + normalVelocityTend(:,iEdge)
+               end do
+      
+               ! --- fine (soln advancement)  
+               do ie = 1, nEdgesInLTSHalo(1,1)
+                  iEdge = edgesInLTSHalo(1,1,ie)
+                  normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
+               end do
+               do ie = 1, nEdgesInLTSHalo(1,3)
+                  iEdge = edgesInLTSHalo(1,3,ie)
+                  normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
+               end do
+ 
+               ! --- LAYER THICKNESS
+
+               ! --- interface layer 1 (correction)
+               do ic = 1, nCellsInLTSHalo(1,2)
+                  iCell = cellsInLTSHalo(1,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessCur(k,iCell) = layerThicknessNew(k,iCell)
+                     layerThicknessTendSum2nd(k,iCell) = layerThicknessTendSum2nd(k,iCell) +  layerThicknessTend(k,iCell)
+                  end do
+               end do
+
+               ! --- interface layer 2 (correction)
+               do ic = 1, nCellsInLTSHalo(2,2)
+                  iCell = cellsInLTSHalo(2,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessTendSum2nd(k,iCell) = layerThicknessTendSum2nd(k,iCell) +  layerThicknessTend(k,iCell)
+                  end do
+               end do
+
+               ! --- fine (soln advancement)
+               do ic = 1, nCellsInLTSHalo(1,1)
+                  iCell = cellsInLTSHalo(1,1,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessFirstStage(k,iCell) = layerThicknessCur(k,iCell) + dtFine * layerThicknessTend(k,iCell) !soln update for the fine
+                  end do
+               end do
+               do ic = 1, nCellsInLTSHalo(1,3)
+                  iCell = cellsInLTSHalo(1,3,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessFirstStage(k,iCell) = layerThicknessCur(k,iCell) + dtFine * layerThicknessTend(k,iCell) !soln update for the fine
+                  end do
+               end do
+
+               ! --- TRACERS
+
+               call mpas_pool_begin_iteration(tracersPool)
+               do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+                  if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                     configName = 'config_use_' // trim(groupItr % memberName)
+                     call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+                     if ( config_use_tracerGroup ) then
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupFirstStage, 3)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupCur, 1)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+
+                        modifiedGroupName = trim(groupItr % memberName) // 'Tend'
+                        call mpas_pool_get_array(tracersTendPool, modifiedGroupName, tracersGroupTend)
+                        call mpas_pool_get_array(tracersTendSum2ndPool, modifiedGroupName, tracersGroupTendSum2nd)
+                        !$omp do schedule(runtime) private(k)
+
+                        ! --- interface layer 1 (correction)
+                        do ic = 1, nCellsInLTSHalo(1,2)
+                           iCell = cellsInLTSHalo(1,2,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupCur(:,k,iCell) = tracersGroupNew(:,k,iCell)
+                              tracersGroupTendSum2nd(:,k,iCell) = tracersGroupTendSum2nd(:,k,iCell) +  tracersGroupTend(:,k,iCell)
+                           end do
+                        end do
+            
+                        ! --- interface layer 2 (correction)
+                        do ic = 1, nCellsInLTSHalo(2,2)
+                           iCell = cellsInLTSHalo(2,2,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupTendSum2nd(:,k,iCell) = tracersGroupTendSum2nd(:,k,iCell) +  tracersGroupTend(:,k,iCell)
+                           end do
+                        end do
+
+                        ! --- fine (soln advancement)
+                        do ic = 1, nCellsInLTSHalo(1,1)
+                           iCell = cellsInLTSHalo(1,1,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupFirstStage(:,k,iCell) = tracersGroupCur(:,k,iCell) + dtFine * tracersGroupTend(:,k,iCell) !soln update for the fine
+                           end do
+                        end do
+                        do ic = 1, nCellsInLTSHalo(1,3)
+                           iCell = cellsInLTSHalo(1,3,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupFirstStage(:,k,iCell) = tracersGroupCur(:,k,iCell) + dtFine * tracersGroupTend(:,k,iCell) !soln update for the fine
+                           end do
+                        end do
+
+                        !$omp end do
+                     end if
+                  end if
+               end do
+
+            end if
+
+            block => block % next
+         end do
+
+         call mpas_timer_stop("advance soln LTS")
+
+         call mpas_timer_start("halo updates  LTS")
+      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+         call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=3)
+         call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=3)
+         call mpas_pool_begin_iteration(tracersPool)
+         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+               call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=3)
+            end if
+         end do
+         call mpas_timer_stop("halo updates  LTS")
+
+
+         call mpas_timer_start("interface prediction LTS")
+         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln cur in soln new
+         block => domain % blocklist
+         do while (associated(block))
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+
+            call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+            if (haveInterface == 1) then
+               beta = REAL(im) / M
+               betaHat = REAL((im - 1) * (im + 1)) / (M * M)
+               do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
+                  iEdge = edgesInLTSHalo(1,2,ie)
+                  normalVelocityNew(:,iEdge) = normalVelocityFirstStage(:,iEdge)
+                  normalVelocityFirstStage(:,iEdge) = (1.0 - beta - betaHat) * normalVelocityCur(k,iEdge) + (beta - betaHat) * normalVelocityFirstStage(:,iEdge) &
+                                             + 2.0 * alphaHat *normalVelocitySecondStage(:,iEdge)
+               end do
+               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
+                  iCell = cellsInLTSHalo(1,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                    layerThicknessNew(k,iCell) = layerThicknessFirstStage(k,iCell)
+                    layerThicknessFirstStage(k,iCell) = (1.0 - beta - betaHat) * layerThicknessCur(k,iCell) + (beta - betaHat) * layerThicknessFirstStage(k,iCell) &
+                                                         + 2.0 * betaHat * layerThicknessSecondStage(k,iCell) 
+                  end do
+               end do
+            end if
+
+            call mpas_pool_begin_iteration(tracersPool)
+            do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+               if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                  configName = 'config_use_' // trim(groupItr % memberName)
+                  call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+                  if ( config_use_tracerGroup ) then
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
+                     !$omp do schedule(runtime) private(k)
+                     do ic = 1, nCellsInLTSHalo(1,2)
+                        do k = 1, maxLevelCell(iCell)
+                           tracersGroupNew(:, k, iCell) = tracersGroupFirstStage(:, k, iCell)
+                           tracersGroupFirstStage(:, k, iCell) = (1.0 - beta - betaHat) * tracersGroupCur(:,k,iCell) + &
+                                                                 (beta - betaHat) * tracersGroupFirstStage(:,k,iCell) + 2.0 * betaHat * tracersGroupSecondStage(:,k,iCell)
+                        end do
+                     end do
+                     !$omp end do
+                  end if
+               end if
+            end do
+
+            block => block % next
+         end do
+         call mpas_timer_stop("interface prediction LTS")
+
+         ! --- update halos for diagnostic variables
+         if (config_use_cvmix_kpp) then
+            call mpas_timer_start("LTS3-boundary layer depth halo update")
+            call mpas_dmpar_field_halo_exch(domain, 'boundaryLayerDepth')
+            call mpas_timer_stop("LTS3-boundary layer depth halo update")
+         end if
+
+         call mpas_timer_start("LTS3-diagnostic halo update")
+         call mpas_dmpar_field_halo_exch(domain, 'normalizedRelativeVorticityEdge')
+         if (config_mom_del4 > 0.0_RKIND) then
+            call mpas_dmpar_field_halo_exch(domain, 'divergence')
+            call mpas_dmpar_field_halo_exch(domain, 'relativeVorticity')
+         end if
+         call mpas_timer_stop("LTS3-diagnostic halo update")
+         call mpas_threading_barrier()
+
+
+         ! --- compute diagnostics and tendencies for velocity, thickness, and tracers
+         call mpas_timer_start("LTS3-update diagnostic variables and compute tendencies")
+         block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+
+               ! DIAGNOSTICS UPDATE ---
+
+               call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 3)
+               call mpas_threading_barrier()
+
+               !$omp do schedule(runtime)
+               do ie = 1, nEdgesInLTSHalo(1,1)
+                  iEdge = edgesInLTSHalo(1,1,ie)
+                  normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+               end do
+               do iRegion =1, nRegions
+                  do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                     iEdge = edgesInLTSHalo(iRegion,2,ie)
+                     normalTransportVelocity(:, iEdge) = normalVelocityFirstStage(:, iEdge)
+                  end do
+               end do
+               !$omp end do
+
+               !! TODO: not sure yet if this is needed
+               !call mpas_timer_start("halo updates  LTS")
+               !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
+               !call mpas_timer_stop("halo updates  LTS")
+
+               ! TENDENCIES COMPUTATION ---
+
+               call ocn_time_integrator_compute_vel_tends(block, dt, err, statePool, 3)
+               call ocn_time_integrator_compute_thick_tends(block, dt, err, statePool, 3)
+               call ocn_time_integrator_compute_tracer_tends( block, dt, err, statePool, 3)
+
+            end if
+
+            block => block % next
+         end do
+         call mpas_timer_stop("LTS3-update diagnostic variables and compute tendencies")
+         call mpas_threading_barrier()
+
+
+         call mpas_timer_start("advance soln LTS")
+         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface
+         ! layer 2 also restore soln cur by copying it back from soln new
+         block => domain % blocklist
+         do while (associated(block))
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(tendPool, 'tracersTend', tracersTendPool)
+
+            call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+
+            call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
+            call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
+
+            call mpas_pool_get_array(tendSum1stPool, 'normalVelocity', normalVelocityTendSum1st)
+            call mpas_pool_get_array(tendSum1stPool, 'layerThickness', layerThicknessTendSum1st)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+    
+               ! --- NORMAL VELOCITY
+
+               ! --- interface layer 1 (correction)
+               do ie = 1, nEdgesInLTSHalo(1,2)
+                  iEdge = edgesInLTSHalo(1,2,ie)
+                  normalVelocityFirstStage(:,iEdge) = normalVelocityNew(:,iEdge)
+                  normalVelocityTendSum1st(:,iEdge) = normalVelocityTendSum1st(:,iEdge) + normalVelocityTend(:,iEdge)
+               end do
+               ! --- interface layer 2 (correction)
+               do ie = 1, nEdgesInLTSHalo(2,2)
+                  iEdge = edgesInLTSHalo(2,2,ie)
+                  normalVelocityTendSum1st(:,iEdge) = normalVelocityTendSum1st(:,iEdge) + normalVelocityTend(:,iEdge)
+               end do
+      
+               ! --- fine (soln advancement)  
+               do ie = 1, nEdgesInLTSHalo(1,1)
+                  iEdge = edgesInLTSHalo(1,1,ie)
+                  normalVelocitySecondStage(:,iEdge) =  weightOld * normalVelocityCur(:,iEdge) + weightNew * normalVelocityFirstStage(:,iEdge) &
+                                                        + weightTend *  dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
+               end do
+               do ie = 1, nEdgesInLTSHalo(1,3)
+                  iEdge = edgesInLTSHalo(1,3,ie)
+                  normalVelocitySecondStage(:,iEdge) =  weightOld * normalVelocityCur(:,iEdge) + weightNew * normalVelocityFirstStage(:,iEdge) &
+                                                        + weightTend *  dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
+               end do
+ 
+               ! --- LAYER THICKNESS
+
+               ! --- interface layer 1 (correction)
+               do ic = 1, nCellsInLTSHalo(1,2)
+                  iCell = cellsInLTSHalo(1,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessFirstStage(k,iCell) = layerThicknessNew(k,iCell)
+                     layerThicknessTendSum1st(k,iCell) = layerThicknessTendSum1st(k,iCell) +  layerThicknessTend(k,iCell)
+                  end do
+               end do
+
+               ! --- interface layer 2 (correction)
+               do ic = 1, nCellsInLTSHalo(2,2)
+                  iCell = cellsInLTSHalo(2,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessTendSum1st(k,iCell) = layerThicknessTendSum1st(k,iCell) +  layerThicknessTend(k,iCell)
+                  end do
+               end do
+
+               ! --- fine (soln advancement)
+               do ic = 1, nCellsInLTSHalo(1,1)
+                  iCell = cellsInLTSHalo(1,1,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessSecondStage(k,iCell) = weightOld * layerThicknessCur(k,iCell) + weightNew * layerThicknessFirstStage(k,iCell) &
+                                                          + weightTend * dtFine * layerThicknessTend(k,iCell) !soln update for the fine
+                  end do
+               end do
+               do ic = 1, nCellsInLTSHalo(1,3)
+                  iCell = cellsInLTSHalo(1,3,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessSecondStage(k,iCell) = weightOld * layerThicknessCur(k,iCell) + weightNew * layerThicknessFirstStage(k,iCell) &
+                                                          + weightTend * dtFine * layerThicknessTend(k,iCell) !soln update for the fine
+                  end do
+               end do
+
+               ! --- TRACERS
+
+               call mpas_pool_begin_iteration(tracersPool)
+               do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+                  if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                     configName = 'config_use_' // trim(groupItr % memberName)
+                     call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+                     if ( config_use_tracerGroup ) then
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupFirstStage, 3)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupSecondStage, 4)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupCur, 1)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+   
+                        modifiedGroupName = trim(groupItr % memberName) // 'Tend'
+                        call mpas_pool_get_array(tracersTendPool, modifiedGroupName, tracersGroupTend)
+                        call mpas_pool_get_array(tracersTendSum1stPool, modifiedGroupName, tracersGroupTendSum1st)
+                        !$omp do schedule(runtime) private(k)
+   
+                        ! --- interface layer 1 (correction)
+                        do ic = 1, nCellsInLTSHalo(1,2)
+                           iCell = cellsInLTSHalo(1,2,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupFirstStage(:,k,iCell) = tracersGroupNew(:,k,iCell)
+                              tracersGroupTendSum1st(:,k,iCell) = tracersGroupTendSum1st(:,k,iCell) +  tracersGroupTend(:,k,iCell)
+                           end do
+                        end do
+               
+                        ! --- interface layer 2 (correction)
+                        do ic = 1, nCellsInLTSHalo(2,2)
+                           iCell = cellsInLTSHalo(2,2,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupTendSum1st(:,k,iCell) = tracersGroupTendSum1st(:,k,iCell) +  tracersGroupTend(:,k,iCell)
+                           end do
+                        end do
+
+                        ! --- fine (soln advancement)
+                        do ic = 1, nCellsInLTSHalo(1,1)
+                           iCell = cellsInLTSHalo(1,1,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupSecondStage(:,k,iCell) = ( weightOld * tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell) + &
+                                                                     weightNew * tracersGroupFirstStage(:,k,iCell) * layerThicknessFirstStage(k,iCell) + &
+                                                                     weightTend * dtFine * tracersGroupTend(:,k,iCell) ) / layerThicknessSecondStage(k,iCell)
+                           end do
+                        end do
+                        do ic = 1, nCellsInLTSHalo(1,3)
+                           iCell = cellsInLTSHalo(1,3,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupSecondStage(:,k,iCell) = ( weightOld * tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell) + &
+                                                                     weightNew * tracersGroupFirstStage(:,k,iCell) * layerThicknessFirstStage(k,iCell) + &
+                                                                     weightTend * dtFine * tracersGroupTend(:,k,iCell) ) / layerThicknessSecondStage(k,iCell)
+                           end do
+                        end do
+
+                        !$omp end do
+                     end if
+                  end if
+               end do
+
+            end if
+
+            block => block % next
+         end do
+
+         call mpas_timer_stop("advance soln LTS")
+
+         call mpas_timer_start("halo updates  LTS")
+         call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+         call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=4)
+         call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=4)
+         call mpas_pool_begin_iteration(tracersPool)
+         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+              call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=4)
+           end if
+         end do
+         call mpas_timer_stop("halo updates  LTS")
+
+
+         call mpas_timer_start("interface prediction LTS")
+         ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln cur in soln new
+         block => domain % blocklist
+         do while (associated(block))
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+
+            call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+
+            call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+            if (haveInterface == 1) then
+               gam = REAL(2 * (im - 1) + 1) / ( 2 * M )
+               gamHat = REAL(2 * (im - 1) * (im - 1) + 2 * (im - 1) + 1) / (2 * M * M)
+               do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
+                  iEdge = edgesInLTSHalo(1,2,ie)
+                  normalVelocityNew(:,iEdge) = normalVelocitySecondStage(:,iEdge)
+                  normalVelocitySecondStage(:,iEdge) = (1.0 - gam - gamHat) * normalVelocityCur(k,iEdge) + (gam - gamHat) * normalVelocityFirstStage(:,iEdge) &
+                                             + 2.0 * gamHat *normalVelocitySecondStage(:,iEdge)
+               end do
+               do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
+                  iCell = cellsInLTSHalo(1,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                    layerThicknessNew(k,iCell) = layerThicknessSecondStage(k,iCell)
+                    layerThicknessSecondStage(k,iCell) = (1.0 - gam - gamHat) * layerThicknessCur(k,iCell) + (gam - gamHat) * layerThicknessFirstStage(k,iCell) &
+                                                         + 2.0 * gamHat * layerThicknessSecondStage(k,iCell) 
+                  end do
+               end do
+            end if
+
+            call mpas_pool_begin_iteration(tracersPool)
+            do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+               if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                  configName = 'config_use_' // trim(groupItr % memberName)
+                  call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+                  if ( config_use_tracerGroup ) then
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
+                     !$omp do schedule(runtime) private(k)
+                     do ic = 1, nCellsInLTSHalo(1,2)
+                        do k = 1, maxLevelCell(iCell)
+                           tracersGroupNew(:, k, iCell) = tracersGroupSecondStage(:, k, iCell)
+                           tracersGroupSecondStage(:, k, iCell) = (1.0 - gam - gamHat) * tracersGroupCur(:,k,iCell) + &
+                                                                  (gam - gamHat) * tracersGroupFirstStage(:,k,iCell) + 2.0 * gamHat * tracersGroupSecondStage(:,k,iCell)
+                        end do
+                     end do
+                     !$omp end do
+                  end if
+               end if
+            end do
+
+            block => block % next
+         end do
+         call mpas_timer_stop("interface prediction LTS")
+
+         ! --- update halos for diagnostic variables
+         if (config_use_cvmix_kpp) then
+            call mpas_timer_start("LTS3-boundary layer depth halo update")
+            call mpas_dmpar_field_halo_exch(domain, 'boundaryLayerDepth')
+            call mpas_timer_stop("LTS3-boundary layer depth halo update")
+         end if
+
+         call mpas_timer_start("LTS3-diagnostic halo update")
+         call mpas_dmpar_field_halo_exch(domain, 'normalizedRelativeVorticityEdge')
+         if (config_mom_del4 > 0.0_RKIND) then
+            call mpas_dmpar_field_halo_exch(domain, 'divergence')
+            call mpas_dmpar_field_halo_exch(domain, 'relativeVorticity')
+         end if
+         call mpas_timer_stop("LTS3-diagnostic halo update")
+         call mpas_threading_barrier()
+
+
+         ! --- compute diagnostics and tendencies for velocity, thickness, and tracers
+         call mpas_timer_start("LTS3-update diagnostic variables and compute tendencies")
+         block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+            call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+
+               ! DIAGNOSTICS UPDATE ---
+
+               call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 4)
+               call mpas_threading_barrier()
+ 
+               !$omp do schedule(runtime)
+               do ie = 1, nEdgesInLTSHalo(1,1)
+                  iEdge = edgesInLTSHalo(1,1,ie)
+                  normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
+               end do
+               do iRegion =1, nRegions
+                  do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                     iEdge = edgesInLTSHalo(iRegion,2,ie)
+                     normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
+                  end do
+               end do
+               !$omp end do
+
+               !! TODO: not sure yet if this is needed
+               !call mpas_timer_start("halo updates  LTS")
+               !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
+               !call mpas_timer_stop("halo updates  LTS")
+
+               ! TENDENCIES COMPUTATION ---
+
+               call ocn_time_integrator_compute_vel_tends(block, dt, err, statePool, 4)
+               call ocn_time_integrator_compute_thick_tends(block, dt, err, statePool, 4)
+               call ocn_time_integrator_compute_tracer_tends( block, dt, err, statePool, 4)
+
+            end if
+
+            block => block % next
+         end do
+         call mpas_timer_stop("LTS3-update diagnostic variables and compute tendencies")
+         call mpas_threading_barrier()
+
+
+         call mpas_timer_start("advance soln LTS")
+         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface
+         ! layer 2 also restore soln cur by copying it back from soln new
+         block => domain % blocklist
+         do while (associated(block))
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(tendSum3rdPool, 'tracersTend', tracersTendSum3rdPool)
+
+            call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+
+            call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
+            call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
+
+            call mpas_pool_get_array(tendSum1stPool, 'normalVelocity', normalVelocityTendSum1st)
+            call mpas_pool_get_array(tendSum1stPool, 'layerThickness', layerThicknessTendSum1st)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+    
+               ! --- NORMAL VELOCITY
+
+               ! --- interface layer 1 (correction)
+               do ie = 1, nEdgesInLTSHalo(1,2)
+                  iEdge = edgesInLTSHalo(1,2,ie)
+                  normalVelocitySecondStage(:,iEdge) = normalVelocityNew(:,iEdge)
+                  normalVelocityTendSum3rd(:,iEdge) = normalVelocityTendSum3rd(:,iEdge) + normalVelocityTend(:,iEdge)
+               end do
+               ! --- interface layer 2 (correction)
+               do ie = 1, nEdgesInLTSHalo(2,2)
+                  iEdge = edgesInLTSHalo(2,2,ie)
+                  normalVelocityTendSum3rd(:,iEdge) = normalVelocityTendSum3rd(:,iEdge) + normalVelocityTend(:,iEdge)
+               end do
+      
+               ! --- fine (soln advancement)  
+               do ie = 1, nEdgesInLTSHalo(1,1)
+                  iEdge = edgesInLTSHalo(1,1,ie)
+                  normalVelocityCur(:,iEdge) =  (1.0 / 3.0) * normalVelocityCur(:,iEdge) + (2.0 / 3.0) * normalVelocitySecondStage(:,iEdge) &
+                                                        + (2.0 / 3.0) *  dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
+               end do
+               do ie = 1, nEdgesInLTSHalo(1,3)
+                  iEdge = edgesInLTSHalo(1,3,ie)
+                  normalVelocityCur(:,iEdge) =  (1.0 / 3.0) * normalVelocityCur(:,iEdge) + (2.0 / 3.0) * normalVelocitySecondStage(:,iEdge) &
+                                                        + (2.0 / 3.0) *  dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
+               end do
+ 
+               ! --- LAYER THICKNESS
+
+               ! --- interface layer 1 (correction)
+               do ic = 1, nCellsInLTSHalo(1,2)
+                  iCell = cellsInLTSHalo(1,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessSecondStage(k,iCell) = layerThicknessNew(k,iCell)
+                     layerThicknessTendSum3rd(k,iCell) = layerThicknessTendSum3rd(k,iCell) +  layerThicknessTend(k,iCell)
+                  end do
+               end do
+
+               ! --- interface layer 2 (correction)
+               do ic = 1, nCellsInLTSHalo(2,2)
+                  iCell = cellsInLTSHalo(2,2,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessTendSum3rd(k,iCell) = layerThicknessTendSum3rd(k,iCell) +  layerThicknessTend(k,iCell)
+                  end do
+               end do
+
+               ! --- fine (soln advancement)
+               do ic = 1, nCellsInLTSHalo(1,1)
+                  iCell = cellsInLTSHalo(1,1,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessNew(k,iCell) = (1.0 / 3.0)  * layerThicknessCur(k,iCell) + (2.0 / 3.0) * layerThicknessSecondStage(k,iCell) &
+                                                          + (2.0 / 3.0) * dtFine * layerThicknessTend(k,iCell) !soln update for the fine
+                  end do
+               end do
+               do ic = 1, nCellsInLTSHalo(1,3)
+                  iCell = cellsInLTSHalo(1,3,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessNew(k,iCell) = (1.0 / 3.0)  * layerThicknessCur(k,iCell) + (2.0 / 3.0) * layerThicknessSecondStage(k,iCell) &
+                                                          + (2.0 / 3.0) * dtFine * layerThicknessTend(k,iCell) !soln update for the fine
+                  end do
+               end do
+
+               ! --- TRACERS
+
+               call mpas_pool_begin_iteration(tracersPool)
+               do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+                  if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                     configName = 'config_use_' // trim(groupItr % memberName)
+                     call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+                     if ( config_use_tracerGroup ) then
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupFirstStage, 3)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupSecondStage, 4)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupCur, 1)
+                        call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+   
+                        modifiedGroupName = trim(groupItr % memberName) // 'Tend'
+                        call mpas_pool_get_array(tracersTendPool, modifiedGroupName, tracersGroupTend)
+                        call mpas_pool_get_array(tracersTendSum3rdPool, modifiedGroupName, tracersGroupTendSum3rd)
+                        !$omp do schedule(runtime) private(k)
+   
+                        ! --- interface layer 1 (correction)
+                        do ic = 1, nCellsInLTSHalo(1,2)
+                           iCell = cellsInLTSHalo(1,2,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupSecondStage(:,k,iCell) = tracersGroupNew(:,k,iCell)
+                              tracersGroupTendSum3rd(:,k,iCell) = tracersGroupTendSum3rd(:,k,iCell) +  tracersGroupTend(:,k,iCell)
+                           end do
+                        end do
+               
+                        ! --- interface layer 2 (correction)
+                        do ic = 1, nCellsInLTSHalo(2,2)
+                           iCell = cellsInLTSHalo(2,2,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupTendSum3rd(:,k,iCell) = tracersGroupTendSum3rd(:,k,iCell) +  tracersGroupTend(:,k,iCell)
+                           end do
+                        end do
+
+                        ! --- fine (soln advancement)
+                        do ic = 1, nCellsInLTSHalo(1,1)
+                           iCell = cellsInLTSHalo(1,1,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupCur(:,k,iCell) = ( (1.0 / 3.0) * tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell) + &
+                                                             (2.0 / 3.0) * tracersGroupSecondStage(:,k,iCell) * layerThicknessSecondStage(k,iCell) + &
+                                                             (2.0 / 3.0) * dtFine * tracersGroupTend(:,k,iCell) ) / layerThicknessNew(k,iCell)
+                           end do
+                        end do
+                        do ic = 1, nCellsInLTSHalo(1,3)
+                           iCell = cellsInLTSHalo(1,3,ic)
+                           do k = 1, maxLevelCell(iCell)
+                              tracersGroupCur(:,k,iCell) = ( (1.0 / 3.0) * tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell) + &
+                                                             (2.0 / 3.0) * tracersGroupSecondStage(:,k,iCell) * layerThicknessSecondStage(k,iCell) + &
+                                                             (2.0 / 3.0) * dtFine * tracersGroupTend(:,k,iCell) ) / layerThicknessNew(k,iCell)
+                           end do
+                        end do
+
+                        !$omp end do
+                     end if
+                  end if
+               end do
+
+               do ic = 1, nCellsInLTSHalo(1,1)
+                  iCell = cellsInLTSHalo(1,1,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessCur(k,iCell) = layerThicknessNew(k,iCell)
+                  end do
+               end do
+               do ic = 1, nCellsInLTSHalo(1,3)
+                  iCell = cellsInLTSHalo(1,3,ic)
+                  do k = 1, maxLevelCell(iCell)
+                     layerThicknessCur(k,iCell) = layerThicknessNew(k,iCell) 
+                  end do
+               end do
+
+            end if
+
+            block => block % next
+         end do
+
+         call mpas_timer_stop("advance soln LTS")
+
+         call mpas_timer_start("halo updates  LTS")
+         call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+         call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=1)
+         call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=1)
+         call mpas_pool_begin_iteration(tracersPool)
+         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+              call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=1)
+           end if
+         end do
+         call mpas_timer_stop("halo updates  LTS")
+
+      end do ! --- end substepping
+ 
+
+      call mpas_timer_start("copy soln into new soln LTS")
+      ! --- copy old soln into new soln for the fine cells and edges
       block => domain % blocklist
       do while (associated(block))
          call mpas_pool_get_subpool(block % structs, 'state', statePool)
          call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
          call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
 
          call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
 
@@ -874,13 +1849,7 @@ module ocn_time_integration_lts3
          call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
          call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
          call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
-
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
-
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+         call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
 
          call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
          call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
@@ -888,53 +1857,62 @@ module ocn_time_integration_lts3
          call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
          call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
 
-         if (haveInterface == 1) then
-            alpha = REAL((im - 1)) / M
-            alphaHat = REAL((im - 1) * (im - 1)) / (M * M)
-            do ie = 1, nEdgesInLTSHalo(1,2) !interface layer 1
-               iEdge = edgesInLTSHalo(1,2,ie)
+         if(haveFine == 1) then
+
+            ! --- normal velocity
+            do ie = 1, nEdgesInLTSHalo(1,1) 
+               iEdge = edgesInLTSHalo(1,1,ie)
                normalVelocityNew(:,iEdge) = normalVelocityCur(:,iEdge)
-               normalVelocityCur(:,iEdge) = (1.0 - alpha - alphaHat) * normalVelocityCur(k,iEdge) + (alpha - alphaHat) * normalVelocityFirstStage(:,iEdge) &
-                                             + 2.0 * alphaHat *normalVelocitySecondStage(:,iEdge)
             end do
-            do ic = 1, nCellsInLTSHalo(1,2) !interface layer 1
+            do ie = 1, nEdgesInLTSHalo(1,3)
+               iEdge = edgesInLTSHalo(1,3,ie)
+               normalVelocityNew(:,iEdge) = normalVelocityCur(:,iEdge)
+            end do
+
+            do ic = 1, nCellsInLTSHalo(1,2) 
                iCell = cellsInLTSHalo(1,2,ic)
                do k = 1, maxLevelCell(iCell)
-                 layerThicknessNew(k,iCell) = layerThicknessCur(k,iCell)
-                 layerThicknessCur(k,iCell) = (1.0 - alpha - alphaHat) * layerThicknessCur(k,iCell) + (alpha - alphaHat) * layerThicknessFirstStage(k,iCell) &
-                                               + 2.0 * alphaHat * layerThicknessSecondStage(k,iCell) 
+                  layerThicknessNew(k,iCell) = layerThicknessCur(k,iCell)
                end do
             end do
-         end if
+            do ic = 1, nCellsInLTSHalo(1,3) 
+               iCell = cellsInLTSHalo(1,3,ic)
+               do k = 1, maxLevelCell(iCell)
+                  layerThicknessNew(k,iCell) = layerThicknessCur(k,iCell)
+               end do
+            end do
 
-         call mpas_pool_begin_iteration(tracersPool)
-         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-               configName = 'config_use_' // trim(groupItr % memberName)
-               call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+            call mpas_pool_begin_iteration(tracersPool)
+            do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+               if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                  configName = 'config_use_' // trim(groupItr % memberName)
+                  call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
 
-               if ( config_use_tracerGroup ) then
-                  call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
-                  call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
-                  call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
-                  call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
-                  !$omp do schedule(runtime) private(k)
-                  do ic = 1, nCellsInLTSHalo(1,2)
-                     do k = 1, maxLevelCell(iCell)
-                        tracersGroupNew(:, k, iCell) = tracersGroupCur(:, k, iCell)
-                        tracersGroupCur(:, k, iCell) = (1.0 - alpha - alphaHat) * tracersGroupCur(:,k,iCell) + &
-                                         (alpha - alphaHat) * tracersGroupFirstStage(:,k,iCell) + 2.0 * alphaHat * tracersGroupSecondStage(:,k,iCell)
+                  if ( config_use_tracerGroup ) then
+
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
+                     call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
+                     !$omp do schedule(runtime) private(k)
+                     do iCell = 1, nCells
+                        do k = 1, maxLevelCell(iCell)
+                           tracersGroupNew(:, k, iCell) = tracersGroupCur(:, k, iCell)
+                        end do
                      end do
-                  end do
-                  !$omp end do
+                     !$omp end do
+                  end if
                end if
-            end if
-         end do
+            end do
+
+         end if
 
          block => block % next
       end do
-      call mpas_timer_stop("interface prediction LTS")
-
+      call mpas_timer_stop("copy soln into new soln LTS")
+      
+      ! --------------------------------------  STEP  ------------------------------------------
+      ! --- compute the third stage of SSPRK for coarse
+      !
+     
       ! --- update halos for diagnostic variables
       if (config_use_cvmix_kpp) then
          call mpas_timer_start("LTS3-boundary layer depth halo update")
@@ -951,68 +1929,49 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3-diagnostic halo update")
       call mpas_threading_barrier()
 
-      ! --- compute tendencies for high frequency thickness
-      if (config_use_freq_filtered_thickness) then
-         !TODO: MISSING FOR NOW (it would add too much complexity to something
-         !already complex)
-      end if
-
-      ! --- require that cells don't dry out
-      if (config_use_wetting_drying) then
-         !TODO: MISSING FOR NOW
-      end if
-
       ! --- compute diagnostics and tendencies for velocity, thickness, and tracers
       call mpas_timer_start("LTS3-update diagnostic variables and compute tendencies")
       block => domain % blocklist
       do while (associated(block))
 
          call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
          call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
          call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
          call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
-         call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+         call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool) 
          call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
-         call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
 
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
          call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
-         call mpas_pool_get_array(diagnosticsPool, 'normalGMBolusVelocity', normalGMBolusVelocity)
 
-         if(haveFine == 1 .or. haveInterface == 1) then
+         if(haveCoarse == 1) then
 
             ! DIAGNOSTICS UPDATE ---
 
-            call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 1)
+            call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 4)
             call mpas_threading_barrier()
 
             !$omp do schedule(runtime)
-            do iEdge = 1, nEdges
-               normalTransportVelocity(:, iEdge) = normalVelocityCur(:,iEdge)
+            do ie = 1, nEdgesInLTSHalo(2,1)
+               iEdge = edgesInLTSHalo(2,1,ie)
+               normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
             end do
             !$omp end do
 
-            ! --- compute normalGMBolusVelocity, relativeSlope and
-            ! RediDiffVertCoef if respective flags are turned on
-            if (config_use_GM) then
-               call ocn_gm_compute_Bolus_velocity(statePool, diagnosticsPool, meshPool, scratchPool, timeLevelIn=1)
-            end if
-            call mpas_threading_barrier()
-
-            if (config_use_GM) then
-            !$omp do schedule(runtime)
-            do iEdge = 1, nEdges
-               normalTransportVelocity(:, iEdge) = normalTransportVelocity(:,iEdge) + normalGMBolusVelocity(:,iEdge)
-            end do
-            !$omp end do
-            end if
+            !! TODO: not sure yet if this is needed
+            !call mpas_timer_start("halo updates  LTS")
+            !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
+            !call mpas_timer_stop("halo updates  LTS")
 
             ! TENDENCIES COMPUTATION ---
 
-            call ocn_time_integrator_compute_vel_tends(block, dt, err, statePool, 1)
-            call ocn_time_integrator_compute_thick_tends(block, dt, err, statePool, 1)
-            call ocn_time_integrator_compute_tracer_tends( block, dt, err, statePool, 1)
+            call ocn_time_integrator_compute_vel_tends(block, dt, err, statePool, 4)
+            call ocn_time_integrator_compute_thick_tends(block, dt, err, statePool, 4)
+            call ocn_time_integrator_compute_tracer_tends( block, dt, err, statePool, 4)
 
          end if
 
@@ -1021,173 +1980,443 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3-update diagnostic variables and compute tendencies")
       call mpas_threading_barrier()
 
-   end do
+      call mpas_timer_start("LTS3 advance soln")
+      ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK
+      block => domain % blocklist
+      do while (associated(block))
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+         call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+         call mpas_pool_get_subpool(tendPool, 'tracersTend', tracersTendPool)
+         call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
 
-   call mpas_timer_start("advance soln LTS")
-   ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface
-   ! layer 2 also restore soln cur by copying it back from soln new
-   block => domain % blocklist
-   do while (associated(block))
-      call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-      call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-      call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
-      call mpas_pool_get_subpool(block % structs, 'state', statePool)
-      call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-      call mpas_pool_get_subpool(tendSum2ndPool, 'tracersTend', tracersTendSum2ndPool)
+         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
 
-      call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
 
-      call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-      call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-      call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-      call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-      call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
-      call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
 
-      call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-      call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
 
-      call mpas_pool_get_array(tendSum2ndPool, 'normalVelocity', normalVelocityTendSum2nd)
-      call mpas_pool_get_array(tendSum2ndPool, 'layerThickness', layerThicknessTendSum2nd)
+         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
+         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
 
-      call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
-      call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+         call mpas_pool_get_array(diagnosticsPool, 'wettingVelocity', wettingVelocity)
 
-      call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
-      call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+         if (haveCoarse == 1) then
 
-      call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
-      call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+            ! --- NORMAL VELOCITY
 
-      if(haveFine == 1 .or. haveInterface == 1) then
-
-      ! --- NORMAL VELOCITY
-
-         ! --- interface layer 1 (correction)
-         do ie = 1, nEdgesInLTSHalo(1,2)
-            iEdge = edgesInLTSHalo(1,2,ie)
-            normalVelocityCur(:,iEdge) = normalVelocityNew(:,iEdge)
-            normalVelocityTendSum2nd(:,iEdge) = normalVelocityTendSum2nd(:,iEdge) + normalVelocityTend(:,iEdge)
-         end do
-         ! --- interface layer 2 (correction)
-         do ie = 1, nEdgesInLTSHalo(2,2)
-            iEdge = edgesInLTSHalo(2,2,ie)
-            normalVelocityTendSum2nd(:,iEdge) = normalVelocityTendSum2nd(:,iEdge) + normalVelocityTend(:,iEdge)
-         end do
-      
-         ! --- fine (soln advancement)  
-         do ie = 1, nEdgesInLTSHalo(1,1)
-            iEdge = edgesInLTSHalo(1,1,ie)
-            normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
-         end do
-         do ie = 1, nEdgesInLTSHalo(1,3)
-            iEdge = edgesInLTSHalo(1,3,ie)
-            normalVelocityFirstStage(:,iEdge) =  normalVelocityCur(:,iEdge) + dtFine * normalVelocityTend(:,iEdge) !soln update for the fine
-         end do
- 
-      ! --- LAYER THICKNESS
-
-         ! --- interface layer 1 (correction)
-         do ic = 1, nCellsInLTSHalo(1,2)
-            iCell = cellsInLTSHalo(1,2,ic)
-            do k = 1, maxLevelCell(iCell)
-               layerThicknessCur(k,iCell) = layerThicknessNew(k,iCell)
-               layerThicknessTendSum2nd(k,iCell) = layerThicknessTendSum2nd(k,iCell) +  layerThicknessTend(k,iCell)
+            ! --- coarse
+            do ie = 1, nEdgesInLTSHalo(2,1)
+               iEdge = edgesInLTSHalo(2,1,ie)
+               normalVelocityNew(:,iEdge) = (1.0 / 3.0)  * normalVelocityCur(:,iEdge) + (2.0 / 3.0) * normalVelocitySecondStage(:,iEdge) &
+                                            + (2.0 / 3.0) * dtFine * normalVelocityTend(:,iEdge)
             end do
-         end do
 
-         ! --- interface layer 2 (correction)
-         do ic = 1, nCellsInLTSHalo(2,2)
-            iCell = cellsInLTSHalo(2,2,ic)
-            do k = 1, maxLevelCell(iCell)
-               layerThicknessTendSum2nd(k,iCell) = layerThicknessTendSum2nd(k,iCell) +  layerThicknessTend(k,iCell)
+            ! --- LAYER THICKNESS
+
+            ! --- coarse
+            do ic = 1, nCellsInLTSHalo(2,1)
+               iCell = cellsInLTSHalo(2,1,ic)
+               do k = 1, maxLevelCell(iCell)
+                  layerThicknessNew(k,iCell) = (1.0 / 3.0)  * layerThicknessCur(k,iCell) + (2.0 / 3.0) * layerThicknessSecondStage(k,iCell) &
+                                               + (2.0 / 3.0) * dtFine * layerThicknessTend(k,iCell)
+               end do
             end do
-         end do
 
-         ! --- fine (soln advancement)
-         do ic = 1, nCellsInLTSHalo(1,1)
-            iCell = cellsInLTSHalo(1,1,ic)
-            do k = 1, maxLevelCell(iCell)
-               layerThicknessFirstStage(k,iCell) = layerThicknessCur(k,iCell) + dtFine * layerThicknessTend(k,iCell) !soln update for the fine
-            end do
-         end do
-         do ic = 1, nCellsInLTSHalo(1,3)
-            iCell = cellsInLTSHalo(1,3,ic)
-            do k = 1, maxLevelCell(iCell)
-               layerThicknessFirstStage(k,iCell) = layerThicknessCur(k,iCell) + dtFine * layerThicknessTend(k,iCell) !soln update for the fine
-            end do
-         end do
+            ! --- TRACERS
 
-      ! --- TRACERS
+            call mpas_pool_begin_iteration(tracersPool)
+            do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+               if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                  configName = 'config_use_' // trim(groupItr % memberName)
+                  call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
 
-         call mpas_pool_begin_iteration(tracersPool)
-         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-               configName = 'config_use_' // trim(groupItr % memberName)
-               call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-               if ( config_use_tracerGroup ) then
-                  call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupFirstStage, 3)
-                  call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupCur, 1)
-                  call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+                  if ( config_use_tracerGroup ) then
+                     call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupSecondStage, 4)
+                     call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+                     call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupCur, 1)
 
-                  modifiedGroupName = trim(groupItr % memberName) // 'Tend'
-                  call mpas_pool_get_array(tracersTendPool, modifiedGroupName, tracersGroupTend)
-                  call mpas_pool_get_array(tracersTendSum2ndPool, modifiedGroupName, tracersGroupTendSum2nd)
-                  !$omp do schedule(runtime) private(k)
-
-                  ! --- interface layer 1 (correction)
-                  do ic = 1, nCellsInLTSHalo(1,2)
-                     iCell = cellsInLTSHalo(1,2,ic)
-                     do k = 1, maxLevelCell(iCell)
-                        tracersGroupCur(:,k,iCell) = tracersGroupNew(:,k,iCell)
-                        tracersGroupTendSum2nd(:,k,iCell) = tracersGroupTendSum2nd(:,k,iCell) +  tracersGroupTend(:,k,iCell)
+                     modifiedGroupName = trim(groupItr % memberName) // 'Tend'
+                     call mpas_pool_get_array(tracersTendPool, modifiedGroupName, tracersGroupTend)
+                     !$omp do schedule(runtime) private(k)
+                     ! --- coarse
+                     do ic = 1, nCellsInLTSHalo(2,1)
+                        iCell = cellsInLTSHalo(2,1,ic)
+                        do k = 1, maxLevelCell(iCell)
+                           tracersGroupNew(:,k,iCell) = ( (1.0 / 3.0) * tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell) + &
+                                                          (2.0 / 3.0) * tracersGroupSecondStage(:,k,iCell) * layerThicknessSecondStage(k,iCell) + &
+                                                          (2.0 / 3.0) * dtFine * tracersGroupTend(:,k,iCell) ) / layerThicknessNew(k,iCell)
+                        end do
                      end do
-                  end do
-            
-                  ! --- interface layer 2 (correction)
-                  do ic = 1, nCellsInLTSHalo(2,2)
-                     iCell = cellsInLTSHalo(2,2,ic)
-                     do k = 1, maxLevelCell(iCell)
-                        tracersGroupTendSum2nd(:,k,iCell) = tracersGroupTendSum2nd(:,k,iCell) +  tracersGroupTend(:,k,iCell)
-                     end do
-                  end do
-
-                  ! --- fine (soln advancement)
-                  do ic = 1, nCellsInLTSHalo(1,1)
-                     iCell = cellsInLTSHalo(1,1,ic)
-                     do k = 1, maxLevelCell(iCell)
-                        tracersGroupFirstStage(:,k,iCell) = tracersGroupCur(:,k,iCell) + dtFine * tracersGroupTend(:,k,iCell) !soln update for the fine
-                     end do
-                  end do
-                  do ic = 1, nCellsInLTSHalo(1,3)
-                     iCell = cellsInLTSHalo(1,3,ic)
-                     do k = 1, maxLevelCell(iCell)
-                        tracersGroupFirstStage(:,k,iCell) = tracersGroupCur(:,k,iCell) + dtFine * tracersGroupTend(:,k,iCell) !soln update for the fine
-                     end do
-                  end do
-
-                  !$omp end do
+                     !$omp end do
+                  end if
                end if
-            end if
+            end do
+
+         end if
+
+         block => block % next
+      end do
+      call mpas_timer_stop("LTS3 advance soln")
+      call mpas_threading_barrier()
+
+
+      ! --------------------------------------  STEP  ------------------------------------------
+      ! --- interface correction
+      !
+
+      call mpas_timer_start("interface correction LTS")
+      ! --- correct solution for interface layer 1 and interface layer 2
+      block => domain % blocklist
+      do while (associated(block))
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
+         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+
+         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+
+         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+         call mpas_pool_get_array(tendSum1stPool, 'normalVelocity', normalVelocityTendSum1st)
+         call mpas_pool_get_array(tendSum1stPool, 'layerThickness', layerThicknessTendSum1st)
+
+         call mpas_pool_get_array(tendSum2ndPool, 'normalVelocity', normalVelocityTendSum2nd)
+         call mpas_pool_get_array(tendSum2ndPool, 'layerThickness', layerThicknessTendSum2nd)
+
+         call mpas_pool_get_array(tendSum3rdPool, 'normalVelocity', normalVelocityTendSum3rd)
+         call mpas_pool_get_array(tendSum3rdPool, 'layerThickness', layerThicknessTendSum3rd)
+
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+         if (haveInterface == 1) then
+
+            do iRegion = 1,nRegions
+
+               ! --- NORMAL VELOCITY
+
+               ! --- interface layers
+
+               do ie = 1, nEdgesInLTSHalo(iRegion,2)
+                  iEdge = edgesInLTSHalo(iRegion,2,ie)
+                  normalVelocityNew(:,iEdge) =  normalVelocityCur(:,iEdge) + weightTendSum2nd * dtFine * normalVelocityTendSum2nd(:,iEdge) &
+                                                + weightTendSum1st * dtFine * normalVelocityTendSum1st(:,iEdge) + weightTendSum3rd * dtFine * normalVelocityTendSum3rd(:,iEdge)
+               end do
+
+               ! --- LAYER THICKNESS
+
+               ! --- interface layers
+
+               do ic = 1, nCellsInLTSHalo(iRegion,2)
+                  iCell = cellsInLTSHalo(iRegion,2,ic)
+                  do k= 1, maxLevelCell(iCell)
+                     layerThicknessNew(k,iCell) = layerThicknessCur(k,iCell) + weightTendSum2nd * dtFine * layerThicknessTendSum2nd(k,iCell) &
+                                                  + weightTendSum1st * dtFine * layerThicknessTendSum1st(k,iCell) &
+                                                  + weightTendsum3rd * dtFine * layerThicknessTendSum3rd(k,iCell)
+                  end do
+               end do
+            end do
+   
+            call mpas_pool_begin_iteration(tracersPool)
+            do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+               if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                  configName = 'config_use_' // trim(groupItr % memberName)
+                  call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+                  if ( config_use_tracerGroup ) then
+                     call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupCur, 1)
+                     call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+
+                     modifiedGroupName = trim(groupItr % memberName) // 'Tend'
+                     call mpas_pool_get_array(tracersTendSum1stPool, modifiedGroupName, tracersGroupTendSum1st)
+                     call mpas_pool_get_array(tracersTendSum2ndPool, modifiedGroupName, tracersGroupTendSum2nd)
+                     call mpas_pool_get_array(tracersTendSum3rdPool, modifiedGroupName, tracersGroupTendSum3rd)
+
+                     !$omp do schedule(runtime) private(k)
+
+                     ! --- TRACERS
+
+                     ! --- interface layers
+
+                     do iRegion = 1, nRegions
+                        do ic = 1, nCellsInLTSHalo(iRegion,2)
+                           iCell = cellsInLTSHalo(iRegion,2,ic)
+                           do k= 1, maxLevelCell(iCell)
+                              tracersGroupNew(:,k,iCell) = ( tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell) &
+                                                             + weightTendSum2nd * dtFine * tracersGroupTendSum2nd(:,k,iCell) &
+                                                             + weightTendSum1st * dtFine * tracersGroupTendSum1st(:,k,iCell) &
+                                                             + weightTendsum3rd * dtFine * tracersgroupTendSum3rd(:,k,iCell) ) / layerThicknessNew(k,iCell)
+                           end do
+                        end do
+                     end do
+                     !$omp end do
+                  end if
+               end if
+            end do
+
+         end if
+
+         block => block % next
+      end do
+      call mpas_timer_stop("interface correction LTS")
+
+      call mpas_timer_start("halo updates  LTS")
+      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+      call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=2)
+      call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=2)
+      call mpas_pool_begin_iteration(tracersPool)
+      do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+         if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+            call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=2)
+         end if
+      end do
+      call mpas_timer_stop("halo updates  LTS")
+
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! END LTS SCHEME
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      !
+      !  A little clean up at the end
+      !
+
+      call mpas_timer_start("LTS3-compute vmix")
+      block => domain % blocklist
+      do while (associated(block))
+
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+         call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+         call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+
+
+         call ocn_vmix_implicit(dt, meshPool, diagnosticsPool, statePool, forcingPool, scratchPool, err, 2)
+         call mpas_threading_barrier()
+
+         block => block % next
+      end do
+      call mpas_timer_stop("LTS3-compute vmix")
+      call mpas_threading_barrier()
+
+      call mpas_timer_start("LTS3-cleanup phase")
+
+      call mpas_timer_start("LTS3-implicit vert mix")
+      ! Update halo on u and tracers, which were just updated for implicit vertical mixing.  If not done, this leads to lack of volume
+      ! conservation.  It is required because halo updates in LTS3 are only  conducted on tendencies, not on the velocity
+      ! and tracer fields (NOT TRUE! ACTUALLY IN LTS3 THE HALO UPDATES ARE ONLY ON THE STATE VARIABLES AND NOT ON THE TENDENCIES. TODO: DO WE STILL NEED THIS?). 
+      ! So this update is required to communicate the change due to implicit vertical mixing across the boundary.
+      call mpas_timer_start("LTS3-implicit vert mix halos")
+
+      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+
+      call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=2)
+
+      call mpas_pool_begin_iteration(tracersPool)
+      do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+         if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+            call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=2) 
+         end if
+      end do
+
+      call mpas_timer_stop("LTS3-implicit vert mix halos")
+      call mpas_timer_stop("LTS3-implicit vert mix")
+      call mpas_threading_barrier()
+
+      block => domain % blocklist
+      do while (associated(block))
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+         call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+         call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+         call mpas_pool_get_subpool(block % structs, 'verticalMesh', verticalMeshPool)
+
+         call mpas_pool_get_dimension(meshPool, 'nCells', nCells)
+         call mpas_pool_get_dimension(meshPool, 'nEdges', nEdges)
+         call mpas_pool_get_array(meshPool, 'bottomDepth', bottomDepth)
+
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1) 
+         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
+
+         call mpas_pool_get_dimension(diagnosticsPool, 'index_surfaceVelocityZonal', indexSurfaceVelocityZonal)
+         call mpas_pool_get_dimension(diagnosticsPool, 'index_surfaceVelocityMeridional', indexSurfaceVelocityMeridional)
+         call mpas_pool_get_dimension(diagnosticsPool, 'index_SSHGradientZonal', indexSSHGradientZonal)
+         call mpas_pool_get_dimension(diagnosticsPool, 'index_SSHGradientMeridional', indexSSHGradientMeridional)
+
+         call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+         call mpas_pool_get_array(diagnosticsPool, 'normalGMBolusVelocity', normalGMBolusVelocity)
+         call mpas_pool_get_array(diagnosticsPool, 'velocityX', velocityX) 
+         call mpas_pool_get_array(diagnosticsPool, 'velocityY', velocityY)
+         call mpas_pool_get_array(diagnosticsPool, 'velocityZ', velocityZ)
+         call mpas_pool_get_array(diagnosticsPool, 'velocityZonal', velocityZonal)
+         call mpas_pool_get_array(diagnosticsPool, 'velocityMeridional', velocityMeridional)
+         call mpas_pool_get_array(diagnosticsPool, 'gradSSH', gradSSH) 
+         call mpas_pool_get_array(diagnosticsPool, 'gradSSHX', gradSSHX)
+         call mpas_pool_get_array(diagnosticsPool, 'gradSSHY', gradSSHY)
+         call mpas_pool_get_array(diagnosticsPool, 'gradSSHZ', gradSSHZ)
+         call mpas_pool_get_array(diagnosticsPool, 'gradSSHZonal', gradSSHZonal)
+         call mpas_pool_get_array(diagnosticsPool, 'gradSSHMeridional', gradSSHMeridional)
+         call mpas_pool_get_array(diagnosticsPool, 'surfaceVelocity', surfaceVelocity)
+         call mpas_pool_get_array(diagnosticsPool, 'SSHGradient', SSHGradient)
+         call mpas_pool_get_array(verticalMeshPool, 'restingThickness', restingThickness)
+         call mpas_pool_get_array(forcingPool, 'tidalInputMask', tidalInputMask)
+         call mpas_pool_get_array(forcingPool, 'tidalBCValue', tidalBCValue)
+
+         if (config_prescribe_velocity) then
+            !$omp do schedule(runtime)
+            do iEdge = 1, nEdges
+               normalVelocityNew(:, iEdge) = normalVelocityCur(:, iEdge)
+            end do
+            !$omp end do
+         end if
+
+         if (config_prescribe_thickness) then
+            !$omp do schedule(runtime)
+            do iCell = 1, nCells
+               layerThicknessNew(:, iCell) = layerThicknessCur(:, iCell)
+            end do
+            !$omp end do
+         end if
+
+         ! ------------------------------------------------------------------
+         ! Accumulating various parametrizations of the transport velocity
+         ! ------------------------------------------------------------------
+         !$omp do schedule(runtime)
+         do iEdge = 1, nEdges
+            normalTransportVelocity(:, iEdge) = normalVelocityNew(:, iEdge)
          end do
+         !$omp end do
 
+         ! Compute normalGMBolusVelocity, relativeSlope and RediDiffVertCoef if
+         ! respective flags are turned on
+         if (config_use_GM) then
+            call ocn_gm_compute_Bolus_velocity(statePool, diagnosticsPool, meshPool, scratchPool, timeLevelIn=2)
+         end if
+         call mpas_threading_barrier()
+
+         if (config_use_GM) then
+         !$omp do schedule(runtime)
+         do iEdge = 1, nEdges
+            normalTransportVelocity(:, iEdge) = normalTransportVelocity(:,iEdge) + normalGMBolusVelocity(:,iEdge)
+         end do
+         !$omp end do
+         end if
+         ! ------------------------------------------------------------------
+         ! End: Accumulating various parametrizations of the transport velocity
+         ! ------------------------------------------------------------------
+
+         ! direct application of tidal boundary condition
+         if (config_use_tidal_forcing .and. trim(config_tidal_forcing_type) == 'direct') then
+           do iCell=1, nCells
+             ! artificially assumes boolean mask for now, could generalize to
+             ! tappered sponge layer
+             if (tidalInputMask(iCell) == 1.0_RKIND) then
+               ! compute total depth for relative thickness contribution
+               totalDepth = 0.0_RKIND
+               do k = 1, maxLevelCell(iCell)
+                 totalDepth = totalDepth + restingThickness(k,iCell)
+               end do
+
+               ! only modify layer thicknesses on tidal boundary
+               do k = 1, maxLevelCell(iCell)
+                 layerThicknessNew(k, iCell) = tidalInputMask(iCell)*(tidalBCValue(iCell) + bottomDepth(iCell))*(restingThickness(k,iCell)/totalDepth)
+                 !(1.0_RKIND - tidalInputMask(iCell))*layerThicknessNew(k,
+                 !iCell)  ! generalized tappered assumption code
+               end do
+             end if
+           end do
+         end if
+
+         call mpas_threading_barrier()
+
+         ! Update the effective desnity in land ice if we're coupling to land ice
+         call ocn_effective_density_in_land_ice_update(meshPool, forcingPool, statePool, scratchPool, err)
+
+         call mpas_reconstruct(meshPool,  normalVelocityNew, &
+                          velocityX, velocityY, velocityZ,   &
+                          velocityZonal, velocityMeridional, &
+                          includeHalos = .true.)
+
+         call mpas_reconstruct(meshPool, gradSSH,          &
+                          gradSSHX, gradSSHY, gradSSHZ,    &
+                          gradSSHZonal, gradSSHMeridional, &
+                          includeHalos = .true.)
+         call mpas_threading_barrier()
+
+         !$omp do schedule(runtime)
+         do iCell = 1, nCells
+            surfaceVelocity(indexSurfaceVelocityZonal, iCell) = velocityZonal(1, iCell)
+            surfaceVelocity(indexSurfaceVelocityMeridional, iCell) = velocityMeridional(1, iCell)
+
+            SSHGradient(indexSSHGradientZonal, iCell) = gradSSHZonal(iCell)
+            SSHGradient(indexSSHGradientMeridional, iCell) = gradSSHMeridional(iCell)
+         end do
+         !$omp end do
+
+         call ocn_time_average_coupled_accumulate(diagnosticsPool, statePool, forcingPool, 2)
+
+         if (config_use_GM) then
+            call ocn_reconstruct_gm_vectors(diagnosticsPool, meshPool)
+         end if
+         call mpas_threading_barrier()
+
+         block => block % next
+      end do
+
+      if (trim(config_land_ice_flux_mode) == 'coupled') then
+         call mpas_timer_start("LTS3-effective density halo")
+         call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+         call mpas_pool_get_field(statePool, 'effectiveDensityInLandIce', effectiveDensityField, 2)
+         call mpas_dmpar_exch_halo_field(effectiveDensityField)
+         call mpas_timer_stop("LTS3-effective density halo")
       end if
 
-      block => block % next
-   end do
+      block => domain % blocklist
+      do while(associated(block))
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_1st', tendSum1stPool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_2nd', tendSum2ndPool)
+         call mpas_pool_get_subpool(block % structs, 'tend_sum_3rd', tendSum3rdPool)
 
-   call mpas_timer_stop("advance soln LTS")
+         call mpas_pool_destroy_pool(tendSum1stPool)
+         call mpas_pool_destroy_pool(tendSum2ndPool)
+         call mpas_pool_destroy_pool(tendSum3rdPool)
 
-   call mpas_timer_start("halo updates  LTS")
-   call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=3)
-   call mpas_dmpar_field_halo_exch(domain, 'layerThicknessMPIHaloUpdate', timeLevel=3)
-   call mpas_pool_begin_iteration(tracersPool)
-   do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-      if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-         call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=3)
-      end if
-   end do
-   call mpas_timer_stop("halo updates  LTS")
+         call mpas_pool_remove_subpool(block % structs, 'tend_sum_1st')
+         call mpas_pool_remove_subpool(block % structs, 'tend_sum_2nd')
+         call mpas_pool_remove_subpool(block % structs, 'tend_sum_3rd')
+
+         block => block % next
+      end do
+      call mpas_timer_stop("LTS3-cleanup phase")
 
 
    end subroutine ocn_time_integrator_lts3
@@ -1289,19 +2518,12 @@ module ocn_time_integration_lts3
           !   LTSRegion(iCell) = 2
           !end if
 
-          !latPoint = pii / 6.0
-          !lonPoint = 3.0 * pii * 0.5
           latPoint = pii * 0.5
           lonPoint = 135 * pii / 180
           distLTS = sphere_distance(latCell(iCell), lonCell(iCell), latPoint, lonPoint, 1.0)
           ! NOTE: the number on the right hand side of the inequality dictates
           ! where is the interface between coarse and fine on the mesh
-          !if (distLTS > 1.2) then  !this was for the convergence test for test 5
-          !if (distLTS > 0.35) then   !this is for the CPU ratio test for test 5
-          if (distLTS > 0.7) then   !this is for the CPU ratio test with multiple interface layers for test 5
-          !if (distLTS > 0.2) then   !this is for the speed up test for test 5
-          !if (distLTS > 0.55) then   !this is for the speed up test with multiple interface layers for test 5 (this goes with 38 or 40 layers)
-          !if (distLTS > 0.3) then   !this is for the speed up test with multiple interface layers for test 5 (this goes with 18 or 20 layers)
+          if (distLTS > 0.7) then   
              LTSRegion(iCell) = 2
           end if
           !BEGIN: test initializaton
