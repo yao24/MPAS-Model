@@ -453,11 +453,6 @@ module ocn_time_integration_lts3
          end do
          !$omp end do
 
-         !! TODO: not sure yet if this is needed
-         !call mpas_timer_start("halo updates  LTS")
-         !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
-         !call mpas_timer_stop("halo updates  LTS")
-
          ! TENDENCIES COMPUTATION ---
 
          call ocn_time_integrator_compute_vel_tends(block, dt, err, statePool, 1)
@@ -537,7 +532,7 @@ module ocn_time_integration_lts3
          end do
          ! --- fine layers close to interface layers
          do ic = 1, nCellsInLTSHalo(1,3)
-            iCell = cellsInLTSHalo(2,1,ic)
+            iCell = cellsInLTSHalo(1,3,ic)
             do k = 1, maxLevelCell(iCell)
                layerThicknessFirstStage(k,iCell) = layerThicknessCur(k,iCell) + dt * layerThicknessTend(k,iCell)
             end do
@@ -666,11 +661,6 @@ module ocn_time_integration_lts3
                end do
             end do
             !$omp end do
-
-            !! TODO: not sure yet if this is needed
-            !call mpas_timer_start("halo updates  LTS")
-            !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
-            !call mpas_timer_stop("halo updates  LTS")
 
             ! TENDENCIES COMPUTATION ---
 
@@ -960,11 +950,6 @@ module ocn_time_integration_lts3
                   end do
                end do
                !$omp end do
-
-               !! TODO: not sure yet if this is needed
-               !call mpas_timer_start("halo updates  LTS")
-               !call mpas_dmpar_field_halo_exch(domain, 'normalTransportVelocity')
-               !call mpas_timer_stop("halo updates  LTS")
 
                ! TENDENCIES COMPUTATION ---
 
@@ -1869,8 +1854,9 @@ module ocn_time_integration_lts3
                normalVelocityNew(:,iEdge) = normalVelocityCur(:,iEdge)
             end do
 
-            do ic = 1, nCellsInLTSHalo(1,2) 
-               iCell = cellsInLTSHalo(1,2,ic)
+            ! --- layer thickness
+            do ic = 1, nCellsInLTSHalo(1,1) 
+               iCell = cellsInLTSHalo(1,1,ic)
                do k = 1, maxLevelCell(iCell)
                   layerThicknessNew(k,iCell) = layerThicknessCur(k,iCell)
                end do
@@ -1882,6 +1868,7 @@ module ocn_time_integration_lts3
                end do
             end do
 
+            ! --- tracers
             call mpas_pool_begin_iteration(tracersPool)
             do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
                if ( groupItr % memberType == MPAS_POOL_FIELD ) then
@@ -2273,7 +2260,6 @@ module ocn_time_integration_lts3
          call mpas_pool_get_dimension(diagnosticsPool, 'index_SSHGradientMeridional', indexSSHGradientMeridional)
 
          call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
-         call mpas_pool_get_array(diagnosticsPool, 'normalGMBolusVelocity', normalGMBolusVelocity)
          call mpas_pool_get_array(diagnosticsPool, 'velocityX', velocityX) 
          call mpas_pool_get_array(diagnosticsPool, 'velocityY', velocityY)
          call mpas_pool_get_array(diagnosticsPool, 'velocityZ', velocityZ)
@@ -2315,21 +2301,6 @@ module ocn_time_integration_lts3
             normalTransportVelocity(:, iEdge) = normalVelocityNew(:, iEdge)
          end do
          !$omp end do
-
-         ! Compute normalGMBolusVelocity, relativeSlope and RediDiffVertCoef if
-         ! respective flags are turned on
-         if (config_use_GM) then
-            call ocn_gm_compute_Bolus_velocity(statePool, diagnosticsPool, meshPool, scratchPool, timeLevelIn=2)
-         end if
-         call mpas_threading_barrier()
-
-         if (config_use_GM) then
-         !$omp do schedule(runtime)
-         do iEdge = 1, nEdges
-            normalTransportVelocity(:, iEdge) = normalTransportVelocity(:,iEdge) + normalGMBolusVelocity(:,iEdge)
-         end do
-         !$omp end do
-         end if
          ! ------------------------------------------------------------------
          ! End: Accumulating various parametrizations of the transport velocity
          ! ------------------------------------------------------------------
@@ -2383,11 +2354,6 @@ module ocn_time_integration_lts3
          !$omp end do
 
          call ocn_time_average_coupled_accumulate(diagnosticsPool, statePool, forcingPool, 2)
-
-         if (config_use_GM) then
-            call ocn_reconstruct_gm_vectors(diagnosticsPool, meshPool)
-         end if
-         call mpas_threading_barrier()
 
          block => block % next
       end do
