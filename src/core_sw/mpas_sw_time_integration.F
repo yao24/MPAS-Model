@@ -1396,6 +1396,12 @@ call cpu_time(finishInterface)
 totalTimeInterface = totalTimeInterface + (finishInterface - startInterface)
 call mpas_timer_stop("interface prediction LTS")
 
+!call mpas_timer_start("halo updates  LTS")
+!     call mpas_dmpar_field_halo_exch(domain, 'u', timeLevel=1)
+!     call mpas_dmpar_field_halo_exch(domain, 'h', timeLevel=1)
+!     call mpas_dmpar_field_halo_exch(domain, 'tracers', timeLevel=1)
+!call mpas_timer_stop("halo updates  LTS")
+
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
 
@@ -1633,6 +1639,12 @@ call cpu_time(startInterface)
 call cpu_time(finishInterface)
 totalTimeInterface = totalTimeInterface + (finishInterface - startInterface)
 call mpas_timer_stop("interface prediction LTS")
+
+!call mpas_timer_start("halo updates  LTS")
+!     call mpas_dmpar_field_halo_exch(domain, 'u', timeLevel=3)
+!     call mpas_dmpar_field_halo_exch(domain, 'h', timeLevel=3)
+!     call mpas_dmpar_field_halo_exch(domain, 'tracers', timeLevel=3)
+!call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("halo updates  LTS")
         ! --- update halos for diagnostic variables
@@ -1933,6 +1945,12 @@ call cpu_time(startInterface)
 call cpu_time(finishInterface)
 totalTimeInterface = totalTimeInterface + (finishInterface - startInterface)
 call mpas_timer_stop("interface prediction LTS")
+
+!call mpas_timer_start("halo updates  LTS")
+!     call mpas_dmpar_field_halo_exch(domain, 'u', timeLevel=4)
+!     call mpas_dmpar_field_halo_exch(domain, 'h', timeLevel=4)
+!     call mpas_dmpar_field_halo_exch(domain, 'tracers', timeLevel=4)
+!call mpas_timer_stop("halo updates  LTS")
 
 call mpas_timer_start("halo updates  LTS")
            ! --- update halos for diagnostic variables
