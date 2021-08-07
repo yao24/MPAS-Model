@@ -1817,12 +1817,6 @@ call mpas_timer_stop("advance soln LTS")
 
        if(lts_order == 2) then
 
-!I DON'T THINK THIS HALO UPDATE DOWN HERE IS NECESSARY
-!call mpas_timer_start("halo updates  LTS")
-!        call mpas_dmpar_field_halo_exch(domain, 'u', timeLevel=4)
-!        call mpas_dmpar_field_halo_exch(domain, 'h', timeLevel=4)
-!        call mpas_dmpar_field_halo_exch(domain, 'tracers', timeLevel=4)
-!call mpas_timer_stop("halo updates  LTS")
 
 ! --- copy second stage soln into old soln for the fine
 call mpas_timer_start("copy second stage soln into old soln  LTS")
@@ -2119,11 +2113,6 @@ call cpu_time(finishAdvance)
 totalTimeAdvance = totalTimeAdvance + (finishAdvance - startAdvance)
 call mpas_timer_stop("advance soln LTS")
 
-!call mpas_timer_start("halo updates  LTS")
-!     call mpas_dmpar_field_halo_exch(domain, 'u', timeLevel=1)
-!     call mpas_dmpar_field_halo_exch(domain, 'h', timeLevel=1)
-!     call mpas_dmpar_field_halo_exch(domain, 'tracers', timeLevel=1)
-!call mpas_timer_stop("halo updates  LTS")
 
         end if
 
