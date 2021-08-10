@@ -676,6 +676,16 @@ contains
            if ( associated(landIcePressure) ) pressure(1,iCell) = pressure(1,iCell) + landIcePressure(iCell)
            pressure(1,iCell) = pressure(1,iCell) + density(1,iCell)*gravity*0.5_RKIND*layerThickness(1,iCell)
 
+           ! --- BEGIN: TO REMOVE
+
+           !if( iCell == 157 .or. iCell == 159) then
+
+           !   print*, iCell, atmosphericPressure(iCell), seaIcePressure(iCell), density(1,iCell), gravity, layerThickness(1,iCell)
+
+           !end if
+
+           ! --- END: TO REMOVE
+
            do k = 2, maxLevelCell(iCell)
               pressure(k,iCell) = pressure(k-1,iCell)  &
                 + 0.5_RKIND*gravity*(  density(k-1,iCell)*layerThickness(k-1,iCell) &

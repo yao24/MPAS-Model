@@ -102,6 +102,9 @@ module ocn_time_integration_ssprk3
     type (mpas_pool_type), pointer :: forcingPool
     type (mpas_pool_type), pointer :: scratchPool
     type (mpas_pool_type), pointer :: swForcingPool
+    ! ---------- BEGIN: TO REMOVE
+    type (mpas_pool_type), pointer :: LTSPool
+    ! ---------- END: TO REMOVE
 
     integer :: ssprk_step
 
@@ -177,6 +180,12 @@ module ocn_time_integration_ssprk3
     real (kind=RKIND), dimension(:), pointer :: tidalInputMask, tidalBCValue
     real (kind=RKIND), dimension(:,:), pointer :: restingThickness
     real (kind=RKIND) :: totalDepth
+
+    ! ---------- BEGIN: TO REMOVE
+    integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
+    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
+    integer :: iRegion, ic
+    ! ---------- END: TO REMOVE
 
     ! Get config options
     call mpas_pool_get_config(domain % configs, 'config_mom_del4', config_mom_del4)
@@ -426,6 +435,14 @@ module ocn_time_integration_ssprk3
          call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
          call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
 
+         ! ---------- BEGIN: TO REMOVE
+         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+         ! ---------- END: TO REMOVE
+
          call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
          call mpas_pool_get_subpool(tendPool, 'tracersTend', tracersTendPool)
 
@@ -447,6 +464,26 @@ module ocn_time_integration_ssprk3
          call mpas_pool_get_array(diagnosticsPool, 'wettingVelocity', wettingVelocity)
 
          call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+
+         ! ------------- BEGIN: TO REMOVE
+         !if (ssprk_step == 2) then
+         !   !do ic = 1, nCellsInLTSHalo(1,3)
+         !   !   iCell = cellsInLTSHalo(1,3,ic)
+         !   do ic = 1, nEdgesInLTSHalo(1,3)
+         !      iCell = edgesInLTSHalo(1,3,ic)
+         !    !do iCell= 1,nEdges
+         !      !do k = 1, maxLevelCell(iCell)
+         !         !print*, layerThicknessNew(k,iCell)
+         !         !print*, layerThicknessNew(6,iCell)
+         !         !print*, layerThicknessTend(6,iCell)
+         !         print*, normalVelocityNew(6,iCell)
+         !         !print*, normalVelocityCur(6,iCell)
+         !         !print*, normalVelocityTend(6,iCell)
+         !      !end do
+         !   end do
+         !end if
+
+         ! ------------- END: TO REMOVE
 
          !$omp do schedule(runtime)
          do iEdge = 1, nEdges
@@ -479,16 +516,42 @@ module ocn_time_integration_ssprk3
             end if
          end do
 
-        !$omp do schedule(runtime)
-        do iCell = 1, nCells
-           do k = 1, maxLevelCell(iCell)
-              layerThicknessNew(k,iCell) = weights_old(ssprk_step) * layerThicknessCur(k,iCell) &
-                                        + weights_new(ssprk_step) * layerThicknessNew(k,iCell) &
-                                        + weights_tend(ssprk_step) * layerThicknessTend(k,iCell)
-           end do
-        end do
-        !$omp end do
 
+         !$omp do schedule(runtime)
+         do iCell = 1, nCells
+            do k = 1, maxLevelCell(iCell)
+               layerThicknessNew(k,iCell) = weights_old(ssprk_step) * layerThicknessCur(k,iCell) &
+                                         + weights_new(ssprk_step) * layerThicknessNew(k,iCell) &
+                                         + weights_tend(ssprk_step) * layerThicknessTend(k,iCell)
+            end do
+         end do
+         !$omp end do
+
+       
+         ! ------------- BEGIN: TO REMOVE
+
+         if (ssprk_step == 2) then
+            call mpas_pool_get_array(statePool, 'ssh', sshNew, 2)
+            !do ic = 1, nCellsInLTSHalo(1,3)
+            !   iCell = cellsInLTSHalo(1,3,ic)
+            !do iCell = 1, nCells
+            !do ic = 1, nEdgesInLTSHalo(1,3)
+             !  iCell = edgesInLTSHalo(1,3,ic)
+             do iCell= 1,nEdges
+               !do k = 1, maxLevelCell(iCell)
+                  !print*, layerThicknessNew(k,iCell)
+                  !print*, layerThicknessNew(6,iCell)
+                  !print*, layerThicknessTend(6,iCell)
+                  !print*, normalVelocityNew(6,iCell)
+                  !print*, normalVelocityCur(6,iCell)
+                  !print*, normalVelocityTend(6,iCell)
+                  !print*, sshNew(iCell)
+               !end do
+            end do
+         end if
+
+         ! ------------- END: TO REMOVE
+        
 
          call mpas_pool_begin_iteration(tracersPool)
          do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
@@ -767,8 +830,7 @@ module ocn_time_integration_ssprk3
 
          call mpas_threading_barrier()
 
-         ! Update the effective desnity in land ice if we're coupling to land
-         ! ice
+         ! Update the effective density in land ice if we're coupling to land ice
          call ocn_effective_density_in_land_ice_update(meshPool, forcingPool, statePool, scratchPool, err)
 
          call mpas_reconstruct(meshPool,  normalVelocityNew, &
