@@ -387,16 +387,6 @@ contains
          density(k,iCell) = (unt0 + rhosfc)*bulkMod/ &
                             (bulkMod - p(k))
 
-         ! --- BEGIN: TO REMOVE
-
-         !if ((iCell == 157 .or. iCell == 159) .and. k==1) then
-
-         !   print*, iCell, density(k,iCell), tracerSalt(k,iCell), tracerTemp(k,iCell)
-        
-         !end if
-
-         ! --- END: TO REMOVE
-
       end do
       end do
 #ifdef MPAS_OPENACC

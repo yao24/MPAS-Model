@@ -610,63 +610,6 @@ module ocn_time_integration_lts3
       end do
       call mpas_timer_stop("halo updates  LTS")
 
-      ! ------------ BEGIN: TO REMOVE
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
-
-         do ic = 1, nCellsInLTSHalo(1,3)
-            iCell = cellsInLTSHalo(1,3,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessFirstStage(k,iCell) 
-            !    print*, layerThicknessFirstStage(6,iCell) 
-            !end do
-         end do
-
-       call mpas_pool_begin_iteration(tracersPool)
-       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-             configName = 'config_use_' // trim(groupItr % memberName)
-             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-             if ( config_use_tracerGroup ) then
-
-                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
-                !$omp do schedule(runtime) private(k)
-             do ic = 1, nCellsInLTSHalo(1,2)
-                iCell = cellsInLTSHalo(1,2,ic)
-                !    print*,  tracersGroupFirstStage(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(2,2)
-                iCell = cellsInLTSHalo(2,2,ic)
-                !    print*,  tracersGroupFirstStage(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(2,1)
-                iCell = cellsInLTSHalo(2,1,ic)
-                !    print*,  tracersGroupFirstStage(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(1,3)
-                iCell = cellsInLTSHalo(1,3,ic)
-                !    print*,  tracersGroupFirstStage(1, 6, iCell)
-                end do
-                !$omp end do
-             end if
-          end if
-       end do
-
-         block => block % next
-      end do
-      ! ------------ END: TO REMOVE
-
-
       ! --------------------------------------  STEP  ------------------------------------------
       ! --- compute the second stage of SSPRK for interface layer 1, interface layer 2 and coarse
 
@@ -869,68 +812,6 @@ module ocn_time_integration_lts3
          end if
       end do
       call mpas_timer_stop("halo updates  LTS")
-
-      ! ------------ BEGIN: TO REMOVE
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
-         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
-         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-
-         !do ic = 1, nCellsInLTSHalo(2,1)
-         !   iCell = cellsInLTSHalo(2,1,ic)
-         do ic = 1, nEdgesInLTSHalo(2,1)
-            iCell = edgesInLTSHalo(2,1,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessSecondStage(6,iCell)
-            !     print*, layerThicknessTend(6,iCell)
-            !   print*, normalVelocitySecondStage(6,iCell)
-            !     print*, normalVelocityTend(6,iCell)
-            !end do
-         end do
-
-       call mpas_pool_begin_iteration(tracersPool)
-       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-             configName = 'config_use_' // trim(groupItr % memberName)
-             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-             if ( config_use_tracerGroup ) then
-
-                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
-                !$omp do schedule(runtime) private(k)
-             do ic = 1, nCellsInLTSHalo(1,2)
-                iCell = cellsInLTSHalo(1,2,ic)
-                !    print*,  tracersGroupSecondStage(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(2,2)
-                iCell = cellsInLTSHalo(2,2,ic)
-                !    print*,  tracersGroupSecondStage(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(2,1)
-                iCell = cellsInLTSHalo(2,1,ic)
-                !    print*,  tracersGroupSecondStage(1, 6, iCell)
-                end do
-                !$omp end do
-             end if
-          end if
-       end do
-
-         block => block % next
-      end do
-      ! ------------ END: TO REMOVE
 
       ! --------------------------------------  STEP  ------------------------------------------
       ! --- substepping for fine soln advancement begins here. we also compute
@@ -1249,54 +1130,6 @@ module ocn_time_integration_lts3
 
          call mpas_timer_stop("advance soln LTS")
 
-      ! ------------ BEGIN: TO REMOVE
-         call mpas_timer_start("halo updates  LTS")
-      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
-      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
-         call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=3)
-         call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=3)
-         call mpas_pool_begin_iteration(tracersPool)
-         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-               call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=3)
-            end if
-         end do
-         call mpas_timer_stop("halo updates  LTS")
-
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
-         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
-         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-
-         !do ic = 1, nCellsInLTSHalo(1,3)
-         !   iCell = cellsInLTSHalo(1,3,ic)
-         do ic = 1, nEdgesInLTSHalo(1,3)
-            iCell = edgesInLTSHalo(1,3,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessFirstStage(6,iCell)
-            !     print*, layerThicknessTend(6,iCell)
-            !   print*, normalVelocityFirstStage(6,iCell)
-            !     print*, normalVelocityTend(6,iCell)
-            !end do
-         end do
-         block => block % next
-      end do
-      ! ------------ END: TO REMOVE
-
-
          call mpas_timer_start("interface prediction LTS")
          ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln cur in soln new
          block => domain % blocklist
@@ -1386,43 +1219,6 @@ module ocn_time_integration_lts3
             end if
          end do
          call mpas_timer_stop("halo updates  LTS")
-
-         ! ---- BEGIN: TO REMOVE
-
-         block => domain % blocklist
-         do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
-         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
-         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-
-         do ic = 1, nCellsInLTSHalo(1,3)
-            iCell = cellsInLTSHalo(1,3,ic)
-         !do ic = 1, nEdgesInLTSHalo(1,3)
-            !iCell = edgesInLTSHalo(1,3,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessFirstStage(6,iCell)
-            !     print*, layerThicknessTend(6,iCell)
-            !   print*, normalVelocityFirstStage(6,iCell)
-            !     print*, normalVelocityTend(6,iCell)
-            !end do
-         end do
-
-         block => block % next
-      end do
-
-         ! --- END: TO REMOVE
 
          ! --- update halos for diagnostic variables
          if (config_use_cvmix_kpp) then
@@ -1657,91 +1453,6 @@ module ocn_time_integration_lts3
 
          call mpas_timer_stop("advance soln LTS")
 
-      ! ------------ BEGIN: TO REMOVE
-         call mpas_timer_start("halo updates  LTS")
-         call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
-         call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
-         call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=4)
-         call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=4)
-         call mpas_pool_begin_iteration(tracersPool)
-         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-              call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=4)
-           end if
-         end do
-         call mpas_timer_stop("halo updates  LTS")
-
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
-         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
-         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
-         call mpas_pool_get_dimension(block % dimensions, 'nCells', nCells)
-         call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
-
-
-         call mpas_pool_get_array(statePool, 'ssh', sshFirstStage, 3)
-         !do ic = 1, nCellsInLTSHalo(1,3)
-         !   iCell = cellsInLTSHalo(1,3,ic)
-         do iCell= 1, nEdges
-         !do ic = 1, nEdgesInLTSHalo(1,3)
-            !iCell = edgesInLTSHalo(1,3,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessSecondStage(6,iCell)
-            !print*, iCell
-            !   print*, layerThicknessFirstStage(6,iCell)
-            !     print*, layerThicknessTend(6,iCell)
-            !   print*, normalVelocitySecondStage(6,iCell)
-            !   print*, normalVelocityCur(6,iCell)
-            !   print*, normalVelocityFirstStage(6,iCell)
-            !     print*, normalVelocityTend(6,iCell)
-            !     print*, sshFirstStage(iCell) 
-            !end do
-         end do
-
-       call mpas_pool_begin_iteration(tracersPool)
-       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-             configName = 'config_use_' // trim(groupItr % memberName)
-             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-             if ( config_use_tracerGroup ) then
-
-                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
-                !$omp do schedule(runtime) private(k)
-             do ic = 1, nCellsInLTSHalo(1,1)
-                iCell = cellsInLTSHalo(1,1,ic)
-                !    print*,  tracersGroupFirstStage(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(1,3)
-                iCell = cellsInLTSHalo(1,3,ic)
-                !    print*,  tracersGroupFirstStage(1, 6, iCell)
-                end do
-                !$omp end do
-             end if
-          end if
-       end do
-
-         block => block % next
-      end do
-      ! ------------ END: TO REMOVE
-
 
          call mpas_timer_start("interface prediction LTS")
          ! --- interpolate interface layer 1 values (this is the actual interface prediction) and store soln cur in soln new
@@ -1834,63 +1545,6 @@ module ocn_time_integration_lts3
          end do
          call mpas_timer_stop("halo updates  LTS")
 
-         !---- BEGIN: TO REMOVE
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
-         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
-         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-
-         do ic = 1, nCellsInLTSHalo(1,3)
-            iCell = cellsInLTSHalo(1,3,ic)
-         !do ic = 1, nEdgesInLTSHalo(1,2)
-         !   iCell = edgesInLTSHalo(1,2,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessSecondStage(6,iCell)
-            !     print*, layerThicknessTend(6,iCell)
-            !   print*, normalVelocitySecondStage(6,iCell)
-            !     print*, normalVelocityTend(6,iCell)
-            !end do
-         end do
-
-       call mpas_pool_begin_iteration(tracersPool)
-       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-             configName = 'config_use_' // trim(groupItr % memberName)
-             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-             if ( config_use_tracerGroup ) then
-
-                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
-                !$omp do schedule(runtime) private(k)
-             do ic = 1, nCellsInLTSHalo(1,1)
-                iCell = cellsInLTSHalo(1,1,ic)
-                    !print*,  tracersGroupSecondStage(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(1,3)
-                iCell = cellsInLTSHalo(1,3,ic)
-                    !print*,  tracersGroupSecondStage(1, 6, iCell)
-                end do
-                !$omp end do
-             end if
-          end if
-       end do
-
-         block => block % next
-      end do
-      ! ------------ END: TO REMOVE
 
          ! --- update halos for diagnostic variables
          if (config_use_cvmix_kpp) then
@@ -2138,77 +1792,6 @@ module ocn_time_integration_lts3
 
          call mpas_timer_stop("advance soln LTS")
 
-      ! ------------ BEGIN: TO REMOVE
-
-      call mpas_timer_start("halo updates  LTS")
-      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
-      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
-      call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=1)
-      call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=1)
-      call mpas_pool_begin_iteration(tracersPool)
-      do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-         if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-            call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=1)
-         end if
-      end do
-      call mpas_timer_stop("halo updates  LTS")
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
-         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
-         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-
-         do ic = 1, nCellsInLTSHalo(1,3)
-            iCell = cellsInLTSHalo(1,3,ic)
-         !do ic = 1, nEdgesInLTSHalo(1,2)
-         !   iCell = edgesInLTSHalo(1,2,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessCur(6,iCell)
-                 !print*, layerThicknessTend(6,iCell)
-            !   print*, normalVelocitySecondStage(6,iCell)
-            !     print*, normalVelocityTend(6,iCell)
-            !end do
-         end do
-
-       call mpas_pool_begin_iteration(tracersPool)
-       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-             configName = 'config_use_' // trim(groupItr % memberName)
-             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-             if ( config_use_tracerGroup ) then
-
-                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
-                !$omp do schedule(runtime) private(k)
-             do ic = 1, nCellsInLTSHalo(1,1)
-                iCell = cellsInLTSHalo(1,1,ic)
-                    !print*,  tracersGroupCur(1, 6, iCell)
-                end do
-             do ic = 1, nCellsInLTSHalo(1,3)
-                iCell = cellsInLTSHalo(1,3,ic)
-                    !print*,  tracersGroupCur(1, 6, iCell)
-                end do
-                !$omp end do
-             end if
-          end if
-       end do
-
-         block => block % next
-      end do
-      ! ------------ END: TO REMOVE
-
       end do ! --- end substepping
  
 
@@ -2455,42 +2038,6 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3 advance soln")
       call mpas_threading_barrier()
 
-      ! --- BEGIN : TO REMOVE
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-       call mpas_pool_begin_iteration(tracersPool)
-       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-             configName = 'config_use_' // trim(groupItr % memberName)
-             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-             if ( config_use_tracerGroup ) then
-
-                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
-                !$omp do schedule(runtime) private(k)
-             do ic = 1, nCellsInLTSHalo(2,1)
-                iCell = cellsInLTSHalo(2,1,ic)
-                    !print*,  tracersGroupNew(1, 6, iCell)
-                end do
-                !$omp end do
-             end if
-          end if
-       end do
-         block => block % next
-      end do
-      ! --- END : TO REMOVE
-
 
       ! --------------------------------------  STEP  ------------------------------------------
       ! --- interface correction
@@ -2615,64 +2162,6 @@ module ocn_time_integration_lts3
       end do
       call mpas_timer_stop("halo updates  LTS")
 
-         !---- BEGIN: TO REMOVE
-      block => domain % blocklist
-      do while (associated(block))
-         call mpas_pool_get_subpool(block % structs, 'state', statePool)
-         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
-
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-
-         call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
-         call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
-         call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
-         call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
-
-         call mpas_pool_get_dimension(block % dimensions, 'nCells', nCells)
-
-         do ic = 1, nCellsInLTSHalo(2,1)
-            iCell = cellsInLTSHalo(2,1,ic)
-         !do ic = 1, nEdgesInLTSHalo(1,2)
-         !   iCell = edgesInLTSHalo(1,2,ic)
-            !do k = 1, maxLevelCell(iCell)
-            !   print*, layerThicknessNew(6,iCell)
-            !     print*, layerThicknessTend(6,iCell)
-            !   print*, normalVelocitySecondStage(6,iCell)
-            !     print*, normalVelocityTend(6,iCell)
-            !end do
-         end do
-
-       call mpas_pool_begin_iteration(tracersPool)
-       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-             configName = 'config_use_' // trim(groupItr % memberName)
-             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-             if ( config_use_tracerGroup ) then
-
-                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
-                !$omp do schedule(runtime) private(k)
-             do iCell = 1, nCells
-                    print*,  tracersGroupNew(1, 6, iCell)
-                end do
-             !do ic = 1, nCellsInLTSHalo(2,2)
-             !   iCell = cellsInLTSHalo(2,2,ic)
-             !       print*,  tracersGroupNew(1, 6, iCell)
-             !   end do
-                !$omp end do
-             end if
-          end if
-       end do
-
-         block => block % next
-      end do
-      ! ------------ END: TO REMOVE
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! END LTS SCHEME

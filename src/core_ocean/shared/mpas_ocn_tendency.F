@@ -331,28 +331,10 @@ contains
       call ocn_vel_hadv_coriolis_tend(meshPool, normalizedRelativeVorticityEdge, normalizedPlanetaryVorticityEdge, layerThicknessEdge, &
          normalVelocity, kineticEnergyCell, tend_normalVelocity, err)
 
-      ! ---- BEGIN: TO REMOVE
-
-      !print*, 'BEGIN: tendency call -----------------------------------'
-
-      !print*, 'call for nonlinear Coriolis term and grad of kinetic energy'
-
-      !print*, tend_normalVelocity(6,723)
-
-      ! --- END: TO REMOVE
-
       !
       ! velocity tendency: vertical advection term -w du/dz
       !
       call ocn_vel_vadv_tend(meshPool, normalVelocity, layerThicknessEdge, vertAleTransportTop, tend_normalVelocity, err)
-
-      ! ---- BEGIN: TO REMOVE
-
-      !print*, 'call for vertical advection term -w du/dz' 
-
-      !print*, tend_normalVelocity(6,723)
-
-      ! --- END: TO REMOVE
 
       !
       ! velocity tendency: tidal potential (if needed) 
@@ -396,14 +378,6 @@ contains
               inSituThermalExpansionCoeff,inSituSalineContractionCoeff)
       endif
 
-      ! ---- BEGIN: TO REMOVE
-
-      !print*, 'call for pressure gradient'
-
-      !print*, tend_normalVelocity(6,723)
-
-      ! --- END: TO REMOVE
-
       if (config_use_tidal_potential_forcing .and. (config_time_integrator == 'RK4' .or. config_time_integrator == 'SSPRK3' .or. config_time_integrator == 'LTS3')) then
         ! point zMid back to usual array, to be safe
         call mpas_pool_get_array(diagnosticsPool, 'zMid', zMid)
@@ -417,28 +391,12 @@ contains
       call ocn_vel_hmix_tend(meshPool, scratchPool, divergence, relativeVorticity, normalVelocity, tangentialVelocity, viscosity, &
          tend_normalVelocity, err)
 
-      ! ---- BEGIN: TO REMOVE
-
-      !print*, 'call for del2 dissipation'
-
-      !print*, tend_normalVelocity(6,723)
-
-      ! --- END: TO REMOVE
-
       !
       ! velocity tendency: forcing and bottom drag
       !
       call ocn_vel_forcing_tend(meshPool, normalVelocity, surfaceFluxAttenuationCoefficient, &
               surfaceStress, kineticEnergyCell, layerThicknessEdge, &
                                 tend_normalVelocity, err)
-
-      ! ---- BEGIN: TO REMOVE
-
-      !print*, 'call for forcing and bottom drag'
-
-      !print*, tend_normalVelocity(6,723)
-
-      ! --- END: TO REMOVE
 
       !
       ! velocity tendency: zero if drying
@@ -448,15 +406,6 @@ contains
          tend_normalVelocity(:, iEdge) = tend_normalVelocity(:, iEdge) * (1.0_RKIND - wettingVelocity(:, iEdge))
       end do
       !$omp end do
-
-      ! ---- BEGIN: TO REMOVE
-
-      !print*, 'call for zero if drying'
-
-      !print*, tend_normalVelocity(6,723)
-
-      !print*, 'END: tendency call -----------------------------------'
-      ! --- END: TO REMOVE
 
       !
       ! velocity tendency: vertical mixing d/dz( nu_v du/dz))

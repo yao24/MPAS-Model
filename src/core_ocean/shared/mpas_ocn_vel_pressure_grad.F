@@ -302,16 +302,6 @@ contains
 
             tend(k,iEdge) = tend(k,iEdge) + pGrad
 
-            ! ---- BEGIN: TO REMOVE
-
-            !if (iEdge == 723) then
-
-            !   print*, cell1, cell2, pressure(k,cell2), pressure(k,cell1), density(k,cell1), density(k,cell2)
-     
-            !end if
-
-            ! ---- END: TO REMOVE
-
             do k=2,kMax
 
                ! Average alpha and beta over four data points of the Jacobian cell.

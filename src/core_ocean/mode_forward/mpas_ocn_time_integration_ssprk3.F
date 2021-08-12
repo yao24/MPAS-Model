@@ -102,9 +102,6 @@ module ocn_time_integration_ssprk3
     type (mpas_pool_type), pointer :: forcingPool
     type (mpas_pool_type), pointer :: scratchPool
     type (mpas_pool_type), pointer :: swForcingPool
-    ! ---------- BEGIN: TO REMOVE
-    type (mpas_pool_type), pointer :: LTSPool
-    ! ---------- END: TO REMOVE
 
     integer :: ssprk_step
 
@@ -180,12 +177,6 @@ module ocn_time_integration_ssprk3
     real (kind=RKIND), dimension(:), pointer :: tidalInputMask, tidalBCValue
     real (kind=RKIND), dimension(:,:), pointer :: restingThickness
     real (kind=RKIND) :: totalDepth
-
-    ! ---------- BEGIN: TO REMOVE
-    integer, dimension(:,:), pointer :: nCellsInLTSHalo, nEdgesInLTSHalo
-    integer, dimension(:,:,:), pointer :: cellsInLTSHalo, edgesInLTSHalo
-    integer :: iRegion, ic
-    ! ---------- END: TO REMOVE
 
     ! Get config options
     call mpas_pool_get_config(domain % configs, 'config_mom_del4', config_mom_del4)
@@ -435,14 +426,6 @@ module ocn_time_integration_ssprk3
          call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
          call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
 
-         ! ---------- BEGIN: TO REMOVE
-         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
-         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
-         ! ---------- END: TO REMOVE
-
          call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
          call mpas_pool_get_subpool(tendPool, 'tracersTend', tracersTendPool)
 
@@ -464,26 +447,6 @@ module ocn_time_integration_ssprk3
          call mpas_pool_get_array(diagnosticsPool, 'wettingVelocity', wettingVelocity)
 
          call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
-
-         ! ------------- BEGIN: TO REMOVE
-         !if (ssprk_step == 2) then
-         !   !do ic = 1, nCellsInLTSHalo(1,3)
-         !   !   iCell = cellsInLTSHalo(1,3,ic)
-         !   do ic = 1, nEdgesInLTSHalo(1,3)
-         !      iCell = edgesInLTSHalo(1,3,ic)
-         !    !do iCell= 1,nEdges
-         !      !do k = 1, maxLevelCell(iCell)
-         !         !print*, layerThicknessNew(k,iCell)
-         !         !print*, layerThicknessNew(6,iCell)
-         !         !print*, layerThicknessTend(6,iCell)
-         !         print*, normalVelocityNew(6,iCell)
-         !         !print*, normalVelocityCur(6,iCell)
-         !         !print*, normalVelocityTend(6,iCell)
-         !      !end do
-         !   end do
-         !end if
-
-         ! ------------- END: TO REMOVE
 
          !$omp do schedule(runtime)
          do iEdge = 1, nEdges
@@ -527,33 +490,6 @@ module ocn_time_integration_ssprk3
          end do
          !$omp end do
 
-       
-         ! ------------- BEGIN: TO REMOVE
-
-         if (ssprk_step == 1) then
-            call mpas_pool_get_array(statePool, 'ssh', sshNew, 2)
-            !do ic = 1, nCellsInLTSHalo(1,3)
-            !   iCell = cellsInLTSHalo(1,3,ic)
-            !do iCell = 1, nCells
-            !do ic = 1, nEdgesInLTSHalo(1,3)
-             !  iCell = edgesInLTSHalo(1,3,ic)
-             do iCell= 1,nEdges
-               !do k = 1, maxLevelCell(iCell)
-                  !print*, layerThicknessNew(k,iCell)
-                  !print*, layerThicknessNew(6,iCell)
-                  !print*, layerThicknessTend(6,iCell)
-                  !print*, normalVelocityNew(6,iCell)
-                  !print*, normalVelocityCur(6,iCell)
-                  !print*, normalVelocityTend(6,iCell)
-                  !print*, sshNew(iCell)
-               !end do
-            end do
-
-         end if
-
-         ! ------------- END: TO REMOVE
-        
-
          call mpas_pool_begin_iteration(tracersPool)
          do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
             if ( groupItr % memberType == MPAS_POOL_FIELD ) then
@@ -580,43 +516,6 @@ module ocn_time_integration_ssprk3
                end if
             end if
          end do
-
-         ! ------------- BEGIN: TO REMOVE
-
-         if (ssprk_step == 3) then
-
-         call mpas_pool_begin_iteration(tracersPool)
-         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-               configName = 'config_use_' // trim(groupItr % memberName)
-               call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
-
-               if ( config_use_tracerGroup ) then
-                  call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
-
-                  if ( associated(tracersGroupNew) ) then
-                     !$omp do schedule(runtime) private(k)
-             !do ic = 1, nCellsInLTSHalo(1,2)
-             do iCell = 1, nCells
-                    print*,  tracersGroupNew(1, 6, iCell)
-                end do
-             !do ic = 1, nCellsInLTSHalo(2,2)
-             !   iCell = cellsInLTSHalo(2,2,ic)
-             !      print*,  tracersGroupNew(1, 6, iCell)
-             !  end do
-             !do ic = 1, nCellsInLTSHalo(2,1)
-             !   iCell = cellsInLTSHalo(2,1,ic)
-             !       print*,  tracersGroupNew(1, 6, iCell)
-             !   end do
-                     !$omp end do
-                  end if
-               end if
-            end if
-         end do
-
-         end if
-
-         ! ------------- END: TO REMOVE
 
          !if (associated(highFreqThicknessNew)) then    !TODO: WHY IS THIS ADVANCED HERE BUT ALSO ABOVE FOR THE SAME TENDENCY?
          !   !$omp do schedule(runtime)
