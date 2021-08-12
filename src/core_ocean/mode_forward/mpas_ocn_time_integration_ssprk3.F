@@ -530,7 +530,7 @@ module ocn_time_integration_ssprk3
        
          ! ------------- BEGIN: TO REMOVE
 
-         if (ssprk_step == 2) then
+         if (ssprk_step == 1) then
             call mpas_pool_get_array(statePool, 'ssh', sshNew, 2)
             !do ic = 1, nCellsInLTSHalo(1,3)
             !   iCell = cellsInLTSHalo(1,3,ic)
@@ -548,6 +548,7 @@ module ocn_time_integration_ssprk3
                   !print*, sshNew(iCell)
                !end do
             end do
+
          end if
 
          ! ------------- END: TO REMOVE
@@ -579,6 +580,43 @@ module ocn_time_integration_ssprk3
                end if
             end if
          end do
+
+         ! ------------- BEGIN: TO REMOVE
+
+         if (ssprk_step == 3) then
+
+         call mpas_pool_begin_iteration(tracersPool)
+         do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+            if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+               configName = 'config_use_' // trim(groupItr % memberName)
+               call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+               if ( config_use_tracerGroup ) then
+                  call mpas_pool_get_array(tracersPool, groupItr % memberName, tracersGroupNew, 2)
+
+                  if ( associated(tracersGroupNew) ) then
+                     !$omp do schedule(runtime) private(k)
+             !do ic = 1, nCellsInLTSHalo(1,2)
+             do iCell = 1, nCells
+                    print*,  tracersGroupNew(1, 6, iCell)
+                end do
+             !do ic = 1, nCellsInLTSHalo(2,2)
+             !   iCell = cellsInLTSHalo(2,2,ic)
+             !      print*,  tracersGroupNew(1, 6, iCell)
+             !  end do
+             !do ic = 1, nCellsInLTSHalo(2,1)
+             !   iCell = cellsInLTSHalo(2,1,ic)
+             !       print*,  tracersGroupNew(1, 6, iCell)
+             !   end do
+                     !$omp end do
+                  end if
+               end if
+            end if
+         end do
+
+         end if
+
+         ! ------------- END: TO REMOVE
 
          !if (associated(highFreqThicknessNew)) then    !TODO: WHY IS THIS ADVANCED HERE BUT ALSO ABOVE FOR THE SAME TENDENCY?
          !   !$omp do schedule(runtime)

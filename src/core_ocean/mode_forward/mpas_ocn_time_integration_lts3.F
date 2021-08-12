@@ -567,7 +567,7 @@ module ocn_time_integration_lts3
                         iCell = cellsInLTSHalo(iRegion,2,ic)
                         do k = 1, maxLevelCell(iCell)
                             tracersGroupFirstStage(:,k,iCell) = ( tracersGroupCur(:,k,iCell) * layerThicknessCur(k,iCell) & 
-                                                             +   dt * tracersGroupTend(:,k,iCell) ) / layerThicknessFirstStage(k,iCell)
+                                                                  +   dt * tracersGroupTend(:,k,iCell) ) / layerThicknessFirstStage(k,iCell)
                         end do
                      end do
                   end do
@@ -630,6 +630,37 @@ module ocn_time_integration_lts3
             !    print*, layerThicknessFirstStage(6,iCell) 
             !end do
          end do
+
+       call mpas_pool_begin_iteration(tracersPool)
+       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+             configName = 'config_use_' // trim(groupItr % memberName)
+             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+             if ( config_use_tracerGroup ) then
+
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
+                !$omp do schedule(runtime) private(k)
+             do ic = 1, nCellsInLTSHalo(1,2)
+                iCell = cellsInLTSHalo(1,2,ic)
+                !    print*,  tracersGroupFirstStage(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(2,2)
+                iCell = cellsInLTSHalo(2,2,ic)
+                !    print*,  tracersGroupFirstStage(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(2,1)
+                iCell = cellsInLTSHalo(2,1,ic)
+                !    print*,  tracersGroupFirstStage(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(1,3)
+                iCell = cellsInLTSHalo(1,3,ic)
+                !    print*,  tracersGroupFirstStage(1, 6, iCell)
+                end do
+                !$omp end do
+             end if
+          end if
+       end do
 
          block => block % next
       end do
@@ -703,7 +734,7 @@ module ocn_time_integration_lts3
       call mpas_threading_barrier()
 
       call mpas_timer_start("LTS3 advance soln")
-      ! --- advance solution (2nd stage of SSPRK for the coarse using dt)
+      ! --- advance solution for interface layer 1, interface layer 2 and coarse with second stage of SSPRK
       block => domain % blocklist
       do while (associated(block))
          call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -869,6 +900,33 @@ module ocn_time_integration_lts3
             !     print*, normalVelocityTend(6,iCell)
             !end do
          end do
+
+       call mpas_pool_begin_iteration(tracersPool)
+       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+             configName = 'config_use_' // trim(groupItr % memberName)
+             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+             if ( config_use_tracerGroup ) then
+
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
+                !$omp do schedule(runtime) private(k)
+             do ic = 1, nCellsInLTSHalo(1,2)
+                iCell = cellsInLTSHalo(1,2,ic)
+                !    print*,  tracersGroupSecondStage(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(2,2)
+                iCell = cellsInLTSHalo(2,2,ic)
+                !    print*,  tracersGroupSecondStage(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(2,1)
+                iCell = cellsInLTSHalo(2,1,ic)
+                !    print*,  tracersGroupSecondStage(1, 6, iCell)
+                end do
+                !$omp end do
+             end if
+          end if
+       end do
 
          block => block % next
       end do
@@ -1432,8 +1490,8 @@ module ocn_time_integration_lts3
 
 
          call mpas_timer_start("advance soln LTS")
-         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface
-         ! layer 2 also restore soln cur by copying it back from soln new
+         ! --- advance fine solution (second stage of SSPRK) AND sum up the tendecies above into tendSum1st for interface layer 1 and interface
+         ! layer 2 also restore soln first stage by copying it back from soln new
          block => domain % blocklist
          do while (associated(block))
             call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1657,6 +1715,29 @@ module ocn_time_integration_lts3
             !end do
          end do
 
+       call mpas_pool_begin_iteration(tracersPool)
+       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+             configName = 'config_use_' // trim(groupItr % memberName)
+             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+             if ( config_use_tracerGroup ) then
+
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
+                !$omp do schedule(runtime) private(k)
+             do ic = 1, nCellsInLTSHalo(1,1)
+                iCell = cellsInLTSHalo(1,1,ic)
+                !    print*,  tracersGroupFirstStage(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(1,3)
+                iCell = cellsInLTSHalo(1,3,ic)
+                !    print*,  tracersGroupFirstStage(1, 6, iCell)
+                end do
+                !$omp end do
+             end if
+          end if
+       end do
+
          block => block % next
       end do
       ! ------------ END: TO REMOVE
@@ -1784,6 +1865,29 @@ module ocn_time_integration_lts3
             !end do
          end do
 
+       call mpas_pool_begin_iteration(tracersPool)
+       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+             configName = 'config_use_' // trim(groupItr % memberName)
+             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+             if ( config_use_tracerGroup ) then
+
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
+                !$omp do schedule(runtime) private(k)
+             do ic = 1, nCellsInLTSHalo(1,1)
+                iCell = cellsInLTSHalo(1,1,ic)
+                    !print*,  tracersGroupSecondStage(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(1,3)
+                iCell = cellsInLTSHalo(1,3,ic)
+                    !print*,  tracersGroupSecondStage(1, 6, iCell)
+                end do
+                !$omp end do
+             end if
+          end if
+       end do
+
          block => block % next
       end do
       ! ------------ END: TO REMOVE
@@ -1829,7 +1933,6 @@ module ocn_time_integration_lts3
             !$omp do schedule(runtime)
             do iEdge = 1, nEdges
                normalTransportVelocity(:, iEdge) = normalVelocitySecondStage(:,iEdge)
-               !print*, normalTransportVelocity(6, iEdge)
             end do
             !$omp end do
 
@@ -1855,8 +1958,8 @@ module ocn_time_integration_lts3
 
 
          call mpas_timer_start("advance soln LTS")
-         ! --- advance fine solution (first stage of SSPRK) AND sum up the tendecies above into tendSum2nd for interface layer 1 and interface
-         ! layer 2 also restore soln cur by copying it back from soln new
+         ! --- advance fine solution (third stage of SSPRK) AND sum up the tendecies above into tendSum3rd for interface layer 1 and interface
+         ! layer 2 also restore soln second stage by copying it back from soln new
          block => domain % blocklist
          do while (associated(block))
             call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
@@ -1865,7 +1968,7 @@ module ocn_time_integration_lts3
             call mpas_pool_get_subpool(block % structs, 'state', statePool)
             call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
             call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
-            call mpas_pool_get_subpool(tendSum3rdPool, 'tracersTend', tracersTendSum3rdPool)
+            call mpas_pool_get_subpool(tendPool, 'tracersTend', tracersTendPool)
 
             call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
 
@@ -2079,6 +2182,29 @@ module ocn_time_integration_lts3
             !end do
          end do
 
+       call mpas_pool_begin_iteration(tracersPool)
+       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+             configName = 'config_use_' // trim(groupItr % memberName)
+             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+             if ( config_use_tracerGroup ) then
+
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
+                !$omp do schedule(runtime) private(k)
+             do ic = 1, nCellsInLTSHalo(1,1)
+                iCell = cellsInLTSHalo(1,1,ic)
+                    !print*,  tracersGroupCur(1, 6, iCell)
+                end do
+             do ic = 1, nCellsInLTSHalo(1,3)
+                iCell = cellsInLTSHalo(1,3,ic)
+                    !print*,  tracersGroupCur(1, 6, iCell)
+                end do
+                !$omp end do
+             end if
+          end if
+       end do
+
          block => block % next
       end do
       ! ------------ END: TO REMOVE
@@ -2238,7 +2364,7 @@ module ocn_time_integration_lts3
       call mpas_threading_barrier()
 
       call mpas_timer_start("LTS3 advance soln")
-      ! --- advance solution for interface layer 1, interface layer 2 and coarse with first stage of SSPRK
+      ! --- advance solution for coarse with third stage of SSPRK
       block => domain % blocklist
       do while (associated(block))
          call mpas_pool_get_subpool(block % structs, 'state', statePool)
@@ -2328,6 +2454,42 @@ module ocn_time_integration_lts3
       end do
       call mpas_timer_stop("LTS3 advance soln")
       call mpas_threading_barrier()
+
+      ! --- BEGIN : TO REMOVE
+      block => domain % blocklist
+      do while (associated(block))
+         call mpas_pool_get_subpool(block % structs, 'state', statePool)
+         call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+         call mpas_pool_get_array(meshPool, 'maxLevelCell', maxLevelCell)
+         call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+
+         call mpas_pool_get_array(LTSPool, 'cellsInLTSHalo',cellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nCellsInLTSHalo',nCellsInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo',edgesInLTSHalo)
+         call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
+
+       call mpas_pool_begin_iteration(tracersPool)
+       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+             configName = 'config_use_' // trim(groupItr % memberName)
+             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+             if ( config_use_tracerGroup ) then
+
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
+                !$omp do schedule(runtime) private(k)
+             do ic = 1, nCellsInLTSHalo(2,1)
+                iCell = cellsInLTSHalo(2,1,ic)
+                    !print*,  tracersGroupNew(1, 6, iCell)
+                end do
+                !$omp end do
+             end if
+          end if
+       end do
+         block => block % next
+      end do
+      ! --- END : TO REMOVE
 
 
       ! --------------------------------------  STEP  ------------------------------------------
@@ -2472,6 +2634,8 @@ module ocn_time_integration_lts3
          call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
          call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
 
+         call mpas_pool_get_dimension(block % dimensions, 'nCells', nCells)
+
          do ic = 1, nCellsInLTSHalo(2,1)
             iCell = cellsInLTSHalo(2,1,ic)
          !do ic = 1, nEdgesInLTSHalo(1,2)
@@ -2483,6 +2647,28 @@ module ocn_time_integration_lts3
             !     print*, normalVelocityTend(6,iCell)
             !end do
          end do
+
+       call mpas_pool_begin_iteration(tracersPool)
+       do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+          if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+             configName = 'config_use_' // trim(groupItr % memberName)
+             call mpas_pool_get_config(block % configs, configName, config_use_tracerGroup)
+
+             if ( config_use_tracerGroup ) then
+
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
+                !$omp do schedule(runtime) private(k)
+             do iCell = 1, nCells
+                    print*,  tracersGroupNew(1, 6, iCell)
+                end do
+             !do ic = 1, nCellsInLTSHalo(2,2)
+             !   iCell = cellsInLTSHalo(2,2,ic)
+             !       print*,  tracersGroupNew(1, 6, iCell)
+             !   end do
+                !$omp end do
+             end if
+          end if
+       end do
 
          block => block % next
       end do
