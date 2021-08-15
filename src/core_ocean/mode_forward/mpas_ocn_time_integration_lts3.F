@@ -267,14 +267,17 @@ module ocn_time_integration_lts3
        call mpas_pool_get_subpool(tendSum3rdPool, 'tracersTend', tracersTendSum3rdPool)
 
        call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+       call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
        call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
        call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
 
        call mpas_pool_get_array(statePool, 'ssh', sshCur, 1)
+       call mpas_pool_get_array(statePool, 'ssh', sshNew, 2)
        call mpas_pool_get_array(statePool, 'ssh', sshFirstStage, 3)
        call mpas_pool_get_array(statePool, 'ssh', sshSecondStage, 4)
 
        call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+       call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
        call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
        call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
 
@@ -286,6 +289,7 @@ module ocn_time_integration_lts3
           do k = 1, maxLevelEdgeTop(iEdge)
              normalVelocityFirstStage(k, iEdge) = normalVelocityCur(k, iEdge)
              normalVelocitySecondStage(k, iEdge) = normalVelocityCur(k, iEdge)
+             normalVelocityNew(k, iEdge) = normalVelocityCur(k, iEdge)
           end do
        end do
        !$omp end do
@@ -295,9 +299,11 @@ module ocn_time_integration_lts3
           !TODO: is the initialization of sshCur needed?
           sshFirstStage(iCell) = sshCur(iCell)
           sshSecondStage(iCell) = sshCur(iCell)
+          sshNew(iCell) = sshCur(iCell)
           do k = 1, maxLevelCell(iCell)
              layerThicknessFirstStage(k, iCell) = layerThicknessCur(k, iCell)
              layerThicknessSecondStage(k, iCell) = layerThicknessCur(k, iCell)
+             layerThicknessNew(k, iCell) = layerThicknessCur(k, iCell)
           end do
        end do
        !$omp end do
@@ -327,6 +333,7 @@ module ocn_time_integration_lts3
                 tracersGroupTendSum3rd(:,:,:) = 0.0
 
                 call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupCur, 1)
+                call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupNew, 2)
                 call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupFirstStage, 3)
                 call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
                 !$omp do schedule(runtime) private(k)
@@ -334,6 +341,7 @@ module ocn_time_integration_lts3
                    do k = 1, maxLevelCell(iCell)
                       tracersGroupFirstStage(:, k, iCell) = tracersGroupCur(:, k, iCell)
                       tracersGroupSecondStage(:, k, iCell) = tracersGroupCur(:, k, iCell)
+                      tracersGroupNew(:, k, iCell) = tracersGroupCur(:, k, iCell)
                    end do
                 end do
                 !$omp end do
@@ -1878,7 +1886,7 @@ module ocn_time_integration_lts3
          block => block % next
       end do
       call mpas_timer_stop("copy soln into new soln LTS")
-      
+
       ! --------------------------------------  STEP  ------------------------------------------
       ! --- compute the third stage of SSPRK for coarse
       !
@@ -2406,11 +2414,11 @@ module ocn_time_integration_lts3
     nLTSHalos = 4
 
     ! set to 1 if need more cells in interface layers (for load balancing)
-    moreCellsOnInterface = 0
+    moreCellsOnInterface = 1
 
     nLTSHalosCopy = nLTSHalos
     if (moreCellsOnInterface == 1) then
-       nLTSHalosCopy = 9 !the extra layers you get are actually nLTSHalosCopy - 3 
+       nLTSHalosCopy = 5 !the TOTAL number of layers you actually get are nLTSHalosCopy - 3 (so the EXTRA ones are nLTSHalosCopy - 4)
     end if
 
     !NOTE:
