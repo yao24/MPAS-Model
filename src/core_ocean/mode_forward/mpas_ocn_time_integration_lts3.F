@@ -2868,24 +2868,13 @@ module ocn_time_integration_lts3
        !if(haveInterface  == 1) then
        !if (domain % dminfo % my_proc_id == 0) then
        !   print*, block % blockID
-       !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse,
-       !   'haveInterface=', haveInterface
-       !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1),
-       !   'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3),
-       !   'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
-       !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1),
-       !   'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3),
-       !   'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
-       !   print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2),
-       !   'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2)
-       !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1),
-       !   'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3),
-       !   'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
-       !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1),
-       !   'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3),
-       !   'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
-       !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2),
-       !   'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
+       !   print*, 'haveFine=', haveFine, 'haveCoarse=', haveCoarse, 'haveInterface=', haveInterface
+       !   print*, 'nCellsInLTSHalo(1,1)=', nCellsInLTSHalo(1,1),  'nCellsInLTSHalo(1,3)=', nCellsInLTSHalo(1,3),  'nCellsInLTSHalo(1,4)=', nCellsInLTSHalo(1,4)
+       !   print*, 'nCellsInLTSHalo(2,1)=', nCellsInLTSHalo(2,1),  'nCellsInLTSHalo(2,3)=', nCellsInLTSHalo(2,3),  'nCellsInLTSHalo(2,4)=', nCellsInLTSHalo(2,4)
+       !   print*, 'nCellsInLTSHalo(1,2)=', nCellsInLTSHalo(1,2),  'nCellsInLTSHalo(2,2)=', nCellsInLTSHalo(2,2) 
+       !   print*, 'nEdgessInLTSHalo(1,1)=', nEdgesInLTSHalo(1,1),  'nEdgesInLTSHalo(1,3)=', nEdgesInLTSHalo(1,3), 'nEdgesInLTSHalo(1,4)=', nEdgesInLTSHalo(1,4)
+       !   print*, 'nEdgessInLTSHalo(2,1)=', nEdgesInLTSHalo(2,1),  'nEdgesInLTSHalo(2,3)=', nEdgesInLTSHalo(2,3), 'nEdgesInLTSHalo(2,4)=', nEdgesInLTSHalo(2,4)
+       !   print*, 'nEdgessInLTSHalo(1,2)=', nEdgesInLTSHalo(1,2),  'nEdgesInLTSHalo(2,2)=', nEdgesInLTSHalo(2,2)
        !end if
 
        !TO ERASE
