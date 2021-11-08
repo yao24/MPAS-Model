@@ -122,6 +122,7 @@ module ocn_time_integration_lts3
     logical, pointer :: config_filter_btr_mode, config_use_freq_filtered_thickness
     logical, pointer :: config_use_GM
     logical, pointer :: config_use_cvmix_kpp
+    logical, pointer :: config_disable_vel_vmix
     logical, pointer :: config_use_tracerGroup
     logical, pointer :: config_disable_thick_all_tend
     logical, pointer :: config_disable_vel_all_tend
@@ -205,6 +206,7 @@ module ocn_time_integration_lts3
     call mpas_pool_get_config(domain % configs, 'config_use_freq_filtered_thickness', config_use_freq_filtered_thickness)
     call mpas_pool_get_config(domain % configs, 'config_use_GM', config_use_GM)
     call mpas_pool_get_config(domain % configs, 'config_use_cvmix_kpp', config_use_cvmix_kpp)
+    call mpas_pool_get_config(domain % configs, 'config_disable_vel_vmix', config_disable_vel_vmix)
     call mpas_pool_get_config(domain % configs, 'config_land_ice_flux_mode', config_land_ice_flux_mode)
     call mpas_pool_get_config(domain % configs, 'config_disable_vel_all_tend', config_disable_vel_all_tend)
     call mpas_pool_get_config(domain % configs, 'config_disable_thick_all_tend', config_disable_thick_all_tend)
@@ -2170,6 +2172,57 @@ module ocn_time_integration_lts3
       end do
       call mpas_timer_stop("halo updates  LTS")
 
+
+      if ( .not. config_disable_vel_vmix) then
+
+         ! --- update halos for diagnostic variables
+         if (config_use_cvmix_kpp) then
+            call mpas_timer_start("LTS3-boundary layer depth halo update")
+            call mpas_dmpar_field_halo_exch(domain, 'boundaryLayerDepth')
+            call mpas_timer_stop("LTS3-boundary layer depth halo update")
+         end if
+
+         call mpas_timer_start("LTS3-diagnostic halo update")
+         call mpas_dmpar_field_halo_exch(domain, 'normalizedRelativeVorticityEdge')
+         if (config_mom_del4 > 0.0_RKIND) then
+            call mpas_dmpar_field_halo_exch(domain, 'divergence')
+           call mpas_dmpar_field_halo_exch(domain, 'relativeVorticity')
+         end if
+         call mpas_timer_stop("LTS3-diagnostic halo update")
+         call mpas_threading_barrier()
+
+         ! --- compute diagnostics for implicit vert diff for velocity, thickness, and tracers
+         call mpas_timer_start("LTS3-update diagnostic variables for vert diff")
+         block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
+            call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+
+            !$omp do schedule(runtime)
+            do iEdge = 1, nEdges
+               normalTransportVelocity(:, iEdge) = normalVelocityNew(:, iEdge)
+            end do
+            !$omp end do
+
+            ! DIAGNOSTICS UPDATE ---
+
+            call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 2)
+            call mpas_threading_barrier()
+
+            block => block % next
+         end do
+         call mpas_timer_stop("LTS3-update diagnostic variables for vert diff")
+
+      end if
 
       !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
       ! END LTS SCHEME

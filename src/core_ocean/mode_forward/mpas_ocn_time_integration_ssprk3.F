@@ -116,6 +116,7 @@ module ocn_time_integration_ssprk3
     logical, pointer :: config_use_GM
     logical, pointer :: config_use_cvmix_kpp
     logical, pointer :: config_use_tracerGroup
+    logical, pointer :: config_disable_vel_vmix
     logical, pointer :: config_disable_thick_all_tend
     logical, pointer :: config_disable_vel_all_tend
     logical, pointer :: config_disable_tr_all_tend
@@ -187,6 +188,7 @@ module ocn_time_integration_ssprk3
     call mpas_pool_get_config(domain % configs, 'config_use_GM', config_use_GM)
     call mpas_pool_get_config(domain % configs, 'config_use_cvmix_kpp', config_use_cvmix_kpp)
     call mpas_pool_get_config(domain % configs, 'config_land_ice_flux_mode', config_land_ice_flux_mode)
+    call mpas_pool_get_config(domain % configs, 'config_disable_vel_vmix', config_disable_vel_vmix)
     call mpas_pool_get_config(domain % configs, 'config_disable_vel_all_tend', config_disable_vel_all_tend)
     call mpas_pool_get_config(domain % configs, 'config_disable_thick_all_tend', config_disable_thick_all_tend)
     call mpas_pool_get_config(domain % configs, 'config_disable_tr_all_tend', config_disable_tr_all_tend)
@@ -765,6 +767,9 @@ module ocn_time_integration_ssprk3
            end do
          end if
 
+         if (.not. config_disable_vel_vmix) then
+            call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 2)
+         end if
          call mpas_threading_barrier()
 
          ! Update the effective density in land ice if we're coupling to land ice
