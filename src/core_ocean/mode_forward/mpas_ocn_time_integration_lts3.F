@@ -123,6 +123,7 @@ module ocn_time_integration_lts3
     logical, pointer :: config_use_GM
     logical, pointer :: config_use_cvmix_kpp
     logical, pointer :: config_disable_vel_vmix
+    logical, pointer :: config_disable_tr_vmix
     logical, pointer :: config_use_tracerGroup
     logical, pointer :: config_disable_thick_all_tend
     logical, pointer :: config_disable_vel_all_tend
@@ -207,6 +208,7 @@ module ocn_time_integration_lts3
     call mpas_pool_get_config(domain % configs, 'config_use_GM', config_use_GM)
     call mpas_pool_get_config(domain % configs, 'config_use_cvmix_kpp', config_use_cvmix_kpp)
     call mpas_pool_get_config(domain % configs, 'config_disable_vel_vmix', config_disable_vel_vmix)
+    call mpas_pool_get_config(domain % configs, 'config_disable_tr_vmix', config_disable_tr_vmix)
     call mpas_pool_get_config(domain % configs, 'config_land_ice_flux_mode', config_land_ice_flux_mode)
     call mpas_pool_get_config(domain % configs, 'config_disable_vel_all_tend', config_disable_vel_all_tend)
     call mpas_pool_get_config(domain % configs, 'config_disable_thick_all_tend', config_disable_thick_all_tend)
@@ -1802,6 +1804,100 @@ module ocn_time_integration_lts3
 
          call mpas_timer_stop("advance soln LTS")
 
+
+         if ( (.not. config_disable_vel_vmix) .or. (.not. config_disable_tr_vmix) ) then
+
+            ! --- TODO: check if this halo update is needed or not
+            call mpas_timer_start("halo updates  LTS")
+            call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=1)
+            call mpas_dmpar_field_halo_exch(domain, 'layerThickness', timeLevel=1)
+            call mpas_pool_begin_iteration(tracersPool)
+            do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
+               if ( groupItr % memberType == MPAS_POOL_FIELD ) then
+                 call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=1)
+              end if
+            end do
+            call mpas_timer_stop("halo updates  LTS")
+
+            ! --- update halos for diagnostic variables
+            if (config_use_cvmix_kpp) then
+               call mpas_timer_start("LTS3-boundary layer depth halo update")
+               call mpas_dmpar_field_halo_exch(domain, 'boundaryLayerDepth')
+               call mpas_timer_stop("LTS3-boundary layer depth halo update")
+            end if
+
+            call mpas_timer_start("LTS3-diagnostic halo update")
+            call mpas_dmpar_field_halo_exch(domain, 'normalizedRelativeVorticityEdge')
+            if (config_mom_del4 > 0.0_RKIND) then
+               call mpas_dmpar_field_halo_exch(domain, 'divergence')
+              call mpas_dmpar_field_halo_exch(domain, 'relativeVorticity')
+            end if
+            call mpas_timer_stop("LTS3-diagnostic halo update")
+            call mpas_threading_barrier()
+
+            ! --- compute diagnostics for implicit vert diff for velocity, thickness, and tracers
+            call mpas_timer_start("LTS3-update diagnostic variables for vert diff")
+            block => domain % blocklist
+            do while (associated(block))
+
+               call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+               call mpas_pool_get_subpool(block % structs, 'state', statePool)
+               call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+               call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+               call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+               call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+               call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
+               call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+
+               call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+               call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+               call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+
+               !$omp do schedule(runtime)
+               do iEdge = 1, nEdges
+                  normalTransportVelocity(:, iEdge) = normalVelocityCur(:, iEdge)
+               end do
+               !$omp end do
+
+               if (haveFine == 1) then
+
+                  ! DIAGNOSTICS UPDATE ---
+
+                  call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 1)
+                  call mpas_threading_barrier()
+
+               end if
+
+               block => block % next
+            end do
+            call mpas_timer_stop("LTS3-update diagnostic variables for vert diff")
+
+         end if
+
+         call mpas_timer_start("LTS3-compute vmix for fine")
+         !TODO: this has not been tested yet
+         block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+
+            if (haveFine == 1) then
+               call ocn_vmix_implicit(dtFine, meshPool, diagnosticsPool, statePool, forcingPool, scratchPool, err, 1)
+            end if
+            call mpas_threading_barrier()
+
+            block => block % next
+         end do
+         call mpas_timer_stop("LTS3-compute vmix for fine")
+
       end do ! --- end substepping
  
 
@@ -2048,7 +2144,6 @@ module ocn_time_integration_lts3
       call mpas_timer_stop("LTS3 advance soln")
       call mpas_threading_barrier()
 
-
       ! --------------------------------------  STEP  ------------------------------------------
       ! --- interface correction
       !
@@ -2172,8 +2267,11 @@ module ocn_time_integration_lts3
       end do
       call mpas_timer_stop("halo updates  LTS")
 
+      ! --------------------------------------  STEP  ------------------------------------------
+      ! --- implicit vert diff for coarse and interface
+      !
 
-      if ( .not. config_disable_vel_vmix) then
+      if ( (.not. config_disable_vel_vmix) .or. (.not. config_disable_tr_vmix) ) then
 
          ! --- update halos for diagnostic variables
          if (config_use_cvmix_kpp) then
@@ -2203,6 +2301,9 @@ module ocn_time_integration_lts3
             call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
             call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
             call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
             call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
             call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
@@ -2213,10 +2314,14 @@ module ocn_time_integration_lts3
             end do
             !$omp end do
 
-            ! DIAGNOSTICS UPDATE ---
+            if ( haveCoarse == 1 .or. haveInterface == 1 ) then
 
-            call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 2)
-            call mpas_threading_barrier()
+               ! DIAGNOSTICS UPDATE ---
+
+               call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 2)
+               call mpas_threading_barrier()
+
+            end if
 
             block => block % next
          end do
@@ -2224,13 +2329,6 @@ module ocn_time_integration_lts3
 
       end if
 
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-      ! END LTS SCHEME
-      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-      !
-      !  A little clean up at the end
-      !
 
       call mpas_timer_start("LTS3-compute vmix")
       !TODO: this has not been tested yet
@@ -2242,41 +2340,28 @@ module ocn_time_integration_lts3
          call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
          call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
          call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+         call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+         call mpas_pool_get_array(LTSPool, 'haveCoarse', haveCoarse)
+         call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
-
-         call ocn_vmix_implicit(dt, meshPool, diagnosticsPool, statePool, forcingPool, scratchPool, err, 2)
+         if( haveCoarse == 1 .or. haveInterface == 1 ) then
+            call ocn_vmix_implicit(dt, meshPool, diagnosticsPool, statePool, forcingPool, scratchPool, err, 2)
+         end if
          call mpas_threading_barrier()
 
          block => block % next
       end do
       call mpas_timer_stop("LTS3-compute vmix")
-      call mpas_threading_barrier()
+
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      ! END LTS SCHEME
+      !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      !
+      !  A little clean up at the end
+      !
 
       call mpas_timer_start("LTS3-cleanup phase")
-
-      call mpas_timer_start("LTS3-implicit vert mix")
-      ! Update halo on u and tracers, which were just updated for implicit vertical mixing.  If not done, this leads to lack of volume
-      ! conservation.  It is required because halo updates in LTS3 are only  conducted on tendencies, not on the velocity
-      ! and tracer fields (NOT TRUE! ACTUALLY IN LTS3 THE HALO UPDATES ARE ONLY ON THE STATE VARIABLES AND NOT ON THE TENDENCIES. TODO: DO WE STILL NEED THIS?). 
-      ! So this update is required to communicate the change due to implicit vertical mixing across the boundary.
-      call mpas_timer_start("LTS3-implicit vert mix halos")
-
-      call mpas_pool_get_subpool(domain % blocklist % structs, 'state', statePool)
-      call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
-
-      call mpas_dmpar_field_halo_exch(domain, 'normalVelocity', timeLevel=2)
-
-      call mpas_pool_begin_iteration(tracersPool)
-      do while ( mpas_pool_get_next_member(tracersPool, groupItr) )
-         if ( groupItr % memberType == MPAS_POOL_FIELD ) then
-            call mpas_dmpar_field_halo_exch(domain, groupItr % memberName, timeLevel=2) 
-         end if
-      end do
-
-      call mpas_timer_stop("LTS3-implicit vert mix halos")
-      call mpas_timer_stop("LTS3-implicit vert mix")
-      call mpas_threading_barrier()
-
       block => domain % blocklist
       do while (associated(block))
          call mpas_pool_get_subpool(block % structs, 'state', statePool)
