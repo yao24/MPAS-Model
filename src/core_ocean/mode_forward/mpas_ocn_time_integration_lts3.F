@@ -891,6 +891,7 @@ module ocn_time_integration_lts3
                         call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
                         !$omp do schedule(runtime) private(k)
                         do ic = 1, nCellsInLTSHalo(1,2)
+                           iCell = cellsInLTSHalo(1,2,ic)
                            do k = 1, maxLevelCell(iCell)
                               tracersGroupNew(:, k, iCell) = tracersGroupCur(:, k, iCell)
                               tracersGroupCur(:, k, iCell) = (1.0 - alpha - alphaHat) * tracersGroupCur(:,k,iCell) + &
@@ -1202,6 +1203,7 @@ module ocn_time_integration_lts3
                         call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
                         !$omp do schedule(runtime) private(k)
                         do ic = 1, nCellsInLTSHalo(1,2)
+                           iCell = cellsInLTSHalo(1,2,ic)
                            do k = 1, maxLevelCell(iCell)
                               tracersGroupNew(:, k, iCell) = tracersGroupFirstStage(:, k, iCell)
                               tracersGroupFirstStage(:, k, iCell) = (1.0 - beta - betaHat) * tracersGroupCur(:,k,iCell) + &
@@ -1527,6 +1529,7 @@ module ocn_time_integration_lts3
                         call mpas_pool_get_array(tracersPool, trim(groupItr % memberName), tracersGroupSecondStage, 4)
                         !$omp do schedule(runtime) private(k)
                         do ic = 1, nCellsInLTSHalo(1,2)
+                           iCell = cellsInLTSHalo(1,2,ic)
                            do k = 1, maxLevelCell(iCell)
                               tracersGroupNew(:, k, iCell) = tracersGroupSecondStage(:, k, iCell)
                               tracersGroupSecondStage(:, k, iCell) = (1.0 - gam - gamHat) * tracersGroupCur(:,k,iCell) + &
@@ -1648,8 +1651,8 @@ module ocn_time_integration_lts3
             call mpas_pool_get_array(tendPool, 'normalVelocity', normalVelocityTend)
             call mpas_pool_get_array(tendPool, 'layerThickness', layerThicknessTend)
 
-            call mpas_pool_get_array(tendSum1stPool, 'normalVelocity', normalVelocityTendSum1st)
-            call mpas_pool_get_array(tendSum1stPool, 'layerThickness', layerThicknessTendSum1st)
+            call mpas_pool_get_array(tendSum3rdPool, 'normalVelocity', normalVelocityTendSum3rd)
+            call mpas_pool_get_array(tendSum3rdPool, 'layerThickness', layerThicknessTendSum3rd)
 
             call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityNew, 2)
             call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessNew, 2)
