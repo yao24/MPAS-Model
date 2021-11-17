@@ -1029,7 +1029,7 @@ module ocn_time_integration_lts3
             call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
             call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
             call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
-            call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
             call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
             call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
@@ -1049,11 +1049,48 @@ module ocn_time_integration_lts3
                call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 1)
                call mpas_threading_barrier()
 
+            end if
+
+            block => block % next
+         end do
+
+         block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_subpool(block % structs, 'verticalMesh', verticalMeshPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'shortwave', swForcingPool)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
+            call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessCur, 1)
+            call mpas_pool_get_array(statePool, 'ssh', sshCur, 1)
+            call mpas_pool_get_array(diagnosticsPool, 'layerThicknessEdge', layerThicknessEdge)
+            call mpas_pool_get_array(diagnosticsPool, 'vertAleTransportTop', vertAleTransportTop)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+
+               ! VERTICAL TRANSPORT COMPUTATION ---
+               call ocn_vert_transport_velocity_top(meshPool, verticalMeshPool, scratchPool, layerThicknessCur, &
+                                                    layerThicknessEdge, normalTransportVelocity, sshCur, dtFine, vertAleTransportTop, err)
+               call mpas_threading_barrier()
+
                ! TENDENCIES COMPUTATION ---
 
-               call ocn_time_integrator_compute_vel_tends(block, dtFine, err, statePool, 1)
-               call ocn_time_integrator_compute_thick_tends(block, dtFine, err, statePool, 1)
-               call ocn_time_integrator_compute_tracer_tends( block, dtFine, err, statePool, 1)
+               call ocn_tend_vel(tendPool, statePool, forcingPool, diagnosticsPool, meshPool, scratchPool, 1, dtFine)
+               call ocn_tend_thick(tendPool, forcingPool, diagnosticsPool, meshPool)
+               call ocn_tend_tracer(tendPool, statePool, forcingPool, diagnosticsPool, meshPool, swForcingPool, scratchPool, dtFine, activeTracersOnlyIn, 1)
+               call mpas_threading_barrier()
 
             end if
 
@@ -1344,8 +1381,6 @@ module ocn_time_integration_lts3
             call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
             call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
             call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
-            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
 
             call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
             call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
@@ -1363,11 +1398,48 @@ module ocn_time_integration_lts3
                call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 3)
                call mpas_threading_barrier()
 
-               ! TENDENCIES COMPUTATION ---
+            end if
 
-               call ocn_time_integrator_compute_vel_tends(block, dtFine, err, statePool, 3)
-               call ocn_time_integrator_compute_thick_tends(block, dtFine, err, statePool, 3)
-               call ocn_time_integrator_compute_tracer_tends( block, dtFine, err, statePool, 3)
+            block => block % next
+         end do
+
+        block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_subpool(block % structs, 'verticalMesh', verticalMeshPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'shortwave', swForcingPool)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityFirstStage, 3)
+            call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessFirstStage, 3)
+            call mpas_pool_get_array(statePool, 'ssh', sshFirstStage, 3)
+            call mpas_pool_get_array(diagnosticsPool, 'layerThicknessEdge', layerThicknessEdge)
+            call mpas_pool_get_array(diagnosticsPool, 'vertAleTransportTop', vertAleTransportTop)
+
+            if(haveFine == 1 .or. haveInterface == 1) then
+
+               ! VERTICAL TRANSPORT COMPUTATION ---
+               call ocn_vert_transport_velocity_top(meshPool, verticalMeshPool, scratchPool, layerThicknessFirstStage, &
+                                                    layerThicknessEdge, normalTransportVelocity, sshFirstStage, dtFine, vertAleTransportTop, err)
+               call mpas_threading_barrier()
+ 
+               ! TENDENCIES COMPUTATION ---
+   
+               call ocn_tend_vel(tendPool, statePool, forcingPool, diagnosticsPool, meshPool, scratchPool, 3, dtFine)
+               call ocn_tend_thick(tendPool, forcingPool, diagnosticsPool, meshPool)
+               call ocn_tend_tracer(tendPool, statePool, forcingPool, diagnosticsPool, meshPool, swForcingPool, scratchPool, dtFine, activeTracersOnlyIn, 3)
+               call mpas_threading_barrier()
 
             end if
 
@@ -1669,8 +1741,6 @@ module ocn_time_integration_lts3
             call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
             call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
             call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
-            call mpas_pool_get_array(LTSPool, 'edgesInLTSHalo', edgesInLTSHalo)
-            call mpas_pool_get_array(LTSPool, 'nEdgesInLTSHalo',nEdgesInLTSHalo)
             call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
             call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
@@ -1689,12 +1759,49 @@ module ocn_time_integration_lts3
 
                call ocn_diagnostic_solve(dtFine, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 4)
                call mpas_threading_barrier()
+
+            end if
+
+            block => block % next
+         end do
+
+         block => domain % blocklist
+         do while (associated(block))
+
+            call mpas_pool_get_subpool(block % structs, 'mesh', meshPool)
+            call mpas_pool_get_subpool(block % structs, 'state', statePool)
+            call mpas_pool_get_subpool(statePool, 'tracers', tracersPool)
+            call mpas_pool_get_subpool(block % structs, 'forcing', forcingPool)
+            call mpas_pool_get_subpool(block % structs, 'scratch', scratchPool)
+            call mpas_pool_get_subpool(block % structs, 'diagnostics', diagnosticsPool)
+            call mpas_pool_get_subpool(block % structs, 'LTS', LTSPool)
+            call mpas_pool_get_subpool(block % structs, 'verticalMesh', verticalMeshPool)
+            call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
+            call mpas_pool_get_subpool(block % structs, 'shortwave', swForcingPool)
+            call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
+            call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+
+            call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocitySecondStage, 4)
+            call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
+
+            call mpas_pool_get_array(statePool, 'layerThickness', layerThicknessSecondStage, 4)
+            call mpas_pool_get_array(statePool, 'ssh', sshSecondStage, 4)
+            call mpas_pool_get_array(diagnosticsPool, 'layerThicknessEdge', layerThicknessEdge)
+            call mpas_pool_get_array(diagnosticsPool, 'vertAleTransportTop', vertAleTransportTop)
+
+           if(haveFine == 1 .or. haveInterface == 1) then
+
+               ! VERTICAL TRANSPORT COMPUTATION ---
+               call ocn_vert_transport_velocity_top(meshPool, verticalMeshPool, scratchPool, layerThicknessSecondStage, &
+                                                    layerThicknessEdge, normalTransportVelocity, sshSecondStage, dtFine, vertAleTransportTop, err)
+               call mpas_threading_barrier()
  
                ! TENDENCIES COMPUTATION ---
 
-               call ocn_time_integrator_compute_vel_tends(block, dtFine, err, statePool, 4)
-               call ocn_time_integrator_compute_thick_tends(block, dtFine, err, statePool, 4)
-               call ocn_time_integrator_compute_tracer_tends( block, dtFine, err, statePool, 4)
+               call ocn_tend_vel(tendPool, statePool, forcingPool, diagnosticsPool, meshPool, scratchPool, 4, dtFine)
+               call ocn_tend_thick(tendPool, forcingPool, diagnosticsPool, meshPool)
+               call ocn_tend_tracer(tendPool, statePool, forcingPool, diagnosticsPool, meshPool, swForcingPool, scratchPool, dtFine, activeTracersOnlyIn, 4)
+               call mpas_threading_barrier()
 
             end if
 
