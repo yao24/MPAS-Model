@@ -246,7 +246,7 @@ def get_analytical_stress_divergence_triangle(u, v, T11, T12, T21, T22, Cx, Cy, 
 
 #--------------------------------------------------------
 
-def L2_norm_integral_triangle(numerical, nVertices, cellsOnVertex, xCell, yCell, areaTriangle, xMin, yMin, useVertex, divType):
+def L2_norm_integral_triangle(numerical, nVertices, cellsOnVertex, xCell, yCell, areaTriangle, xMin, yMin, useVertex, divType, xVertex, yVertex):
 
     degreesToRadians = math.pi / 180.0
 
@@ -259,25 +259,47 @@ def L2_norm_integral_triangle(numerical, nVertices, cellsOnVertex, xCell, yCell,
 
         if (useVertex[iVertex]):
 
-            iCell1 = cellsOnVertex[iVertex,0]
-            iCell2 = cellsOnVertex[iVertex,1]
-            iCell3 = cellsOnVertex[iVertex,2]
+           # relative weighted l2 norm computed with all values on vertices (Eq.64 in the sea ice paper)
+           #x = (xVertex[iVertex] - xMin)
+           #y = (yVertex[iVertex] - yMin)
 
-            T11, T12, T21, T22, Cx, Cy = \
-                get_real_coords_from_barycentric_coords_coefficients(xCell[iCell1], yCell[iCell1], \
-                                                                     xCell[iCell2], yCell[iCell2], \
-                                                                     xCell[iCell3], yCell[iCell3])
-            for iWeight in range(0, nIntegrationPoints):
+           #u, v, e11, e22, e12, divu, divv = velocities_strains_stress_divergences(x, y)
 
-                divu, divv = get_analytical_stress_divergence_triangle(u[iWeight], v[iWeight], T11, T12, T21, T22, Cx, Cy, xMin, yMin)
+           #if (divType == "divu") :
+           #   analytical = divu
+           #else:
+           #   analytical = divv
 
-                if (divType == "divu"):
-                   analytical = divu
-                else:
-                   analytical = divv
+           #norm  = norm  + areaTriangle[iVertex] * math.pow(numerical[iVertex] - analytical,2)
 
-                norm  = norm  + weights[iWeight] * areaTriangle[iVertex] * math.pow(numerical[iVertex] - analytical,2)
-                denom = denom + weights[iWeight] * areaTriangle[iVertex] * math.pow(analytical,2)
+           #denom = denom + areaTriangle[iVertex] * math.pow(analytical,2)
+
+
+           # relative weighted l2 norm computed wrt the integral mean of analytic soln  
+           iCell1 = cellsOnVertex[iVertex,0]
+           iCell2 = cellsOnVertex[iVertex,1]
+           iCell3 = cellsOnVertex[iVertex,2]
+
+           T11, T12, T21, T22, Cx, Cy = \
+               get_real_coords_from_barycentric_coords_coefficients(xCell[iCell1], yCell[iCell1], \
+                                                                  xCell[iCell2], yCell[iCell2], \
+                                                                 xCell[iCell3], yCell[iCell3])
+           divuIntegral = 0.0
+           divvIntegral = 0.0
+           for iWeight in range(0, nIntegrationPoints):
+
+              divu, divv = get_analytical_stress_divergence_triangle(u[iWeight], v[iWeight], T11, T12, T21, T22, Cx, Cy, xMin, yMin)
+
+              divuIntegral += weights[iWeight] * divu
+              divvIntegral += weights[iWeight] * divv
+
+           if (divType == "divu"):
+              analytical = divuIntegral
+           else:
+              analytical = divvIntegral
+
+           norm  = norm  + areaTriangle[iVertex] * math.pow(numerical[iVertex] - analytical,2)
+           denom = denom + areaTriangle[iVertex] * math.pow(analytical,2)                                                    
 
     norm = math.sqrt(norm / denom)
 
@@ -307,8 +329,75 @@ def get_norm_integral_triangle(filenameIC, filename, useVertex):
     yMin = np.amin(yVertex)
     yMax = np.amax(yVertex)
 
-    normU = L2_norm_integral_triangle(stressDivergenceU, nVertices, cellsOnVertex, xCell, yCell, areaTriangle, xMin, yMin, useVertex, "divu")
-    normV = L2_norm_integral_triangle(stressDivergenceV, nVertices, cellsOnVertex, xCell, yCell, areaTriangle, xMin, yMin, useVertex, "divv")
+    normU = L2_norm_integral_triangle(stressDivergenceU, nVertices, cellsOnVertex, xCell, yCell, areaTriangle, xMin, yMin, useVertex, "divu", xVertex, yVertex)
+    normV = L2_norm_integral_triangle(stressDivergenceV, nVertices, cellsOnVertex, xCell, yCell, areaTriangle, xMin, yMin, useVertex, "divv", xVertex, yVertex)
+
+    print('normU=', normU, 'normV=', normV)
+
+    fileMPAS.close()
+
+    return normU, normV
+
+
+#--------------------------------------------------------
+
+def get_norm_c_grid(filenameIC, filename, useEdge):
+
+    fileMPAS = Dataset(filename, "r")
+
+    nEdges = len(fileMPAS.dimensions["nEdges"])
+
+    xEdge = fileMPAS.variables["xEdge"][:]
+    yEdge = fileMPAS.variables["yEdge"][:]
+    xVertex = fileMPAS.variables["xVertex"][:]
+    yVertex = fileMPAS.variables["yVertex"][:]
+    variationalDenominatorCGrid = fileMPAS.variables["variationalDenominatorCGrid"][:]
+
+    stressDivergenceUCGrid = fileMPAS.variables["stressDivergenceUCGrid"][0,:]
+    stressDivergenceVCGrid = fileMPAS.variables["stressDivergenceVCGrid"][0,:]
+
+    #xMin = np.amin(xEdge)
+    #xMax = np.amax(xEdge)
+    #yMin = np.amin(yEdge)
+    #yMax = np.amax(yEdge)
+    xMin = np.amin(xVertex)
+    xMax = np.amax(xVertex)
+    yMin = np.amin(yVertex)
+    yMax = np.amax(yVertex)
+
+    divTypes = ["divu", "divv"]
+
+    normU = 0.0
+    normV = 0.0
+    for divType in divTypes :
+
+       normTemp = 0.0
+       denomTemp = 0.0
+       for iEdge in range(0,nEdges):
+
+          if(useEdge[iEdge]) :
+
+             x = xEdge[iEdge] - xMin
+             y = yEdge[iEdge] - yMin
+
+             u, v, e11, e22, e12, divu, divv = velocities_strains_stress_divergences(x, y)
+
+             if (divType == "divu") :
+                analytical = divu
+                numerical = stressDivergenceUCGrid[iEdge]
+             else:
+                analytical = divv
+                numerical = stressDivergenceVCGrid[iEdge]
+
+             normTemp  = normTemp  + variationalDenominatorCGrid[iEdge] * math.pow(numerical - analytical,2)
+             denomTemp = denomTemp + variationalDenominatorCGrid[iEdge] * math.pow(analytical,2)
+ 
+       if (divType == "divu") :
+          normU = math.sqrt(normTemp / denomTemp)
+       else :
+          normV = math.sqrt(normTemp / denomTemp) 
+
+    print('normU=', normU, 'normV=', normV)
 
     fileMPAS.close()
 
@@ -374,9 +463,9 @@ def L2_norm_integral_square(numerical, nVertices, cellsOnVertex, xCell, yCell, a
             else:
                 analytical = divvIntegral
 
-            norm  = norm  + weights[iWeight] * areaTriangle[iVertex] * math.pow(numerical[iVertex] - analytical,2)
+            norm  = norm  + areaTriangle[iVertex] * math.pow(numerical[iVertex] - analytical,2)
 
-            denom = denom + weights[iWeight] * areaTriangle[iVertex] * math.pow(analytical,2)
+            denom = denom + areaTriangle[iVertex] * math.pow(analytical,2)
 
     norm = math.sqrt(norm / denom)
 
@@ -410,6 +499,8 @@ def get_norm_integral_square(filenameIC, filename, useVertex):
     normV = L2_norm_integral_square(stressDivergenceV, nVertices, cellsOnVertex, xCell, yCell, areaTriangle, xMin, yMin, useVertex, "divv")
 
     fileMPAS.close()
+
+    print('normU=', normU, 'normV=', normV)
 
     return normU, normV
 
@@ -461,11 +552,13 @@ def get_norm(filenameIC, filename, useVertex):
 
     fileMPAS.close()
 
+    print('normU=', normU, 'normV=', normV)
+
     return normU, normV
 
 #--------------------------------------------------------
 
-def get_resolution(filename, useVertex):
+def get_resolution(filename):
 
     fileMPAS = Dataset(filename, "r")
 
@@ -493,6 +586,8 @@ def get_resolution(filename, useVertex):
 
     fileMPAS.close()
 
+    print('resolution=',resolution)
+
     return resolution
 
 #--------------------------------------------------------
@@ -508,19 +603,60 @@ def get_use_vertex(filenameIn):
     verticesOnCell = fileIn.variables["verticesOnCell"][:]
     verticesOnCell[:] = verticesOnCell[:] - 1
     interiorCell = fileIn.variables["interiorCell"][0,:]
+    interiorVertex = fileIn.variables["interiorVertex"][0,:]
     fileIn.close()
 
     useVertex = np.ones(nVertices,dtype="i")
     for iCell in range(0,nCells):
         if (interiorCell[iCell] == 0):
-            for iCellOnCell in range(0,nEdgesOnCell[iCell]):
-                iCell2 = cellsOnCell[iCell,iCellOnCell]
-                if (iCell2 < nCells):
-                    for iVertexOnCell in range(0,nEdgesOnCell[iCell2]):
-                        iVertex = verticesOnCell[iCell2,iVertexOnCell]
-                        useVertex[iVertex] = 0
+           for iCellOnCell in range(0,nEdgesOnCell[iCell]):
+              iVertex = verticesOnCell[iCell,iCellOnCell]
+              useVertex[iVertex] = 0
+    #          iCell2 = cellsOnCell[iCell,iCellOnCell]
+    #          if (iCell2 < nCells):
+    #             for iVertexOnCell in range(0,nEdgesOnCell[iCell2]):
+    #                 iVertex = verticesOnCell[iCell2,iVertexOnCell]
+    #                 useVertex[iVertex] = 0
+
+    #for iVertex in range(0,nVertices):
+    #   if(interiorVertex[iVertex] == 0):
+    #      useVertex[iVertex] = 0
 
     return useVertex
+
+#--------------------------------------------------------
+
+def get_use_edge(filenameIn):
+
+    fileIn = Dataset(filenameIn,"r")
+    nCells = len(fileIn.dimensions["nCells"])
+    nEdges = len(fileIn.dimensions["nEdges"])
+    nEdgesOnCell = fileIn.variables["nEdgesOnCell"][:]
+    cellsOnCell = fileIn.variables["cellsOnCell"][:]
+    cellsOnCell[:] = cellsOnCell[:] - 1
+    edgesOnCell = fileIn.variables["edgesOnCell"][:]
+    edgesOnCell[:] = edgesOnCell[:] - 1
+    interiorCell = fileIn.variables["interiorCell"][0,:]
+    interiorEdge = fileIn.variables["interiorEdge"][0,:]
+    fileIn.close()
+
+    useEdge = np.ones(nEdges,dtype="i")
+    for iCell in range(0,nCells):
+        if (interiorCell[iCell] == 0):
+            for iCellOnCell in range(0,nEdgesOnCell[iCell]):
+               iEdge = edgesOnCell[iCell,iCellOnCell]
+               useEdge[iEdge] = 0
+                #iCell2 = cellsOnCell[iCell,iCellOnCell]
+                #if (iCell2 < nCells):
+                #    for iEdgeOnCell in range(0,nEdgesOnCell[iCell2]):
+                #        iEdge = edgesOnCell[iCell2,iEdgeOnCell]
+                #        useEdge[iEdge] = 0
+
+    #for iEdge in range(0,nEdges):
+    #   if(interiorEdge[iEdge] == 0):
+    #      useEdge[iEdge] = 0
+
+    return useEdge
 
 #--------------------------------------------------------
 
@@ -547,20 +683,19 @@ def stress_divergence_scaling():
     #operatorMethods = ["wachspress","pwl","weak"]
     operatorMethods = ["wachspress", "pwl"]
 
-    #gridTypes = ["hex","quad"]
-    gridTypes = ["hex"]
+    gridTypes = ["hex","quad"]
+    #gridTypes = ["hex"]
 
-    #grids = {"hex" :["0082x0094",
-    #                 "0164x0188",
-    #                 "0328x0376",
-    #                 "0656x0752"],
-    #         "quad":["0080x0080",
-    #                 "0160x0160",
-    #                 "0320x0320",
-    #                 "0640x0640"]}
+    grids = {"hex" :["0082x0094",
+                     "0164x0188",
+                     "0328x0376",
+                     "0656x0752"],
+             "quad":["0080x0080",
+                     "0160x0160",
+                     "0320x0320",
+                     "0640x0640"]}
     #grids = {"hex" :["0656x0752"],
     #         "quad":["0640x0640"]}
-
     #grids = {"hex" :["0082x0094",
     #                 "0164x0188",
     #                 "0328x0376",
@@ -569,12 +704,19 @@ def stress_divergence_scaling():
     #                 "0160x0160",
     #                 "0320x0320",
     #                 "0640x0640"]}
+    #grids = {"hex" :["0082x0094",
+    #                 "0164x0188",
+    #                 "0328x0376"],
+    #         "quad":["0080x0080",
+    #                 "0160x0160",
+    #                 "0320x0320"]}
     #grids = {"hex" :["0082x0094"],
     #         "quad":["0080x0080"]}
     #grids = {"hex" :["0082x0094"]}
-    grids = {"hex" :["0082x0094",
-                     "0164x0188",
-                     "0328x0376"]}
+    #grids = {"hex" :["0082x0094",
+    #                 "0164x0188",
+    #                 "0328x0376",
+    #                 "0656x0752"]}
 
     stressDivergences = ["U","V"]
     #stressDivergences = ["U"]
@@ -598,6 +740,12 @@ def stress_divergence_scaling():
     stressDivergenceLabels = {"U":r"(a) $(\nabla \cdot \sigma)_u$",
                               "V":r"(b) $(\nabla \cdot \sigma)_v$"}
 
+    with open('./namelist.seaice.stress_divergence') as namelistFile:
+       namelistTxt = namelistFile.read().split('\n')
+       for line in namelistTxt:
+          if 'config_use_c_grid = ' in line:
+             config_use_c_grid = line.split()[-1]
+             break
 
     # scaling lines
     xMin = 2e-3
@@ -637,14 +785,20 @@ def stress_divergence_scaling():
 
                     print("      ", filename, filenameIC)
 
-                    useVertex = get_use_vertex(filename)
+                    if (config_use_c_grid == 'false') :
+                       useVertex = get_use_vertex(filename)
+                       normU, normV = get_norm(filenameIC, filename, useVertex)
+ 
+                       #if (gridType == "hex"):
+                       #    normU, normV = get_norm_integral_triangle(filenameIC, filename, useVertex)
+                       #elif (gridType == "quad"):
+                       #    normU, normV = get_norm_integral_square(filenameIC, filename, useVertex)
 
-                    if (gridType == "hex"):
-                        normU, normV = get_norm_integral_triangle(filenameIC, filename, useVertex)
-                    elif (gridType == "quad"):
-                        normU, normV = get_norm_integral_square(filenameIC, filename, useVertex)
+                    else :
+                       useEdge = get_use_edge(filename)
+                       normU, normV = get_norm_c_grid(filenameIC, filename, useEdge)
 
-                    x.append(get_resolution(filename, useVertex))
+                    x.append(get_resolution(filename))
                     if (stressDivergence == "U"):
                         y.append(normU)
                     elif (stressDivergence == "V"):
@@ -653,7 +807,7 @@ def stress_divergence_scaling():
                 if (gridType == "hex"):
                     legendLabel = legendLabels[operatorMethod]
                 else:
-                    legendLabel = "_nolegend_"
+                    legendLabel = legendLabels[operatorMethod]
                 #print(x)
                 axes[j].loglog(x, y, color=lineColours[operatorMethod], ls=lineStyles[gridType], marker=markers[operatorMethod], markersize=5.0, label=legendLabel)
 

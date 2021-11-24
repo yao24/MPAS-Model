@@ -23,7 +23,8 @@ def error_analysis_stress_divergence():
     gridTypes = ["hex","quad"]
     grids = {"hex" :"0082x0094",
              "quad":"0080x0080"}
-    #gridTypes = ["hex"]
+    #gridTypes = ["quad"]
+    #grids = {"quad" :"0080x0080"}
     #grids = {"hex" :"0082x0094"}
     #grids = {"hex" :"0164x0188"}
     #grids = {"hex" : "0328x0376"}
@@ -83,10 +84,9 @@ def error_analysis_stress_divergence():
         #print(edgesOnVertex[iVertexTest,0])
         #print(edgesOnVertex[iVertexTest,1])
         #print(edgesOnVertex[iVertexTest,2])
-        ##print(edgesOnVertex[iVertexTest,3]) for the quad there is this one too
+        #print(edgesOnVertex[iVertexTest,3]) #for the quad there is this one too
 
-
-        iEdgeTest = 1554 #it is one of the edgesOnVertex of vertex 1123 in the hexagon mesh (with both enumerations starting from 0)
+        iEdgeTest = 1554 #it is one of the edgesOnVertex of vertex 1123 in the hex mesh (with both enums starting from 0), edges are 1553, 1555, 1554 (also 3522 for quad)
         #iEdgeTest = 1436  #it is one of the edgesOnVertex of vertex 1123 in the hexagon mesh (with both enumerations starting from 0) USE THIS WITH FINER MESH
         print("  iEdgeTest: ",iEdgeTest)
         fileout.write("  iEdgeTest: %i\n" %(iEdgeTest))
@@ -98,8 +98,6 @@ def error_analysis_stress_divergence():
         print("xEdge[iEdgeTest]=",xEdge[iEdgeTest],"yEdge[iEdgeTest]=",yEdge[iEdgeTest])
 
         basises = ["wachspress","pwl"]
-        #basises = ["wachspress"]
-        #basises = ["pwl"]
         for basis in basises:
 
             print("   ",basis)

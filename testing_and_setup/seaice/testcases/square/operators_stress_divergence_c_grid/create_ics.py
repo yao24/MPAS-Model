@@ -139,8 +139,10 @@ def create_ic(gridfile, icfile):
 
     for iEdge in range(0,nEdges):
 
-        x = (xEdge[iEdge] - xMinEdge)
-        y = (yEdge[iEdge] - yMinEdge)
+        #x = (xEdge[iEdge] - xMinEdge)
+        #y = (yEdge[iEdge] - yMinEdge)
+        x = (xEdge[iEdge] - xMin)
+        y = (yEdge[iEdge] - yMin)
 
         u, v, e11, e22, e12, divu, divv = velocities_strains_stress_divergences(x, y)
 
@@ -173,10 +175,10 @@ def create_ic(gridfile, icfile):
        for iVertex in range(0, nVertices):
            for iDegree in range(0,vertexDegree):
               iEdge = edgesOnVertex[iVertex,iDegree]
-
               stress11varTri[iVertex,iDegree] = strain11Edge[iEdge]
               stress22varTri[iVertex,iDegree] = strain22Edge[iEdge]
               stress12varTri[iVertex,iDegree] = strain12Edge[iEdge]
+
 
     else :
        # if B-grid
@@ -262,20 +264,20 @@ def create_ic(gridfile, icfile):
     var = fileOut.createVariable("stress12varTri","d",dimensions=["nVertices","vertexDegree"])
     var[:] = stress12varTri[:]
 
-    #if (config_use_c_grid == 'true') :
-    #   #if C-grid
-    #   var = fileOut.createVariable("stressDivergenceUAnalytical","d",dimensions=["nEdges"])
-    #   var[:] = stressDivergenceUCGrid[:]
+    if (config_use_c_grid == 'true') :
+       #if C-grid
+       var = fileOut.createVariable("stressDivergenceUAnalytical","d",dimensions=["nEdges"])
+       var[:] = stressDivergenceUCGrid[:]
  
-    #   var = fileOut.createVariable("stressDivergenceVAnalytical","d",dimensions=["nEdges"])
-    #   var[:] = stressDivergenceVCGrid[:]
+       var = fileOut.createVariable("stressDivergenceVAnalytical","d",dimensions=["nEdges"])
+       var[:] = stressDivergenceVCGrid[:]
 
-    #else :
-    var = fileOut.createVariable("stressDivergenceUAnalytical","d",dimensions=["nVertices"])
-    var[:] = stressDivergenceU[:]
+    else :
+       var = fileOut.createVariable("stressDivergenceUAnalytical","d",dimensions=["nVertices"])
+       var[:] = stressDivergenceU[:]
  
-    var = fileOut.createVariable("stressDivergenceVAnalytical","d",dimensions=["nVertices"])
-    var[:] = stressDivergenceV[:]
+       var = fileOut.createVariable("stressDivergenceVAnalytical","d",dimensions=["nVertices"])
+       var[:] = stressDivergenceV[:]
 
     fileOut.close()
 
@@ -286,19 +288,26 @@ def create_ics():
     gridTypes = ["hex","quad"]
 #    gridTypes = ["hex"]
 
+    grids = {"hex": ["0082x0094",
+                     "0164x0188",
+                     "0328x0376",
+                     "0656x0752"],
+             "quad":["0080x0080",
+                     "0160x0160",
+                     "0320x0320",
+                     "0640x0640"]}
+#    grids = {"hex": ["0082x0094",
+#                     "0164x0188",
+#                     "0328x0376"],
+#             "quad":["0080x0080",
+#                     "0160x0160",
+#                     "0320x0320"]}
+
 #    grids = {"hex": ["0082x0094",
 #                     "0164x0188",
 #                     "0328x0376",
 #                     "0656x0752"],
-#             "quad":["0080x0080",
-#                     "0160x0160",
-#                     "0320x0320",
-#                     "0640x0640"]}
-
-    grids = {"hex": ["0082x0094",
-                     "0164x0188",
-                     "0328x0376"],
-             "quad":["0080x0080"]}
+#             "quad":["0080x0080"]}
 
 #    grids = {"hex": ["0082x0094"],
 #             "quad":["0080x0080"]}
