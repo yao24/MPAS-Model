@@ -52,7 +52,9 @@ contains
        yCell, &
        zCell, &
        rotateCartesianGrid, &
-       onASphere)!{{{
+       onASphere, &
+       dvEdge, &
+       interiorVertex)!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
          xLocal, & !< Output:
@@ -62,7 +64,13 @@ contains
          nCells !< Input:
 
     integer, dimension(:), intent(in) :: &
-         nEdgesOnCell !< Input:
+         nEdgesOnCell  !< Input:
+
+    integer, dimension(:), optional, intent(in) :: &
+         interiorVertex  !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         dvEdge  !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          verticesOnCell !< Input:
@@ -105,7 +113,9 @@ contains
             zVertex, &
             xCell, &
             yCell, &
-            zCell)
+            zCell, &
+            dvEdge, &
+            interiorVertex)
     endif
 
   end subroutine seaice_calc_local_coords!}}}
@@ -133,7 +143,9 @@ contains
        zVertex, &
        xCell, &
        yCell, &
-       zCell)!{{{
+       zCell, &
+       dvEdge, &
+       interiorVertex )!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
          xLocal, & !< Output:
@@ -143,7 +155,13 @@ contains
          nCells !< Input:
 
     integer, dimension(:), intent(in) :: &
-         nEdgesOnCell !< Input:
+         nEdgesOnCell    !< Input:
+
+    integer, dimension(:), optional, intent(in) :: &
+         interiorVertex    !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         dvEdge  !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          verticesOnCell !< Input:
@@ -161,8 +179,10 @@ contains
          iVertex, &
          iVertexOnCell
 
-    do iCell = 1, nCells
+    real(kind=RKIND) :: &
+         halfMeshSize
 
+    do iCell = 1, nCells
        do iVertexOnCell = 1, nEdgesOnCell(iCell)
 
           iVertex = verticesOnCell(iVertexOnCell, iCell)
@@ -170,9 +190,35 @@ contains
           xLocal(iVertexOnCell,iCell) = xVertex(iVertex) - xCell(iCell)
           yLocal(iVertexOnCell,iCell) = yVertex(iVertex) - yCell(iCell)
 
-       enddo ! iVertexOnCell
+        end do
+    end do
 
-    enddo ! iCell
+
+    if(size(xLocal(:,1)) == 4 .and. present(interiorVertex)) then ! the mesh is planar with square cells
+
+       halfMeshSize = abs(maxval(dvEdge(:))) * 0.5_RKIND    
+
+       do iCell = 1, nCells
+
+          if(interiorVertex(iCell) == 0) then
+
+             !put in some junk so Wachspress can run (but the edges with at
+             !least one vertex on the boundary should not be considered because
+             !they won't produce a correct value with the trick below)
+             xLocal(1,iCell) = 0.0_RKIND
+             yLocal(1,iCell) = halfMeshSize
+             xLocal(2,iCell) = - halfMeshSize
+             yLocal(2,iCell) = 0.0_RKIND
+             xLocal(3,iCell) = 0.0_RKIND
+             yLocal(3,iCell) = - halfMeshSize
+             xLocal(4,iCell) = halfMeshSize
+             yLocal(4,iCell) = 0.0_RKIND
+  
+          end if
+
+       end do
+
+    end if
 
   end subroutine calc_local_coords_planar!}}}
 

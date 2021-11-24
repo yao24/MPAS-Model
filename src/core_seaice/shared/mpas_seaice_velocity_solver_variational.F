@@ -369,7 +369,8 @@ contains
             yCell, &
             zCell, &
             rotateCartesianGrid, &
-            on_a_sphere)
+            on_a_sphere, &
+            dvEdge)
     else
        call seaice_calc_local_coords(&
             xLocal, &
@@ -384,7 +385,8 @@ contains
             yCell, &
             zCell, &
             rotateCartesianGrid, &
-            on_a_sphere)
+            on_a_sphere, &
+            dvEdge)
 
        call seaice_calc_local_coords(&
             xLocalTri, &
@@ -399,7 +401,10 @@ contains
             yVertex, &
             zVertex, &
             rotateCartesianGrid, &
-            on_a_sphere)
+            on_a_sphere, &
+            dvEdge, &
+            interiorVertex)
+
     end if
 
     call mpas_timer_stop("variational calc_local_coords")
