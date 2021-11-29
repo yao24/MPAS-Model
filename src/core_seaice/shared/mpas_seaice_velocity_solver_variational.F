@@ -527,7 +527,6 @@ contains
                basisIntegralsMetricTri, &
                basisIntegralsUTri, &
                basisIntegralsVTri)
-
        end if
 
     else if (trim(variationalBasisType) == "none") then
@@ -858,7 +857,7 @@ contains
              laVertex = latVertex(iVertex)
              loVertex = lonVertex(iVertex)
 
-             areaTriCGrid(iVertex) = areaTriCGrid(iVertex) + spherical_triangle_area(laEdge1, loEdge1, laEdge2, loEdge2, laVertex, loVertex, sphere_radius)       
+             areaTriCGrid(iVertex) = areaTriCGrid(iVertex) + spherical_triangle_area(laVertex, loVertex, laEdge1, loEdge1, laEdge2, loEdge2, sphere_radius)       
 
           end do
 
@@ -2134,7 +2133,7 @@ end subroutine variational_denominator_c_grid
        solveVelocityCGrid)!{{{
 
     use seaice_mesh_pool, only: &
-         nEdges, &
+         nEdgesSolve, &
          nEdgesOnCell, &
          cellsOnEdge,  &
          verticesOnEdge, &
@@ -2192,7 +2191,7 @@ end subroutine variational_denominator_c_grid
 
 !!!!!!!!!! TODO: I REMOVED THE STUFF ON OpenMP
 
-    do iEdge = 1, nEdges
+    do iEdge = 1, nEdgesSolve
 
        if (solveVelocityCGrid(iEdge)==1) then
 
@@ -2269,7 +2268,7 @@ end subroutine variational_denominator_c_grid
                      stress22Tri(iStressEdge,iVertex) * basisIntegralsVTri(iStressEdge,iVelocityEdge,iVertex) - &
                      stress12Tri(iStressEdge,iVertex) * basisIntegralsUTri(iStressEdge,iVelocityEdge,iVertex) + &
                      stress11Tri(iStressEdge,iVertex) * basisIntegralsMetricTri(iStressEdge,iVelocityEdge,iVertex) * &
-                     tanLatEdgeRotatedOverRadius(iVertex)
+                     tanLatEdgeRotatedOverRadius(iEdge)
 
              enddo ! iStressEdge
 

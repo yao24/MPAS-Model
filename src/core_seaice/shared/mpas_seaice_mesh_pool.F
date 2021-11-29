@@ -23,6 +23,7 @@ module seaice_mesh_pool
    integer, public :: &
       nCells,         &
       nEdges,         &
+      nEdgesSolve,    &
       nVertices,      &
       nVerticesSolve, &
       vertexDegree
@@ -115,6 +116,7 @@ contains
     integer, pointer ::   &
          nCellsTmp,         &
          nEdgesTmp,         &
+         nEdgesSolveTmp,    &
          nVerticesTmp,      &
          nVerticesSolveTmp, &
          vertexDegreeTmp
@@ -135,12 +137,14 @@ contains
        ! convert mesh dimensions from pointers to scalars
        call mpas_pool_get_dimension(meshPool, 'nCells', nCellsTmp)
        call mpas_pool_get_dimension(meshPool, 'nEdges', nEdgesTmp)
+       call mpas_pool_get_dimension(meshPool, 'nEdgesSolve', nEdgesSolveTmp)
        call MPAS_pool_get_dimension(meshPool, "nVertices", nVerticesTmp)
        call MPAS_pool_get_dimension(meshPool, "nVerticesSolve", nVerticesSolveTmp)
        call MPAS_pool_get_dimension(meshPool, "vertexDegree", vertexDegreeTmp)
 
        nCells         = nCellsTmp
        nEdges         = nEdgesTmp
+       nEdgesSolve    = nEdgesSolveTmp
        nVertices      = nVerticesTmp
        nVerticesSolve = nVerticesSolveTmp
        vertexDegree   = vertexDegreeTmp
@@ -194,6 +198,7 @@ contains
 !$GPU ENTER_DATA COPY_IN_LP             &
 !$GPUC   nCells,                        &
 !$GPUC   nEdges,                        &
+!$GPUC   nEdgesSolve,                   &
 !$GPUC   nVertices,                     &
 !$GPUC   nVerticesSolve,                &
 !$GPUC   vertexDegree,                  &
@@ -268,6 +273,7 @@ contains
 !$GPU EXIT_DATA COPY_DEL_LP             &
 !$GPUC   nCells,                        &
 !$GPUC   nEdges,                        &
+!$GPUC   nEdgesSolve,                   &
 !$GPUC   nVertices,                     &
 !$GPUC   nVerticesSolve,                &
 !$GPUC   vertexDegree,                  &

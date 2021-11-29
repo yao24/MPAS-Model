@@ -290,7 +290,9 @@ contains
     real(kind=RKIND) :: &
          xCellRotated, &
          yCellRotated, &
-         zCellRotated
+         zCellRotated, &
+         e1, e2, e3, n1, n2, n3, norm, latCellRotated, lonCellRotated, &
+         xVertexRotated, yVertexRotated, zVertexRotated
 
     do iCell = 1, nCells
 
@@ -315,12 +317,92 @@ contains
                yCellRotated, &
                zCellRotated)
 
-          xLocal(iVertexOnCell,iCell) = normalVector2D(1)
+          xLocal(iVertexOnCell,iCell) = normalVector2D(1) 
           yLocal(iVertexOnCell,iCell) = normalVector2D(2)
+
 
        enddo ! iVertexOnCell
 
     enddo ! iCell
+
+    !do iCell = 1, nCells
+
+       !if (size(xLocal(:,iCell)) == 3 .and. iCell == 1116) then
+
+    !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
+    !      print*, 'local coords old=', iVertexOnCell, xLocal(iVertexOnCell,iCell), yLocal(iVertexOnCell,iCell)
+    !   end do
+
+    !   call seaice_grid_rotation_forward(&
+    !      xCellRotated, yCellRotated, zCellRotated, &
+    !      xCell(iCell), yCell(iCell), zCell(iCell), &
+    !      rotateCartesianGrid)
+
+    !   norm = sqrt(xCellRotated * xCellRotated + yCellRotated * yCellRotated + zCellRotated * zCellRotated)
+    !   latCellRotated = asin(zCellRotated / norm) 
+    !   lonCellRotated = atan2(yCellRotated, xCellRotated)
+    !   if (lonCellRotated < 0.0_RKIND) then
+    !      lonCellRotated = 2.0_RKIND * 3.14159265359_RKIND + lonCellRotated
+    !   end if
+
+    !   !components of the eastwards unit vector on tg plane at (xCellRoated, yCellRotated, zCellRotated)
+    !   !obtained after a coordinate change on (0,1,0)
+    !   e1 = xCellRotated * sin(lonCellRotated) + (1.0_RKIND - yCellRotated) * cos(lonCellRotated)
+    !   e2 = xCellRotated * cos(lonCellRotated) * sin(latCellRotated) &
+    !        - sin(lonCellRotated) * sin(latCellRotated) * (1.0_RKIND - yCellRotated) &
+    !        - zCellRotated * cos(latCellRotated)
+    !   e3 = - xCellRotated * cos(lonCellRotated) * cos(latCellRotated) &
+    !        + sin(lonCellRotated) * cos(latCellRotated) * (1.0_RKIND - yCellRotated) &
+    !        - zCellRotated * sin(latCellRotated)
+
+    !   norm = sqrt(e1*e1 + e2*e2 + e3*e3)
+
+    !   e1 = e1 / norm
+    !   e2 = e2 / norm
+    !   e3 = e3 / norm
+
+    !   !components of the northwards unit vector on tg plane at (xCellRoated, yCellRotated, zCellRotated)
+    !   !obtained after a coordinate change on (0,0,1)
+    !   n1 = xCellRotated * sin(lonCellRotated) - yCellRotated * cos(lonCellRotated)
+    !   n2 = xCellRotated * cos(lonCellRotated) * sin(latCellRotated) &
+    !        + sin(lonCellRotated) * sin(latCellRotated) * yCellRotated &
+    !        + (1.0_RKIND - zCellRotated) * cos(latCellRotated)
+    !   n3 = - xCellRotated * cos(lonCellRotated) * cos(latCellRotated) &
+    !        - sin(lonCellRotated) * cos(latCellRotated) * yCellRotated &
+    !        + (1.0_RKIND - zCellRotated) * sin(latCellRotated)
+
+    !   norm = sqrt(n1*n1 + n2*n2 + n3*n3)
+
+    !   n1 = n1 / norm
+    !   n2 = n2 / norm
+    !   n3 = n3 / norm
+         
+    !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
+
+    !      iVertex = verticesOnCell(iVertexOnCell, iCell)
+
+    !      call seaice_grid_rotation_forward(&
+    !             xVertexRotated, yVertexRotated, zVertexRotated, &
+    !             xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
+    !             rotateCartesianGrid)
+
+    !      xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * e1 + &
+    !                                    (yVertexRotated - yCellRotated) * e2 + &
+    !                                    (zVertexRotated - zCellRotated) * e3
+    !      yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * n1 + &
+    !                                    (yVertexRotated - yCellRotated) * n2 + &
+    !                                    (zVertexRotated - zCellRotated) * n3
+            
+    !   end do
+
+    !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
+    !      xLocal(iVertexOnCell,iCell) = -   xLocal(iVertexOnCell,iCell)
+    !      print*, 'local coords new=', iVertexOnCell, xLocal(iVertexOnCell,iCell), yLocal(iVertexOnCell,iCell)
+    !   end do
+
+       !end if
+
+    !enddo ! iCell
 
   end subroutine calc_local_coords_spherical!}}}
 
