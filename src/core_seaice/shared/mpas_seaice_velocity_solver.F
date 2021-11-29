@@ -4048,6 +4048,8 @@ contains
 
           call MPAS_dmpar_field_halo_exch(domain, 'uVelocityCGrid')
           call MPAS_dmpar_field_halo_exch(domain, 'vVelocityCGrid')
+          call MPAS_dmpar_field_halo_exch(domain, 'stressDivergenceUCGrid')
+          call MPAS_dmpar_field_halo_exch(domain, 'stressDivergenceVCGrid')
 
           do iVertex = 1, nVerticesSolve
 
