@@ -16,9 +16,8 @@ def L2_norm(numerical, analytical, nVertices, latVertex, areaTriangle, latitudeL
 
         if (math.fabs(latVertex[iVertex]) > latitudeLimit * degreesToRadians):
 
-            norm  = norm  + areaTriangle[iVertex] * math.pow(numerical[iVertex] - analytical[iVertex],2)
-
-            denom = denom + areaTriangle[iVertex] * math.pow(analytical[iVertex],2)
+           norm  = norm  + areaTriangle[iVertex] * math.pow(numerical[iVertex] - analytical[iVertex],2)
+           denom = denom + areaTriangle[iVertex] * math.pow(analytical[iVertex],2)
 
     norm = math.sqrt(norm / denom)
 
@@ -51,7 +50,38 @@ def get_norm(filenameIC, filename, latitudeLimit):
 
     fileMPAS.close()
 
-    print("normU=", normU, "normV=", normV)
+    print('normU=', normU, 'normV=', normV)
+
+    return normU, normV
+
+#--------------------------------------------------------
+
+def get_norm_c_grid(filenameIC, filename, latitudeLimit):
+
+    fileIC = Dataset(filenameIC, "r")
+
+    stressDivergenceUAnalytical = fileIC.variables["stressDivergenceUAnalytical"][:]
+    stressDivergenceVAnalytical = fileIC.variables["stressDivergenceVAnalytical"][:]
+
+    fileIC.close()
+
+    fileMPAS = Dataset(filename, "r")
+
+    nEdges = len(fileMPAS.dimensions["nEdges"])
+
+    latEdge = fileMPAS.variables["latEdge"][:]
+
+    variationalDenominatorCGrid = fileMPAS.variables["variationalDenominatorCGrid"][:]
+
+    stressDivergenceUCGrid = fileMPAS.variables["stressDivergenceUCGrid"][0,:]
+    stressDivergenceVCGrid = fileMPAS.variables["stressDivergenceVCGrid"][0,:]
+
+    normU = L2_norm(stressDivergenceUCGrid, stressDivergenceUAnalytical, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
+    normV = L2_norm(stressDivergenceVCGrid, stressDivergenceVAnalytical, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
+
+    fileMPAS.close()
+
+    print('normU=', normU, 'normV=', normV)
 
     return normU, normV
 
@@ -103,10 +133,17 @@ def scaling_lines(axis, xMin, xMax, yMin):
 
 def stress_divergence_scaling():
 
-    resolutions = [2562,10242,40962,163842]
+    #resolutions = [2562,10242,40962,163842]
+    resolutions = [2562, 10242]
 
-    #methods = ["wachspress", "pwl", "weak", "wachspress_alt", "pwl_alt"]
     methods = ["wachspress", "pwl"]
+
+    with open('./namelist.seaice.stress_divergence') as namelistFile:
+       namelistTxt = namelistFile.read().split('\n')
+       for line in namelistTxt:
+          if 'config_use_c_grid = ' in line:
+             config_use_c_grid = line.split()[-1]
+             break
 
 
     latitudeLimit = 20.0
@@ -163,7 +200,10 @@ def stress_divergence_scaling():
 
             print(filename, filenameIC)
 
-            normU, normV = get_norm(filenameIC, filename, latitudeLimit)
+            if (config_use_c_grid == 'false'):
+               normU, normV = get_norm(filenameIC, filename, latitudeLimit)
+            else :
+               normU, normV = get_norm_c_grid(filenameIC, filename, latitudeLimit)
 
             x.append(get_resolution(filename, latitudeLimit))
             y.append(normU)

@@ -10,12 +10,13 @@ except ImportError:
 def run_model():
 
     MPAS_SEAICE_TESTCASES_RUN_COMMAND = os.environ.get('MPAS_SEAICE_TESTCASES_RUN_COMMAND')
+    mpas_tools_dir = os.environ['MPAS_TOOLS_DIR']
     if (MPAS_SEAICE_TESTCASES_RUN_COMMAND is None):
         MPAS_SEAICE_TESTCASES_RUN_COMMAND = ""
 
-    gridSizes = [2562, 10242, 40962, 163842]
+    #gridSizes = [2562, 10242, 40962, 163842]
+    gridSizes = [2562, 10242]
 
-    #operatorMethods = ["wachspress","pwl","weak","wachspress_alt","pwl_alt"]
     operatorMethods = ["wachspress","pwl"]
 
     for operatorMethod in operatorMethods:
@@ -60,6 +61,10 @@ def run_model():
             os.system("rm -rf namelist.seaice streams.seaice output_%s_%i" %(operatorMethod, gridSize))
             os.system("ln -s namelist.seaice.%s.%i namelist.seaice" %(operatorMethod, gridSize))
             os.system("ln -s streams.seaice.stress_divergence streams.seaice")
+
+            os.system("%s/mesh_tools/mesh_conversion_tools/MpasMeshConverter.x x1.%s.grid.nc" %(mpas_tools_dir, gridSize))
+
+            os.system("gpmetis graph.info 12")
 
             os.system("%s seaice_model" %(MPAS_SEAICE_TESTCASES_RUN_COMMAND))
 

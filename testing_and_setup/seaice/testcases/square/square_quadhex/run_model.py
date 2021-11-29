@@ -10,14 +10,16 @@ except ImportError:
 def run_model():
 
     MPAS_SEAICE_TESTCASES_RUN_COMMAND = os.environ.get('MPAS_SEAICE_TESTCASES_RUN_COMMAND')
+    mpas_tools_dir = os.environ['MPAS_TOOLS_DIR']
     if (MPAS_SEAICE_TESTCASES_RUN_COMMAND is None):
         MPAS_SEAICE_TESTCASES_RUN_COMMAND = ""
 
     operatorMethods = ["wachspress","pwl"]
     #operatorMethods = ["wachspress","pwl","weak","wachsavg","pwlavg","weakwachs","weakpwl"]
 
-    gridTypes = ["hex","quad"]
+    #gridTypes = ["hex","quad"]
     #gridTypes = ["quad"]
+    gridTypes = ["hex"]
 
     #grids = {"hex" :["0082x0094",
     #                 "0164x0188",
@@ -27,8 +29,9 @@ def run_model():
     #                 "0160x0160",
     #                 "0320x0320",
     #                 "0640x0640"]}
-    grids = {"hex" :["0082x0094"],
-             "quad":["0080x0080"]}
+    #grids = {"hex" :["0082x0094"],
+    #         "quad":["0080x0080"]}
+    grids = {"hex" :["0082x0094"]}
 
 
     #subcycleNumbers = [120,240,480,960,1920,3840,7680,15360,30720]
@@ -100,6 +103,10 @@ def run_model():
                     os.system("ln -s namelist.seaice.%s.%i namelist.seaice" %(operatorMethod, subcycleNumber))
                     os.system("ln -s streams.seaice.square streams.seaice")
 
+                    os.system("%s/mesh_tools/mesh_conversion_tools/MpasMeshConverter.x grid_%s_%s.nc" %(mpas_tools_dir, gridType, grid))
+
+                    os.system("gpmetis graph.info 12")
+  
                     #os.system("%s ../../../../../seaice_model" %(MPAS_SEAICE_TESTCASES_RUN_COMMAND))
                     os.system("%s seaice_model" %(MPAS_SEAICE_TESTCASES_RUN_COMMAND))
 
