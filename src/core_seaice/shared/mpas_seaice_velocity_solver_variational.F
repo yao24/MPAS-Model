@@ -353,7 +353,7 @@ contains
 
     allocate(nEdgesOnVertex(nVertices))
 
-    nEdgesOnVertex(:) = vertexDegree 
+    nEdgesOnVertex(:) = vertexDegree
 
     if ( .not. useCGrid ) then
        call seaice_calc_local_coords(&
@@ -369,8 +369,7 @@ contains
             yCell, &
             zCell, &
             rotateCartesianGrid, &
-            on_a_sphere, &
-            dvEdge)
+            on_a_sphere)
     else
        call seaice_calc_local_coords(&
             xLocal, &
@@ -385,8 +384,7 @@ contains
             yCell, &
             zCell, &
             rotateCartesianGrid, &
-            on_a_sphere, &
-            dvEdge)
+            on_a_sphere)
 
        call seaice_calc_local_coords(&
             xLocalTri, &
@@ -402,7 +400,6 @@ contains
             zVertex, &
             rotateCartesianGrid, &
             on_a_sphere, &
-            dvEdge, &
             interiorVertex)
 
     end if

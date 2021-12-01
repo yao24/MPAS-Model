@@ -53,7 +53,6 @@ contains
        zCell, &
        rotateCartesianGrid, &
        onASphere, &
-       dvEdge, &
        interiorVertex)!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
@@ -64,13 +63,10 @@ contains
          nCells !< Input:
 
     integer, dimension(:), intent(in) :: &
-         nEdgesOnCell  !< Input:
+         nEdgesOnCell   !< Input:
 
     integer, dimension(:), optional, intent(in) :: &
          interiorVertex  !< Input:
-
-    real(kind=RKIND), dimension(:), intent(in) :: &
-         dvEdge  !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          verticesOnCell !< Input:
@@ -114,7 +110,6 @@ contains
             xCell, &
             yCell, &
             zCell, &
-            dvEdge, &
             interiorVertex)
     endif
 
@@ -144,7 +139,6 @@ contains
        xCell, &
        yCell, &
        zCell, &
-       dvEdge, &
        interiorVertex )!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
@@ -159,9 +153,6 @@ contains
 
     integer, dimension(:), optional, intent(in) :: &
          interiorVertex    !< Input:
-
-    real(kind=RKIND), dimension(:), intent(in) :: &
-         dvEdge  !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          verticesOnCell !< Input:
@@ -196,7 +187,7 @@ contains
 
     if(size(xLocal(:,1)) == 4 .and. present(interiorVertex)) then ! the mesh is planar with square cells
 
-       halfMeshSize = abs(maxval(dvEdge(:))) * 0.5_RKIND    
+       halfMeshSize = abs(xVertex(verticesOnCell(1,iCell)) - xCell(iCell))
 
        do iCell = 1, nCells
 
@@ -285,14 +276,15 @@ contains
     integer :: &
          iCell, &
          iVertex, &
-         iVertexOnCell
+         iVertexOnCell, &
+         jVertexOnCell
 
     real(kind=RKIND) :: &
          xCellRotated, &
          yCellRotated, &
          zCellRotated, &
          e1, e2, e3, n1, n2, n3, norm, latCellRotated, lonCellRotated, &
-         xVertexRotated, yVertexRotated, zVertexRotated
+         xVertexRotated, yVertexRotated, zVertexRotated, difference
 
     do iCell = 1, nCells
 
@@ -327,12 +319,6 @@ contains
 
     !do iCell = 1, nCells
 
-       !if (size(xLocal(:,iCell)) == 3 .and. iCell == 1116) then
-
-    !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
-    !      print*, 'local coords old=', iVertexOnCell, xLocal(iVertexOnCell,iCell), yLocal(iVertexOnCell,iCell)
-    !   end do
-
     !   call seaice_grid_rotation_forward(&
     !      xCellRotated, yCellRotated, zCellRotated, &
     !      xCell(iCell), yCell(iCell), zCell(iCell), &
@@ -345,38 +331,25 @@ contains
     !      lonCellRotated = 2.0_RKIND * 3.14159265359_RKIND + lonCellRotated
     !   end if
 
-    !   !components of the eastwards unit vector on tg plane at (xCellRoated, yCellRotated, zCellRotated)
-    !   !obtained after a coordinate change on (0,1,0)
-    !   e1 = xCellRotated * sin(lonCellRotated) + (1.0_RKIND - yCellRotated) * cos(lonCellRotated)
-    !   e2 = xCellRotated * cos(lonCellRotated) * sin(latCellRotated) &
-    !        - sin(lonCellRotated) * sin(latCellRotated) * (1.0_RKIND - yCellRotated) &
-    !        - zCellRotated * cos(latCellRotated)
-    !   e3 = - xCellRotated * cos(lonCellRotated) * cos(latCellRotated) &
-    !        + sin(lonCellRotated) * cos(latCellRotated) * (1.0_RKIND - yCellRotated) &
-    !        - zCellRotated * sin(latCellRotated)
+    !   e1 = - sin(lonCellRotated)
+    !   e2 = cos(lonCellRotated)
+    !   e3 = 0.0_RKIND
 
-    !   norm = sqrt(e1*e1 + e2*e2 + e3*e3)
+    !   !norm = sqrt(e1*e1 + e2*e2 + e3*e3)
+    !   !print*, 'norm e=', norm
 
-    !   e1 = e1 / norm
-    !   e2 = e2 / norm
-    !   e3 = e3 / norm
+    !   n1 = - cos(lonCellRotated) * sin(latCellRotated)
+    !   n2 = - sin(latCellRotated) * sin(lonCellRotated)
+    !   n3 = cos(latCellRotated)
 
-    !   !components of the northwards unit vector on tg plane at (xCellRoated, yCellRotated, zCellRotated)
-    !   !obtained after a coordinate change on (0,0,1)
-    !   n1 = xCellRotated * sin(lonCellRotated) - yCellRotated * cos(lonCellRotated)
-    !   n2 = xCellRotated * cos(lonCellRotated) * sin(latCellRotated) &
-    !        + sin(lonCellRotated) * sin(latCellRotated) * yCellRotated &
-    !        + (1.0_RKIND - zCellRotated) * cos(latCellRotated)
-    !   n3 = - xCellRotated * cos(lonCellRotated) * cos(latCellRotated) &
-    !        - sin(lonCellRotated) * cos(latCellRotated) * yCellRotated &
-    !        + (1.0_RKIND - zCellRotated) * sin(latCellRotated)
+    !   !norm = sqrt(n1*n1 + n2*n2 + n3*n3)
+    !   !print*, 'norm n=', norm
 
-    !   norm = sqrt(n1*n1 + n2*n2 + n3*n3)
+    !   !check to se if e and u are perpendicular to normal vector of plane:
+    !   !print*, "e:", e1 * xCellRotated + e2 * yCellRotated + e3 * zCellRotated
+    !   !print*, "n:", n1 * xCellRotated + n2 * yCellRotated + n3 * zCellRotated
+    !   !print*, "e dot n:", e1*n1 + e2*n2 + e3*n3
 
-    !   n1 = n1 / norm
-    !   n2 = n2 / norm
-    !   n3 = n3 / norm
-         
     !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
 
     !      iVertex = verticesOnCell(iVertexOnCell, iCell)
@@ -386,20 +359,75 @@ contains
     !             xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
     !             rotateCartesianGrid)
 
+    !      ! ------------BEGIN: REMOVE THIS IN DUE TIME
+    !      difference = xLocal(iVertexOnCell,iCell) - ((xVertexRotated - xCellRotated)* e1 + &
+    !                                    (yVertexRotated - yCellRotated) * e2 + &
+    !                                    (zVertexRotated - zCellRotated) * e3)
+
+    !      if(abs(difference) > 1.0e-10) then
+    !        print*, iCell,'is no good for xLocal', ' difference:', difference
+    !      end if
+
+    !      !xLocal(iVertexOnCell,iCell) = (xVertexRotated * e1 + &
+    !      !                               yVertexRotated * e2 + &
+    !      !                               zVertexRotated * e3)
+          
+    !      difference = yLocal(iVertexOnCell,iCell) - ((xVertexRotated - xCellRotated) * n1 + &
+    !                                    (yVertexRotated - yCellRotated) * n2 + &
+    !                                    (zVertexRotated - zCellRotated) * n3)
+    !      if(abs(difference) > 1.0e-10 ) then
+    !        print*, iCell,'is no good for yLocal', 'difference:', difference 
+    !      end if
+
+    !      !yLocal(iVertexOnCell,iCell) = (xVertexRotated * n1 + &
+    !      !                               yVertexRotated * n2 + &
+    !      !                               zVertexRotated * n3)
+    !      ! ------------END: REMOVE THIS IN DUE TIME
+
     !      xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * e1 + &
     !                                    (yVertexRotated - yCellRotated) * e2 + &
     !                                    (zVertexRotated - zCellRotated) * e3
     !      yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * n1 + &
     !                                    (yVertexRotated - yCellRotated) * n2 + &
     !                                    (zVertexRotated - zCellRotated) * n3
-            
+
     !   end do
 
-    !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
-    !      xLocal(iVertexOnCell,iCell) = -   xLocal(iVertexOnCell,iCell)
-    !      print*, 'local coords new=', iVertexOnCell, xLocal(iVertexOnCell,iCell), yLocal(iVertexOnCell,iCell)
-    !   end do
+       !difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
 
+       !if (difference < 0.0_RKIND) then
+
+          !print*, "HERE BUT SHOULD NOT BE ------------>"
+
+          !iVertexOnCell = verticesOnCell(2,iCell) 
+          !jVertexOnCell = verticesOnCell(3,iCell)
+          !verticesOnCell(2,iCell) = jVertexOnCell
+          !verticesOnCell(3,iCell) = iVertexOnCell
+
+       !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
+
+       !      iVertex = verticesOnCell(iVertexOnCell, iCell)
+
+       !      call seaice_grid_rotation_forward(&
+       !             xVertexRotated, yVertexRotated, zVertexRotated, &
+       !             xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
+       !             rotateCartesianGrid)          
+
+
+       !      xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * e1 + &
+       !                                    (yVertexRotated - yCellRotated) * e2 + &
+       !                                    (zVertexRotated - zCellRotated) * e3
+       !      yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * n1 + &
+       !                                    (yVertexRotated - yCellRotated) * n2 + &
+       !                                    (zVertexRotated - zCellRotated) * n3
+
+       !   end do
+
+       !end if
+
+       !difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
+       !if( difference < 0.0_RKIND) then
+       !!   print*, 'fix did not work:',  iCell, difference
        !end if
 
     !enddo ! iCell
