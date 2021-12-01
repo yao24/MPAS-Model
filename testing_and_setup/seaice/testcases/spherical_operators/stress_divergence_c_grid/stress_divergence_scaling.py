@@ -134,7 +134,8 @@ def scaling_lines(axis, xMin, xMax, yMin):
 def stress_divergence_scaling():
 
     #resolutions = [2562,10242,40962,163842]
-    resolutions = [2562, 10242]
+    #resolutions = [2562,10242]
+    resolutions = [2562]
 
     methods = ["wachspress", "pwl"]
 

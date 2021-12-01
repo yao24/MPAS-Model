@@ -644,7 +644,8 @@ def create_ic():
     lv = 4
 
     #gridSizes = [2562, 10242, 40962, 163842]
-    gridSizes = [2562, 10242]
+    #gridSizes = [2562, 10242]
+    gridSizes = [2562]
 
     rotateCartesianGrid = True
     r = 1.0
@@ -692,6 +693,41 @@ def create_ic():
         zEdge = fileIn.variables["zEdge"][:]
 
         fileIn.close()
+
+        if (config_use_c_grid == 'true'):
+           # need to reorder the edges of edgesOnVertex so they are all counterclockwise
+           xLocal = np.zeros(vertexDegree)
+           yLocal = np.zeros(vertexDegree)
+           for iVertex in range(0,nVertices):
+              norm = sqrt(xVertex[iVertex] * xVertex[iVertex] + yVertex[iVertex] * yVertex[iVertex] + zVertex[iVertex] * zVertex[iVertex])
+              latVertex = math.asin(zVertex[iVertex] / norm)
+              lonVertex = math.atan2(yVertex[iVertex], xVertex[iVertex])
+              if (lonVertex < 0.0) :
+                 lonVertex = 2.0 * pi + lonVertex
+
+              e1 = - sin(lonVertex)
+              e2 = cos(lonVertex)
+              e3 = 0.0
+
+              n1 = - cos(lonVertex) * sin(latVertex)
+              n2 = - sin(latVertex) * sin(lonVertex)
+              n3 = cos(latVertex)
+
+              for iEdgeOnVertex in range(0,vertexDegree):
+                 iEdge = edgesOnVertex[iVertex,iEdgeOnVertex]
+                 xLocal[iEdgeOnVertex] = (xEdge[iEdge] - xVertex[iVertex]) * e1 + \
+                                         (yEdge[iEdge] - yVertex[iVertex]) * e2 + \
+                                         (zEdge[iEdge] - zVertex[iVertex]) * e3
+                 yLocal[iEdgeOnVertex] = (xEdge[iEdge] - xVertex[iVertex]) * n1 + \
+                                         (yEdge[iEdge] - yVertex[iVertex]) * n2 + \
+                                         (zEdge[iEdge] - zVertex[iVertex]) * n3
+
+              orientationCheck = xLocal[1] * yLocal[2] - yLocal[1] * xLocal[2]   
+              if (orientationCheck < 0.0) :
+                 edge2Tmp = edgesOnVertex[iVertex,1]
+                 edge3Tmp = edgesOnVertex[iVertex,2]
+                 edgesOnVertex[iVertex,1] = edge3Tmp
+                 edgesOnVertex[iVertex,2] = edge2Tmp
 
         # velocities
         uVelocity = np.zeros(nVertices)
@@ -780,7 +816,9 @@ def create_ic():
                  strain11CellVarTriAnalytical[iVertex,iEdgeOnVertex] = strain11EdgeAnalytical[iEdge]
                  strain22CellVarTriAnalytical[iVertex,iEdgeOnVertex] = strain22EdgeAnalytical[iEdge]
                  strain12CellVarTriAnalytical[iVertex,iEdgeOnVertex] = strain12EdgeAnalytical[iEdge]
-  
+ 
+        if (config_use_c_grid == 'true') :
+           edgesOnVertex[:] = edgesOnVertex[:] + 1 
 
         # output
         filenameOut = "ic_%i.nc" %(gridSize)
@@ -792,6 +830,10 @@ def create_ic():
         fileOut.createDimension("nEdges", nEdges)
         fileOut.createDimension("nCells", nCells)
         fileOut.createDimension("maxEdges", maxEdges)
+
+        if (config_use_c_grid == 'true') :
+           var = fileOut.createVariable("edgesOnVertex","i",dimensions=["nVertices", "vertexDegree"])
+           var[:] = edgesOnVertex[:]
 
         var = fileOut.createVariable("uVelocity","d",dimensions=["nVertices"])
         var[:] = uVelocity[:]
