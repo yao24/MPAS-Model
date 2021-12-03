@@ -27,12 +27,12 @@ def L2_norm(numerical, analytical, nVertices, latVertex, areaTriangle, latitudeL
 
 def get_norm(filenameIC, filename, latitudeLimit):
 
-    fileIC = Dataset(filenameIC, "r")
+    #fileIC = Dataset(filenameIC, "r")
 
-    stressDivergenceUAnalytical = fileIC.variables["stressDivergenceUAnalytical"][:]
-    stressDivergenceVAnalytical = fileIC.variables["stressDivergenceVAnalytical"][:]
+    #stressDivergenceUAnalytical = fileIC.variables["stressDivergenceUAnalytical"][:]
+    #stressDivergenceVAnalytical = fileIC.variables["stressDivergenceVAnalytical"][:]
 
-    fileIC.close()
+    #fileIC.close()
 
     fileMPAS = Dataset(filename, "r")
 
@@ -44,6 +44,8 @@ def get_norm(filenameIC, filename, latitudeLimit):
 
     stressDivergenceU = fileMPAS.variables["stressDivergenceU"][0,:]
     stressDivergenceV = fileMPAS.variables["stressDivergenceV"][0,:]
+    stressDivergenceUAnalytical = fileMPAS.variables["stressDivergenceUAnalytical"][0,:]
+    stressDivergenceVAnalytical = fileMPAS.variables["stressDivergenceVAnalytical"][0,:]
 
     normU = L2_norm(stressDivergenceU, stressDivergenceUAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
     normV = L2_norm(stressDivergenceV, stressDivergenceVAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
@@ -58,12 +60,12 @@ def get_norm(filenameIC, filename, latitudeLimit):
 
 def get_norm_c_grid(filenameIC, filename, latitudeLimit):
 
-    fileIC = Dataset(filenameIC, "r")
+    #fileIC = Dataset(filenameIC, "r")
 
-    stressDivergenceUAnalytical = fileIC.variables["stressDivergenceUAnalytical"][:]
-    stressDivergenceVAnalytical = fileIC.variables["stressDivergenceVAnalytical"][:]
+    #stressDivergenceUAnalytical = fileIC.variables["stressDivergenceUAnalytical"][:]
+    #stressDivergenceVAnalytical = fileIC.variables["stressDivergenceVAnalytical"][:]
 
-    fileIC.close()
+    #fileIC.close()
 
     fileMPAS = Dataset(filename, "r")
 
@@ -75,9 +77,11 @@ def get_norm_c_grid(filenameIC, filename, latitudeLimit):
 
     stressDivergenceUCGrid = fileMPAS.variables["stressDivergenceUCGrid"][0,:]
     stressDivergenceVCGrid = fileMPAS.variables["stressDivergenceVCGrid"][0,:]
+    stressDivergenceUAnalyticalCGrid = fileMPAS.variables["stressDivergenceUAnalyticalCGrid"][0,:]
+    stressDivergenceVAnalyticalCGrid = fileMPAS.variables["stressDivergenceVAnalyticalCGrid"][0,:]
 
-    normU = L2_norm(stressDivergenceUCGrid, stressDivergenceUAnalytical, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
-    normV = L2_norm(stressDivergenceVCGrid, stressDivergenceVAnalytical, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
+    normU = L2_norm(stressDivergenceUCGrid, stressDivergenceUAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
+    normV = L2_norm(stressDivergenceVCGrid, stressDivergenceVAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
 
     fileMPAS.close()
 
@@ -204,7 +208,7 @@ def stress_divergence_scaling():
             if (config_use_c_grid == 'false'):
                normU, normV = get_norm(filenameIC, filename, latitudeLimit)
             else :
-               normU, normV = get_norm_c_grid(filenameIC, filename, latitudeLimit)
+               normU, normV = get_norm(filenameIC, filename, latitudeLimit)
 
             x.append(get_resolution(filename, latitudeLimit))
             y.append(normU)

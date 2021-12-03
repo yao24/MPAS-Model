@@ -747,6 +747,26 @@ def create_ic():
         stressDivergenceUAnalyticalCGrid = np.zeros(nEdges)
         stressDivergenceVAnalyticalCGrid = np.zeros(nEdges)
 
+        for iVertex in range(0, nVertices):
+
+           xp, yp, zp = grid_rotation_forward(xVertex[iVertex], yVertex[iVertex], zVertex[iVertex], rotateCartesianGrid)
+           lat, lon = latlon_from_xyz(xp, yp, zp, r)
+
+           u, v, strain11, strain22, strain12, divu, divv = velocities_strains_analytical(lat, lon, mu, lu, mv, lv)
+
+           stressDivergenceUAnalytical[iVertex] = divu
+           stressDivergenceVAnalytical[iVertex] = divv
+
+        for iEdge in range(0, nEdges):
+
+           xp, yp, zp = grid_rotation_forward(xEdge[iEdge], yEdge[iEdge], zEdge[iEdge], rotateCartesianGrid)
+           lat, lon = latlon_from_xyz(xp, yp, zp, r)
+
+           u, v, strain11, strain22, strain12, divu, divv = velocities_strains_analytical(lat, lon, mu, lu, mv, lv)
+
+           stressDivergenceUAnalyticalCGrid[iEdge] = divu
+           stressDivergenceVAnalyticalCGrid[iEdge] = divv
+
         if (config_use_c_grid == 'false'):
            for iVertex in range(0, nVertices):
 
@@ -762,9 +782,6 @@ def create_ic():
               strain22VertexAnalytical[iVertex] = strain22
               strain12VertexAnalytical[iVertex] = strain12
 
-              stressDivergenceUAnalytical[iVertex] = divu
-              stressDivergenceVAnalytical[iVertex] = divv
-
         else :
            for iEdge in range(0, nEdges):
 
@@ -779,9 +796,6 @@ def create_ic():
               strain11EdgeAnalytical[iEdge] = strain11
               strain22EdgeAnalytical[iEdge] = strain22
               strain12EdgeAnalytical[iEdge] = strain12
-
-              stressDivergenceUAnalyticalCGrid[iEdge] = divu
-              stressDivergenceVAnalyticalCGrid[iEdge] = divv
 
         solveVelocityPrevious = np.ones(nVertices,dtype="i")
         solveVelocityPreviousCGrid = np.ones(nEdges,dtype="i")
@@ -871,18 +885,17 @@ def create_ic():
         var = fileOut.createVariable("stress12varTri","d",dimensions=["nVertices","vertexDegree"])
         var[:] = strain12CellVarTriAnalytical[:]
 
-        if (config_use_c_grid == 'false'):
-           var = fileOut.createVariable("stressDivergenceUAnalytical","d",dimensions=["nVertices"])
-           var[:] = stressDivergenceUAnalytical[:]
+        var = fileOut.createVariable("stressDivergenceUAnalytical","d",dimensions=["nVertices"])
+        var[:] = stressDivergenceUAnalytical[:]
 
-           var = fileOut.createVariable("stressDivergenceVAnalytical","d",dimensions=["nVertices"])
-           var[:] = stressDivergenceVAnalytical[:]
-        else: 
-           var = fileOut.createVariable("stressDivergenceUAnalytical","d",dimensions=["nEdges"])
-           var[:] = stressDivergenceUAnalyticalCGrid[:]
+        var = fileOut.createVariable("stressDivergenceVAnalytical","d",dimensions=["nVertices"])
+        var[:] = stressDivergenceVAnalytical[:]
 
-           var = fileOut.createVariable("stressDivergenceVAnalytical","d",dimensions=["nEdges"])
-           var[:] = stressDivergenceVAnalyticalCGrid[:]
+        var = fileOut.createVariable("stressDivergenceUAnalyticalCGrid","d",dimensions=["nEdges"])
+        var[:] = stressDivergenceUAnalyticalCGrid[:]
+
+        var = fileOut.createVariable("stressDivergenceVAnalyticalCGrid","d",dimensions=["nEdges"])
+        var[:] = stressDivergenceVAnalyticalCGrid[:]
 
         fileOut.close()
 
