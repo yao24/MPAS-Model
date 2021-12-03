@@ -14,9 +14,10 @@ def run_model():
     if (MPAS_SEAICE_TESTCASES_RUN_COMMAND is None):
         MPAS_SEAICE_TESTCASES_RUN_COMMAND = ""
 
-    #gridSizes = [2562, 10242, 40962, 163842]
-    gridSizes = [2562, 10242]
-    #gridSizes = [2562]
+    #gridSizes = ['icos4', 'icos5', 'icos6', 'icos7']
+    #gridSizes = ['icos4', 'icos5']
+    #gridSizes = ['icos4']
+    gridSizes = ['icos9']
 
     operatorMethods = ["wachspress","pwl"]
 
@@ -29,8 +30,8 @@ def run_model():
             print("  Gridsize: ", gridSize)
 
             os.system("rm grid.nc ic.nc")
-            os.system("ln -s x1.%i.grid.nc grid.nc" %(gridSize))
-            os.system("ln -s ic_%i.nc ic.nc" %(gridSize))
+            os.system("ln -s %s/base_mesh.nc grid.nc" %(gridSize))
+            os.system("ln -s ic_%s.nc ic.nc" %(gridSize))
 
             if (operatorMethod == "wachspress"):
                 nmlPatch = {"velocity_solver": {"config_strain_scheme":"variational",
@@ -57,19 +58,19 @@ def run_model():
                                                 "config_variational_denominator_type":"alternate"}}
             
 
-            f90nml.patch("namelist.seaice.stress_divergence", nmlPatch, "namelist.seaice.%s.%i" %(operatorMethod, gridSize))
+            f90nml.patch("namelist.seaice.stress_divergence", nmlPatch, "namelist.seaice.%s.%s" %(operatorMethod, gridSize))
 
-            os.system("rm -rf namelist.seaice streams.seaice output_%s_%i" %(operatorMethod, gridSize))
-            os.system("ln -s namelist.seaice.%s.%i namelist.seaice" %(operatorMethod, gridSize))
+            os.system("rm -rf namelist.seaice streams.seaice output_%s_%s" %(operatorMethod, gridSize))
+            os.system("ln -s namelist.seaice.%s.%s namelist.seaice" %(operatorMethod, gridSize))
             os.system("ln -s streams.seaice.stress_divergence streams.seaice")
 
-            os.system("%s/mesh_tools/mesh_conversion_tools/MpasMeshConverter.x x1.%s.grid.nc" %(mpas_tools_dir, gridSize))
+            os.system("%s/mesh_tools/mesh_conversion_tools/MpasMeshConverter.x %s/base_mesh.nc" %(mpas_tools_dir, gridSize))
 
             os.system("gpmetis graph.info 12")
 
             os.system("%s seaice_model" %(MPAS_SEAICE_TESTCASES_RUN_COMMAND))
 
-            os.system("mv output output_%s_%i" %(operatorMethod, gridSize))
+            os.system("mv output output_%s_%s" %(operatorMethod, gridSize))
 
 #-------------------------------------------------------------------------------
 

@@ -25,24 +25,6 @@ def L2_norm(numerical, analytical, nVertices, latVertex, areaTriangle, latitudeL
 
 #--------------------------------------------------------
 
-def Linfinity_norm(numerical, analytical, nVertices, latVertex, areaTriangle, latitudeLimit):
-
-    degreesToRadians = math.pi / 180.0
-
-    norm  = -1.0
-
-    for iVertex in range(0,nVertices):
-
-        if (math.fabs(latVertex[iVertex]) > latitudeLimit * degreesToRadians):
-
-           currentDiff = abs(numerical[iVertex] - analytical[iVertex])
-           if(currentDiff  > norm) :
-              norm = currentDiff
-
-    return norm
-
-#--------------------------------------------------------
-
 def get_norm(filenameIC, filename, latitudeLimit):
 
     #fileIC = Dataset(filenameIC, "r")
@@ -65,8 +47,6 @@ def get_norm(filenameIC, filename, latitudeLimit):
     stressDivergenceUAnalytical = fileMPAS.variables["stressDivergenceUAnalytical"][0,:]
     stressDivergenceVAnalytical = fileMPAS.variables["stressDivergenceVAnalytical"][0,:]
 
-    #normU = Linfinity_norm(stressDivergenceU, stressDivergenceUAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
-    #normV = Linfinity_norm(stressDivergenceV, stressDivergenceVAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
     normU = L2_norm(stressDivergenceU, stressDivergenceUAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
     normV = L2_norm(stressDivergenceV, stressDivergenceVAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
 
@@ -100,8 +80,6 @@ def get_norm_c_grid(filenameIC, filename, latitudeLimit):
     stressDivergenceUAnalyticalCGrid = fileMPAS.variables["stressDivergenceUAnalyticalCGrid"][0,:]
     stressDivergenceVAnalyticalCGrid = fileMPAS.variables["stressDivergenceVAnalyticalCGrid"][0,:]
 
-    #normU = Linfinity_norm(stressDivergenceUCGrid, stressDivergenceUAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
-    #normV = Linfinity_norm(stressDivergenceVCGrid, stressDivergenceVAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
     normU = L2_norm(stressDivergenceUCGrid, stressDivergenceUAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
     normV = L2_norm(stressDivergenceVCGrid, stressDivergenceVAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
 
@@ -159,9 +137,9 @@ def scaling_lines(axis, xMin, xMax, yMin):
 
 def stress_divergence_scaling():
 
-    #resolutions = [2562,10242,40962,163842]
-    resolutions = [2562,10242]
-    #resolutions = [2562]
+    #resolutions = ['icos4', 'icos5', 'icos6', 'icos7']
+    #resolutions = ['icos4', 'icos5']
+    resolutions = ['icos4']
 
     methods = ["wachspress", "pwl"]
 
@@ -222,8 +200,8 @@ def stress_divergence_scaling():
 
         for resolution in resolutions:
 
-            filename = "./output_%s_%i/output.2000.nc" %(method,resolution)
-            filenameIC = "./ic_%i.nc" %(resolution)
+            filename = "./output_%s_%s/output.2000.nc" %(method,resolution)
+            filenameIC = "./ic_%s.nc" %(resolution)
 
             print(filename, filenameIC)
 

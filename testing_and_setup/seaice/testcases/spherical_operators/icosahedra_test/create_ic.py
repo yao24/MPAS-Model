@@ -643,9 +643,10 @@ def create_ic():
     mv = 2
     lv = 4
 
-    #gridSizes = [2562, 10242, 40962, 163842]
-    gridSizes = [2562, 10242]
-    #gridSizes = [2562]
+    #gridSizes = ['icos4', 'icos5', 'icos6', 'icos7', 'icos9']
+    #gridSizes = ['icos4', 'icos5', 'icos6', 'icos7']
+    #gridSizes = ['icos4', 'icos5']
+    gridSizes = ['icos4']
 
     rotateCartesianGrid = True
     r = 1.0
@@ -662,7 +663,7 @@ def create_ic():
         print("  Gridsize: ", gridSize)
 
         # input
-        filenameIn = "x1.%i.grid.nc" %(gridSize)
+        filenameIn = "%s/base_mesh.nc" %(gridSize)
 
         fileIn = Dataset(filenameIn,"r")
 
@@ -835,7 +836,7 @@ def create_ic():
            edgesOnVertex[:] = edgesOnVertex[:] + 1 
 
         # output
-        filenameOut = "ic_%i.nc" %(gridSize)
+        filenameOut = "ic_%s.nc" %(gridSize)
 
         fileOut = Dataset(filenameOut, "w", format="NETCDF3_CLASSIC")
 
