@@ -53,6 +53,7 @@ contains
        zCell, &
        rotateCartesianGrid, &
        onASphere, &
+       dvEdge, &
        interiorVertex)!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
@@ -67,6 +68,9 @@ contains
 
     integer, dimension(:), optional, intent(in) :: &
          interiorVertex  !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         dvEdge  !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          verticesOnCell !< Input:
@@ -110,6 +114,7 @@ contains
             xCell, &
             yCell, &
             zCell, &
+            dvEdge, &
             interiorVertex)
     endif
 
@@ -139,6 +144,7 @@ contains
        xCell, &
        yCell, &
        zCell, &
+       dvEdge, &
        interiorVertex )!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
@@ -150,6 +156,9 @@ contains
 
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell    !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         dvEdge  !< Input:
 
     integer, dimension(:), optional, intent(in) :: &
          interiorVertex    !< Input:
@@ -187,7 +196,7 @@ contains
 
     if(size(xLocal(:,1)) == 4 .and. present(interiorVertex)) then ! the mesh is planar with square cells
 
-       halfMeshSize = abs(xVertex(verticesOnCell(1,iCell)) - xCell(iCell))
+       halfMeshSize = abs(maxval(dvEdge(:))) * 0.5_RKIND
 
        do iCell = 1, nCells
 
@@ -393,42 +402,42 @@ contains
 
     !   end do
 
-       !difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
+    !   difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
 
-       !if (difference < 0.0_RKIND) then
+    !   if (difference < 0.0_RKIND) then
 
-          !print*, "HERE BUT SHOULD NOT BE ------------>"
+    !      print*, "HERE BUT SHOULD NOT BE ------------>"
 
-          !iVertexOnCell = verticesOnCell(2,iCell) 
-          !jVertexOnCell = verticesOnCell(3,iCell)
-          !verticesOnCell(2,iCell) = jVertexOnCell
-          !verticesOnCell(3,iCell) = iVertexOnCell
+    !      iVertexOnCell = verticesOnCell(2,iCell) 
+    !      jVertexOnCell = verticesOnCell(3,iCell)
+    !      verticesOnCell(2,iCell) = jVertexOnCell
+    !      verticesOnCell(3,iCell) = iVertexOnCell
 
-       !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
+    !      do iVertexOnCell = 1, nEdgesOnCell(iCell)
 
-       !      iVertex = verticesOnCell(iVertexOnCell, iCell)
+    !         iVertex = verticesOnCell(iVertexOnCell, iCell)
 
-       !      call seaice_grid_rotation_forward(&
-       !             xVertexRotated, yVertexRotated, zVertexRotated, &
-       !             xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
-       !             rotateCartesianGrid)          
+    !         call seaice_grid_rotation_forward(&
+    !                xVertexRotated, yVertexRotated, zVertexRotated, &
+    !                xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
+    !                rotateCartesianGrid)          
 
 
-       !      xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * e1 + &
-       !                                    (yVertexRotated - yCellRotated) * e2 + &
-       !                                    (zVertexRotated - zCellRotated) * e3
-       !      yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * n1 + &
-       !                                    (yVertexRotated - yCellRotated) * n2 + &
-       !                                    (zVertexRotated - zCellRotated) * n3
+    !         xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * e1 + &
+    !                                       (yVertexRotated - yCellRotated) * e2 + &
+    !                                       (zVertexRotated - zCellRotated) * e3
+    !         yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * n1 + &
+    !                                       (yVertexRotated - yCellRotated) * n2 + &
+    !                                       (zVertexRotated - zCellRotated) * n3
 
-       !   end do
+    !      end do
 
-       !end if
+    !   end if
 
-       !difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
-       !if( difference < 0.0_RKIND) then
-       !!   print*, 'fix did not work:',  iCell, difference
-       !end if
+    !   difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
+    !   if( difference < 0.0_RKIND) then
+    !      print*, 'fix did not work:',  iCell, difference
+    !   end if
 
     !enddo ! iCell
 
