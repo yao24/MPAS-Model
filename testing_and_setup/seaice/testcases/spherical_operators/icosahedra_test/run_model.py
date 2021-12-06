@@ -15,9 +15,9 @@ def run_model():
         MPAS_SEAICE_TESTCASES_RUN_COMMAND = ""
 
     #gridSizes = ['icos4', 'icos5', 'icos6', 'icos7']
-    #gridSizes = ['icos4', 'icos5']
+    gridSizes = ['icos4', 'icos5']
     #gridSizes = ['icos4']
-    gridSizes = ['icos9']
+    #gridSizes = ['icos9']
 
     operatorMethods = ["wachspress","pwl"]
 

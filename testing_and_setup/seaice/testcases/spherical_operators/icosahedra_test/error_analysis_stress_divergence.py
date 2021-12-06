@@ -203,7 +203,7 @@ def error_analysis_stress_divergence():
               print("   ",basis)
 
               # variational
-              filein = Dataset("./output_%s_2562/output.2000.nc" % (basis),"r")
+              filein = Dataset("./output_%s_icos4/output.2000.nc" % (basis),"r")
 
               basisIntegralsU = filein.variables["basisIntegralsU"][:]
               basisIntegralsV = filein.variables["basisIntegralsV"][:]

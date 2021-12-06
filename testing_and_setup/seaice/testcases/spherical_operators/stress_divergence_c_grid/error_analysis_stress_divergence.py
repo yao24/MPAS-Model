@@ -75,7 +75,7 @@ def error_analysis_stress_divergence():
            #print(edgesOnVertex[iVertexTest,1])
            #print(edgesOnVertex[iVertexTest,2])
 
-           iEdgeTest = 3016 #2893, 2997, 3016
+           iEdgeTest = 5596 #2893, 2997, 3016
            print("  iEdgeTest: ",iEdgeTest)
            for iCellOnEdge in range(0, 2):
               print("  iCell: ", iCellOnEdge, cellsOnEdge[iEdgeTest,iCellOnEdge])

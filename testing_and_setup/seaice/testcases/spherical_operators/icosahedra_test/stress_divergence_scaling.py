@@ -138,8 +138,8 @@ def scaling_lines(axis, xMin, xMax, yMin):
 def stress_divergence_scaling():
 
     #resolutions = ['icos4', 'icos5', 'icos6', 'icos7']
-    #resolutions = ['icos4', 'icos5']
-    resolutions = ['icos4']
+    resolutions = ['icos4', 'icos5']
+    #resolutions = ['icos4']
 
     methods = ["wachspress", "pwl"]
 
@@ -208,7 +208,7 @@ def stress_divergence_scaling():
             if (config_use_c_grid == 'false'):
                normU, normV = get_norm(filenameIC, filename, latitudeLimit)
             else :
-               normU, normV = get_norm(filenameIC, filename, latitudeLimit)
+               normU, normV = get_norm_c_grid(filenameIC, filename, latitudeLimit)
 
             x.append(get_resolution(filename, latitudeLimit))
             y.append(normU)

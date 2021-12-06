@@ -645,8 +645,8 @@ def create_ic():
 
     #gridSizes = ['icos4', 'icos5', 'icos6', 'icos7', 'icos9']
     #gridSizes = ['icos4', 'icos5', 'icos6', 'icos7']
-    #gridSizes = ['icos4', 'icos5']
-    gridSizes = ['icos4']
+    gridSizes = ['icos4', 'icos5']
+    #gridSizes = ['icos4']
 
     rotateCartesianGrid = True
     r = 1.0

@@ -230,7 +230,7 @@ def stress_divergence_scaling():
             if (config_use_c_grid == 'false'):
                normU, normV = get_norm(filenameIC, filename, latitudeLimit)
             else :
-               normU, normV = get_norm(filenameIC, filename, latitudeLimit)
+               normU, normV = get_norm_c_grid(filenameIC, filename, latitudeLimit)
 
             x.append(get_resolution(filename, latitudeLimit))
             y.append(normU)

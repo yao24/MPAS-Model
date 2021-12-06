@@ -643,7 +643,8 @@ def create_ic():
     mv = 2
     lv = 4
 
-    gridSizes = [2562, 10242, 40962, 163842]
+    #gridSizes = [2562, 10242, 40962, 163842]
+    gridSizes = [2562, 10242]
 
     rotateCartesianGrid = True
     r = 1.0
