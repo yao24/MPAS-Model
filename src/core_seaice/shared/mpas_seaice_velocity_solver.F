@@ -3232,8 +3232,16 @@ contains
     real(kind=RKIND), dimension(:), pointer :: &
          stressDivergenceU, &
          stressDivergenceV, &
+         stressDivergenceUNoMetric, &
+         stressDivergenceVNoMetric, &
+         stressDivergenceUMetric, &
+         stressDivergenceVMetric, &
          stressDivergenceUCGrid, &
-         stressDivergenceVCGrid
+         stressDivergenceVCGrid, &
+         stressDivergenceUCGridNoMetric, &
+         stressDivergenceVCGridNoMetric, &
+         stressDivergenceUCGridMetric, &
+         stressDivergenceVCGridMetric
 
     real(kind=RKIND), dimension(:), pointer :: &
          replacementPressureWeak, &
@@ -3263,7 +3271,8 @@ contains
 
     real(kind=RKIND), dimension(:), pointer :: &
          variationalDenominator, &
-         variationalDenominatorCGrid
+         variationalDenominatorCGrid, &
+         variationalDenominatorCGridAlt
 
     logical, pointer :: &
          config_use_c_grid
@@ -3283,6 +3292,14 @@ contains
        call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceV", stressDivergenceV)
        call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceUCGrid", stressDivergenceUCGrid)
        call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceVCGrid", stressDivergenceVCGrid)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceUCGridNoMetric", stressDivergenceUCGridNoMetric)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceVCGridNoMetric", stressDivergenceVCGridNoMetric)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceUCGridMetric", stressDivergenceUCGridMetric)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceVCGridMetric", stressDivergenceVCGridMetric)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceUNoMetric", stressDivergenceUNoMetric)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceVNoMetric", stressDivergenceVNoMetric)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceUMetric", stressDivergenceUMetric)
+       call MPAS_pool_get_array(velocitySolverPool, "stressDivergenceVMetric", stressDivergenceVMetric)
 
        if (strainSchemeType           == WEAK_STRAIN_SCHEME .or. &
            stressDivergenceSchemeType == WEAK_STRESS_DIVERGENCE_SCHEME) then
@@ -3319,6 +3336,7 @@ contains
              call MPAS_pool_get_array(velocityVariationalPool, "strain12Tri", strain12varTri)
              call MPAS_pool_get_array(velocityVariationalPool, "replacementPressureTri", replacementPressureVarTri)
              call MPAS_pool_get_array(velocityVariationalPool, "variationalDenominatorCGrid", variationalDenominatorCGrid)
+             call MPAS_pool_get_array(velocityVariationalPool, "variationalDenominatorCGridAlt", variationalDenominatorCGridAlt)
           end if
 
        endif
@@ -3493,6 +3511,12 @@ contains
                   meshPool, &
                   stressDivergenceU, &
                   stressDivergenceV, &
+                  stressDivergenceUNoMetric, &
+                  stressDivergenceVNoMetric, &
+                  stressDivergenceUMetric, &
+                  stressDivergenceVMetric, &
+                  stressDivergenceUCGrid, &
+                  stressDivergenceVCGrid, &
                   stress11var, &
                   stress22var, &
                   stress12var, &
@@ -3507,8 +3531,14 @@ contains
              call seaice_stress_divergence_variational_c_grid(&
                   meshPool, &
                   boundaryPool, &
+                  stressDivergenceU, &
+                  stressDivergenceV, &
                   stressDivergenceUCGrid, &
                   stressDivergenceVCGrid, &
+                  stressDivergenceUCGridNoMetric, &
+                  stressDivergenceVCGridNoMetric, &
+                  stressDivergenceUCGridMetric, &
+                  stressDivergenceVCGridMetric, &
                   stress11var, &
                   stress22var, &
                   stress12var, &
@@ -3522,6 +3552,7 @@ contains
                   basisIntegralsVTri, &
                   basisIntegralsMetricTri, &
                   variationalDenominatorCGrid, &
+                  variationalDenominatorCGridAlt, &
                   tanLatEdgeRotatedOverRadius, &
                   cellEdgesAtEdge, &
                   triangleEdgesAtEdge, &

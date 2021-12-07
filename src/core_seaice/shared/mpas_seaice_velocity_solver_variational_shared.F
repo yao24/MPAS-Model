@@ -292,6 +292,7 @@ contains
          xCellRotated, &
          yCellRotated, &
          zCellRotated, &
+         xCenterRotated, yCenterRotated, zCenterRotated, latCenterRotated, lonCenterRotated, xCenter, yCenter, zCenter, &
          e1, e2, e3, n1, n2, n3, norm, latCellRotated, lonCellRotated, &
          xVertexRotated, yVertexRotated, zVertexRotated, difference
 
@@ -326,30 +327,57 @@ contains
 
     enddo ! iCell
 
-    !do iCell = 1, nCells
+    do iCell = 1, nCells
 
-    !   call seaice_grid_rotation_forward(&
-    !      xCellRotated, yCellRotated, zCellRotated, &
-    !      xCell(iCell), yCell(iCell), zCell(iCell), &
-    !      rotateCartesianGrid)
+       !if(size(xLocal(:,iCell)) == 3) then
 
-    !   norm = sqrt(xCellRotated * xCellRotated + yCellRotated * yCellRotated + zCellRotated * zCellRotated)
-    !   latCellRotated = asin(zCellRotated / norm) 
-    !   lonCellRotated = atan2(yCellRotated, xCellRotated)
-    !   if (lonCellRotated < 0.0_RKIND) then
-    !      lonCellRotated = 2.0_RKIND * 3.14159265359_RKIND + lonCellRotated
-    !   end if
+       !    xCenter = 0.0_RKIND
+       !    yCenter = 0.0_RKIND
+       !    zCenter = 0.0_RKIND
 
-    !   e1 = - sin(lonCellRotated)
-    !   e2 = cos(lonCellRotated)
-    !   e3 = 0.0_RKIND
+       !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
+
+       !      iVertex = verticesOnCell(iVertexOnCell, iCell)
+
+       !      xCenter = xCenter + 1.0_RKIND / 3.0_RKIND * xVertex(iVertex)
+       !      yCenter = yCenter + 1.0_RKIND / 3.0_RKIND * yVertex(iVertex)
+       !      zCenter = zCenter + 1.0_RKIND / 3.0_RKIND * zVertex(iVertex)
+
+             !print*, 'vertex:', xCell(iCell), yCell(iCell), zCell(iCell)
+             !print*, 'new center', xCenter, yCenter, zCenter
+
+       !   end do
+
+       !else 
+
+          xCenter = xCell(iCell)
+          yCenter = yCell(iCell)
+          zCenter = zCell(iCell)
+
+       !end if
+
+       call seaice_grid_rotation_forward(&
+          xCenterRotated, yCenterRotated, zCenterRotated, &
+          xCenter, yCenter, zCenter, &
+          rotateCartesianGrid)
+
+       norm = sqrt(xCenterRotated * xCenterRotated + yCenterRotated * yCenterRotated + zCenterRotated * zCenterRotated)
+       latCenterRotated = asin(zCenterRotated / norm) 
+       lonCenterRotated = atan2(yCenterRotated, xCenterRotated)
+       if (lonCenterRotated < 0.0_RKIND) then
+          lonCenterRotated = 2.0_RKIND * 3.14159265359_RKIND + lonCenterRotated
+       end if
+
+       e1 = - sin(lonCenterRotated)
+       e2 = cos(lonCenterRotated)
+       e3 = 0.0_RKIND
 
     !   !norm = sqrt(e1*e1 + e2*e2 + e3*e3)
     !   !print*, 'norm e=', norm
 
-    !   n1 = - cos(lonCellRotated) * sin(latCellRotated)
-    !   n2 = - sin(latCellRotated) * sin(lonCellRotated)
-    !   n3 = cos(latCellRotated)
+       n1 = - cos(lonCenterRotated) * sin(latCenterRotated)
+       n2 = - sin(latCenterRotated) * sin(lonCenterRotated)
+       n3 = cos(latCenterRotated)
 
     !   !norm = sqrt(n1*n1 + n2*n2 + n3*n3)
     !   !print*, 'norm n=', norm
@@ -359,14 +387,14 @@ contains
     !   !print*, "n:", n1 * xCellRotated + n2 * yCellRotated + n3 * zCellRotated
     !   !print*, "e dot n:", e1*n1 + e2*n2 + e3*n3
 
-    !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
+       do iVertexOnCell = 1, nEdgesOnCell(iCell)
 
-    !      iVertex = verticesOnCell(iVertexOnCell, iCell)
+          iVertex = verticesOnCell(iVertexOnCell, iCell)
 
-    !      call seaice_grid_rotation_forward(&
-    !             xVertexRotated, yVertexRotated, zVertexRotated, &
-    !             xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
-    !             rotateCartesianGrid)
+          call seaice_grid_rotation_forward(&
+                 xVertexRotated, yVertexRotated, zVertexRotated, &
+                 xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
+                 rotateCartesianGrid)
 
     !      ! ------------BEGIN: REMOVE THIS IN DUE TIME
     !      difference = xLocal(iVertexOnCell,iCell) - ((xVertexRotated - xCellRotated)* e1 + &
@@ -393,14 +421,14 @@ contains
     !      !                               zVertexRotated * n3)
     !      ! ------------END: REMOVE THIS IN DUE TIME
 
-    !      xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * e1 + &
-    !                                    (yVertexRotated - yCellRotated) * e2 + &
-    !                                    (zVertexRotated - zCellRotated) * e3
-    !      yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * n1 + &
-    !                                    (yVertexRotated - yCellRotated) * n2 + &
-    !                                    (zVertexRotated - zCellRotated) * n3
+          xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCenterRotated) * e1 + &
+                                        (yVertexRotated - yCenterRotated) * e2 + &
+                                        (zVertexRotated - zCenterRotated) * e3
+          yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCenterRotated) * n1 + &
+                                        (yVertexRotated - yCenterRotated) * n2 + &
+                                        (zVertexRotated - zCenterRotated) * n3
 
-    !   end do
+       end do
 
     !   difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
 
@@ -439,7 +467,7 @@ contains
     !      print*, 'fix did not work:',  iCell, difference
     !   end if
 
-    !enddo ! iCell
+    enddo ! iCell
 
   end subroutine calc_local_coords_spherical!}}}
 

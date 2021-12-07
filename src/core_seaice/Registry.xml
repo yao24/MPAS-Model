@@ -3714,8 +3714,20 @@
 		<var name="icePressure"		        	type="real"	dimensions="nCells Time"		name_in_code="icePressure"/>
 		<var name="stressDivergenceU"			type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceU"/>
 		<var name="stressDivergenceV"			type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceV"/>
+		<var name="stressDivergenceUNoMetric"			type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceUNoMetric"/>
+		<var name="stressDivergenceVNoMetric"			type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceVNoMetric"/>
+		<var name="stressDivergenceUMetric"			type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceUMetric"/>
+		<var name="stressDivergenceVMetric"			type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceVMetric"/>
+		<var name="stressDivergenceUAnalytical"		type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceUAnalytical"/>
+		<var name="stressDivergenceVAnalytical"		type="real"	dimensions="nVertices Time"		name_in_code="stressDivergenceVAnalytical"/>
+		<var name="stressDivergenceUAnalyticalCGrid"	type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceUAnalyticalCGrid"/>
+		<var name="stressDivergenceVAnalyticalCGrid"	type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceVAnalyticalCGrid"/>
 		<var name="stressDivergenceUCGrid"		type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceUCGrid"/>
 		<var name="stressDivergenceVCGrid"		type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceVCGrid"/>
+		<var name="stressDivergenceUCGridNoMetric"		type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceUCGridNoMetric"/>
+		<var name="stressDivergenceVCGridNoMetric"		type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceVCGridNoMetric"/>
+		<var name="stressDivergenceUCGridMetric"		type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceUCGridMetric"/>
+		<var name="stressDivergenceVCGridMetric"		type="real"	dimensions="nEdges Time"		name_in_code="stressDivergenceVCGridMetric"/>
 		<var name="airStressCellU"			type="real"	dimensions="nCells Time"		name_in_code="airStressCellU"/>
 		<var name="airStressCellV"			type="real"	dimensions="nCells Time"		name_in_code="airStressCellV"/>
 		<var name="airStressVertexU"			type="real"	dimensions="nVertices Time"		name_in_code="airStressVertexU"/>
@@ -3803,6 +3815,7 @@
 		<var name="replacementPressureVarTri"		type="real"	dimensions="vertexDegree nVertices Time"		name_in_code="replacementPressureTri"/>
 		<var name="variationalDenominator"	        type="real"	dimensions="nVertices"				name_in_code="variationalDenominator"/>
 		<var name="variationalDenominatorCGrid"  type="real"	dimensions="nEdges"				name_in_code="variationalDenominatorCGrid"/>
+		<var name="variationalDenominatorCGridAlt"  type="real"	dimensions="nEdges"				name_in_code="variationalDenominatorCGridAlt"/>
 	</var_struct>
 
 	<!-- weak strain / variational stress divergence -->
