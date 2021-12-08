@@ -3170,13 +3170,18 @@ contains
          basisGradientU, &
          basisGradientV, &
          basisIntegralsMetric, &
-         basisGradientUTri, &
-         basisGradientVTri, &
-         basisIntegralsMetricTri, &
+         basisGradientUNew, &
+         basisGradientVNew, &
+         basisIntegralsMetricNew, &
+         basisGradientUTriNew, &
+         basisGradientVTriNew, &
+         basisIntegralsMetricTriNew, &
          basisIntegralsU, &
          basisIntegralsV, &
-         basisIntegralsUTri, &
-         basisIntegralsVTri, &
+         basisIntegralsUNew, &
+         basisIntegralsVNew, &
+         basisIntegralsUTriNew, &
+         basisIntegralsVTriNew, &
          cellVerticesAtVertex, &
          cellEdgesAtEdge, &
          triangleEdgesAtEdge, &
@@ -3271,8 +3276,7 @@ contains
 
     real(kind=RKIND), dimension(:), pointer :: &
          variationalDenominator, &
-         variationalDenominatorCGrid, &
-         variationalDenominatorCGridAlt
+         variationalDenominatorCGrid 
 
     logical, pointer :: &
          config_use_c_grid
@@ -3336,7 +3340,6 @@ contains
              call MPAS_pool_get_array(velocityVariationalPool, "strain12Tri", strain12varTri)
              call MPAS_pool_get_array(velocityVariationalPool, "replacementPressureTri", replacementPressureVarTri)
              call MPAS_pool_get_array(velocityVariationalPool, "variationalDenominatorCGrid", variationalDenominatorCGrid)
-             call MPAS_pool_get_array(velocityVariationalPool, "variationalDenominatorCGridAlt", variationalDenominatorCGridAlt)
           end if
 
        endif
@@ -3373,6 +3376,7 @@ contains
                   tanLatVertexRotatedOverRadius, &
                   solveStress)
           else 
+
              call seaice_strain_tensor_variational_c_grid(&
                   meshPool, &
                   strain11var, &
@@ -3383,10 +3387,10 @@ contains
                   strain12varTri, &
                   uVelocityCGrid, &
                   vVelocityCGrid, &
-                  basisGradientU, &
-                  basisGradientV, &
-                  basisGradientUTri, &
-                  basisGradientVTri, &
+                  basisGradientUNew, &
+                  basisGradientVNew, &
+                  basisGradientUTriNew, &
+                  basisGradientVTriNew, &
                   tanLatEdgeRotatedOverRadius, &
                   solveStress, &
                   solveStressTri, &
@@ -3545,14 +3549,13 @@ contains
                   stress11varTri, &
                   stress22varTri, &
                   stress12varTri, &
-                  basisIntegralsU, &
-                  basisIntegralsV, &
-                  basisIntegralsMetric, &
-                  basisIntegralsUTri, &
-                  basisIntegralsVTri, &
-                  basisIntegralsMetricTri, &
+                  basisIntegralsUNew, &
+                  basisIntegralsVNew, &
+                  basisIntegralsMetricNew, &
+                  basisIntegralsUTriNew, &
+                  basisIntegralsVTriNew, &
+                  basisIntegralsMetricTriNew, &
                   variationalDenominatorCGrid, &
-                  variationalDenominatorCGridAlt, &
                   tanLatEdgeRotatedOverRadius, &
                   cellEdgesAtEdge, &
                   triangleEdgesAtEdge, &

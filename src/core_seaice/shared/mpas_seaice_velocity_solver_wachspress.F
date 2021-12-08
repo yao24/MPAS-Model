@@ -44,7 +44,7 @@ contains
 !-----------------------------------------------------------------------
 
   subroutine seaice_init_velocity_solver_wachspress(&
-       nCells, &
+       iCell, &
        maxEdges, &
        nEdgesOnCell, &
        xLocal, &
@@ -67,13 +67,12 @@ contains
          seaice_calc_local_coords
 
     integer, intent(in) :: &
-         nCells, & !< Input:
          maxEdges  !< Input:
 
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell !< Input:
 
-    real(kind=RKIND), dimension(:,:), intent(in) :: &
+    real(kind=RKIND), dimension(:), intent(in) :: &
          xLocal, & !< Input:
          yLocal    !< Input:
 
@@ -86,37 +85,38 @@ contains
          integrationType !< Input:
 
     integer, intent(in) :: &
+         iCell, &
          integrationOrder !< Input:
 
     real(kind=RKIND), intent(in) :: &
          sphereRadius !< Input:
 
-    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+    real(kind=RKIND), dimension(:,:), intent(out) :: &
          basisGradientU, &    !< Output:
          basisGradientV, &    !< Output:
          basisIntegralsU, &   !< Output:
          basisIntegralsV, &   !< Output:
          basisIntegralsMetric !< Output:
 
-    real(kind=RKIND), dimension(:,:), allocatable :: &
+    real(kind=RKIND), dimension(:), allocatable :: &
          wachspressA, &
          wachspressB
 
-    real(kind=RKIND), dimension(:,:,:), allocatable :: &
+    real(kind=RKIND), dimension(:,:), allocatable :: &
          wachspressKappa
 
     call mpas_timer_start("Velocity solver Wachpress init")
 
-    allocate(wachspressKappa(maxEdges,maxEdges,nCells))
-    allocate(wachspressA(maxEdges,nCells))
-    allocate(wachspressB(maxEdges,nCells))
+    allocate(wachspressKappa(maxEdges,maxEdges))
+    allocate(wachspressA(maxEdges))
+    allocate(wachspressB(maxEdges))
 
     call mpas_timer_start("wachpress calc_coefficients")
     call calc_wachspress_coefficients(&
          wachspressKappa, &
          wachspressA, &
          wachspressB, &
-         nCells, &
+         iCell, &
          nEdgesOnCell, &
          xLocal, &
          yLocal)
@@ -126,7 +126,7 @@ contains
     call calculate_wachspress_derivatives(&
          basisGradientU, &
          basisGradientV, &
-         nCells, &
+         iCell, &
          maxEdges, &
          nEdgesOnCell, &
          xLocal, &
@@ -141,7 +141,7 @@ contains
          basisIntegralsU, &
          basisIntegralsV, &
          basisIntegralsMetric, &
-         nCells, &
+         iCell, &
          nEdgesOnCell, &
          xLocal, &
          yLocal, &
@@ -180,7 +180,7 @@ contains
        basisIntegralsU, &
        basisIntegralsV, &
        basisIntegralsMetric, &
-       nCells, &
+       iCell, &
        nEdgesOnCell, &
        xLocal, &
        yLocal, &
@@ -196,34 +196,31 @@ contains
     ! iVelocityVertex : vertex number of Wachspress derivative function
     ! Sij
 
-    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+    real(kind=RKIND), dimension(:,:), intent(out) :: &
          basisIntegralsU, &   !< Output:
          basisIntegralsV, &   !< Output:
          basisIntegralsMetric !< Output:
 
-    integer, intent(in) :: &
-         nCells !< Input:
-
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell !< Input:
 
-    real(kind=RKIND), dimension(:,:), intent(in) :: &
+    real(kind=RKIND), dimension(:), intent(in) :: &
          xLocal, &      !< Input:
          yLocal, &      !< Input:
          wachspressA, & !< Input:
          wachspressB    !< Input:
 
-    real(kind=RKIND), dimension(:,:,:), intent(in) :: &
+    real(kind=RKIND), dimension(:,:), intent(in) :: &
          wachspressKappa !< Input:
 
     character(len=strKIND), intent(in) :: &
          integrationType !< Input:
 
     integer, intent(in) :: &
+         iCell, &         !< Input:
          integrationOrder !< Input:
 
     integer :: &
-         iCell, &
          iStressVertex, &
          iVelocityVertex
 
@@ -249,39 +246,35 @@ contains
          normalizationFactor)
 
     !$omp parallel do default(shared) private(iStressVertex, iVelocityVertex)
-    do iCell = 1, nCells
+    do iVelocityVertex = 1, nEdgesOnCell(iCell)
 
-       do iVelocityVertex = 1, nEdgesOnCell(iCell)
+       do iStressVertex = 1, nEdgesOnCell(iCell)
 
-          do iStressVertex = 1, nEdgesOnCell(iCell)
+          basisIntegralsU(iStressVertex,iVelocityVertex)      = 0.0_RKIND
+          basisIntegralsV(iStressVertex,iVelocityVertex)      = 0.0_RKIND
+          basisIntegralsMetric(iStressVertex,iVelocityVertex) = 0.0_RKIND
 
-             basisIntegralsU(iStressVertex,iVelocityVertex,iCell)      = 0.0_RKIND
-             basisIntegralsV(iStressVertex,iVelocityVertex,iCell)      = 0.0_RKIND
-             basisIntegralsMetric(iStressVertex,iVelocityVertex,iCell) = 0.0_RKIND
+          call integrate_wachspress_polygon(&
+               basisIntegralsU(iStressVertex,iVelocityVertex), &
+               basisIntegralsV(iStressVertex,iVelocityVertex), &
+               basisIntegralsMetric(iStressVertex,iVelocityVertex), &
+               nEdgesOnCell(iCell), &
+               iStressVertex, &
+               iVelocityVertex, &
+               xLocal, &
+               yLocal, &
+               wachspressA, &
+               wachspressB, &
+               wachspressKappa, &
+               nIntegrationPoints, &
+               integrationU, &
+               integrationV, &
+               integrationWeights, &
+               normalizationFactor)
 
-             call integrate_wachspress_polygon(&
-                  basisIntegralsU(iStressVertex,iVelocityVertex,iCell), &
-                  basisIntegralsV(iStressVertex,iVelocityVertex,iCell), &
-                  basisIntegralsMetric(iStressVertex,iVelocityVertex,iCell), &
-                  nEdgesOnCell(iCell), &
-                  iStressVertex, &
-                  iVelocityVertex, &
-                  xLocal(:,iCell), &
-                  yLocal(:,iCell), &
-                  wachspressA(:,iCell), &
-                  wachspressB(:,iCell), &
-                  wachspressKappa(:,:,iCell), &
-                  nIntegrationPoints, &
-                  integrationU, &
-                  integrationV, &
-                  integrationWeights, &
-                  normalizationFactor)
+       enddo ! jVertex
 
-          enddo ! jVertex
-
-       enddo ! iVertex
-
-    enddo ! iCell
+    enddo ! iVertex
 
     deallocate(integrationU)
     deallocate(integrationV)
@@ -536,84 +529,79 @@ contains
        wachspressKappa, &
        wachspressA, &
        wachspressB, &
-       nCells, &
+       iCell, &
        nEdgesOnCell, &
        xLocal, &
        yLocal)!{{{
 
-    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+    real(kind=RKIND), dimension(:,:), intent(out) :: &
          wachspressKappa !< Output:
 
-    real(kind=RKIND), dimension(:,:), intent(out) :: &
+    real(kind=RKIND), dimension(:), intent(out) :: &
          wachspressA, & !< Output:
          wachspressB    !< Output:
 
     integer, intent(in) :: &
-         nCells !< Input:
+         iCell !< Input:
 
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell !< Input:
 
-    real(kind=RKIND), dimension(:,:), intent(in) :: &
+    real(kind=RKIND), dimension(:), intent(in) :: &
          xLocal, & !< Input:
          yLocal    !< Input:
 
     integer :: &
-         iCell, &
          iVertex, &
          i0, &
          i1, &
          i2, &
          jVertex
 
-    integer, dimension(:), allocatable :: &
+    integer :: &
          skipCell
 
     real(kind=RKIND) :: &
          denom
 
-    allocate(skipCell(nCells))
-    skipCell(:) = 0
+    skipCell = 0
 
-    ! loop over cells
-    do iCell = 1, nCells
+    ! loop over vertices
+    do iVertex = 1, nEdgesOnCell(iCell)
+
+       ! end points of line segment
+       i1 = iVertex - 1
+       i2 = iVertex
+       if (i1 < 1) i1 = i1 + nEdgesOnCell(iCell)
+
+       denom = (xLocal(i1) * yLocal(i2) - xLocal(i2) * yLocal(i1))
+
+       if( abs(denom) < 1.e-10_RKIND) then
+
+          skipCell = 1
+          wachspressA(:) = 1.0_RKIND 
+          wachspressB(:) = 1.0_RKIND 
+          exit
+
+       else
+
+          ! solve for the line segment equation
+          wachspressA(iVertex) = (yLocal(i2) - yLocal(i1)) / denom
+          wachspressB(iVertex) = (xLocal(i1) - xLocal(i2)) / denom
+
+       end if
+
+    end do ! iVertex
+
+    if (skipCell == 0) then
 
        ! loop over vertices
        do iVertex = 1, nEdgesOnCell(iCell)
 
-          ! end points of line segment
-          i1 = iVertex - 1
-          i2 = iVertex
-          if (i1 < 1) i1 = i1 + nEdgesOnCell(iCell)
+          ! determine kappa
+          wachspressKappa(1,iVertex) = 1.0_RKIND
 
-          denom = (xLocal(i1,iCell) * yLocal(i2,iCell) - xLocal(i2,iCell) * yLocal(i1,iCell))
-
-          if( abs(denom) < 1.e-10_RKIND) then
-
-             skipCell(iCell) = 1
-             wachspressA(:,iCell) = 1.0_RKIND 
-             wachspressB(:,iCell) = 1.0_RKIND 
-             exit
-
-          else
-
-          ! solve for the line segment equation
-             wachspressA(iVertex, iCell) = (yLocal(i2,iCell) - yLocal(i1,iCell)) / denom
-             wachspressB(iVertex, iCell) = (xLocal(i1,iCell) - xLocal(i2,iCell)) / denom
-
-          end if
-
-       end do ! iVertex
-
-       if (skipCell(iCell) == 0) then
-
-          ! loop over vertices
-          do iVertex = 1, nEdgesOnCell(iCell)
-
-             ! determine kappa
-             wachspressKappa(1,iVertex,iCell) = 1.0_RKIND
-
-             do jVertex = 2, nEdgesOnCell(iCell)
+          do jVertex = 2, nEdgesOnCell(iCell)
 
              ! previous, this and next vertex
              i0 = jVertex - 1
@@ -621,25 +609,21 @@ contains
              i2 = jVertex + 1
              if (i2 > nEdgesOnCell(iCell)) i2 = i2 - nEdgesOnCell(iCell)
 
-                wachspressKappa(jVertex,iVertex,iCell) = wachspressKappa(jVertex-1,iVertex,iCell) * &
-                     (wachspressA(i2,iCell) * (xLocal(i0,iCell) - xLocal(i1,iCell)) + &
-                      wachspressB(i2,iCell) * (yLocal(i0,iCell) - yLocal(i1,iCell))) / &
-                     (wachspressA(i0,iCell) * (xLocal(i1,iCell) - xLocal(i0,iCell)) + &
-                      wachspressB(i0,iCell) * (yLocal(i1,iCell) - yLocal(i0,iCell)))
+             wachspressKappa(jVertex,iVertex) = wachspressKappa(jVertex-1,iVertex) * &
+                  (wachspressA(i2) * (xLocal(i0) - xLocal(i1)) + &
+                   wachspressB(i2) * (yLocal(i0) - yLocal(i1))) / &
+                  (wachspressA(i0) * (xLocal(i1) - xLocal(i0)) + &
+                   wachspressB(i0) * (yLocal(i1) - yLocal(i0)))
 
-             enddo ! jVertex
+          enddo ! jVertex
 
-          enddo ! iVertex
+       enddo ! iVertex
      
-       else 
+    else 
 
-          wachspressKappa(:,:,iCell) = 1.0_RKIND      
+       wachspressKappa(:,:) = 1.0_RKIND      
 
-       end if
-
-    enddo ! iCell
-
-    deallocate(skipCell)
+    end if
 
   end subroutine calc_wachspress_coefficients!}}}
 
@@ -1113,7 +1097,7 @@ contains
   subroutine calculate_wachspress_derivatives(&
        basisGradientU, &
        basisGradientV, &
-       nCells, &
+       iCell, &
        maxEdges, &
        nEdgesOnCell, &
        xLocal, &
@@ -1130,28 +1114,27 @@ contains
     ! iVertexOnCell : The vertex basis function the gradient is calculated from
     ! jVertexOnCell : The vertex location the gradients are calculated at
 
-    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+    real(kind=RKIND), dimension(:,:), intent(out) :: &
          basisGradientU, & !< Output:
          basisGradientV    !< Output:
 
     integer, intent(in) :: &
-         nCells, & !< Input:
+         iCell, & !< Input:
          maxEdges  !< Input:
 
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell !< Input:
 
-    real(kind=RKIND), dimension(:,:), intent(in) :: &
+    real(kind=RKIND), dimension(:), intent(in) :: &
          wachspressA, & !< Input:
          wachspressB, & !< Input:
          xLocal,      & !< Input:
          yLocal         !< Input:
 
-    real(kind=RKIND), dimension(:,:,:), intent(in) :: &
+    real(kind=RKIND), dimension(:,:), intent(in) :: &
          wachspressKappa !< Input:
 
     integer :: &
-         iCell, &
          iBasisVertex, &
          iGradientVertex
 
@@ -1173,56 +1156,51 @@ contains
     allocate(nEdgesOnCellSubset(maxEdges))
     allocate(vertexIndexSubset(maxEdges,maxEdges))
 
-    ! loop over cells
-    do iCell = 1, nCells
+    call wachspress_indexes(&
+         nEdgesOnCell(iCell), &
+         nEdgesOnCellSubset(1:nEdgesOnCell(iCell)), &
+         vertexIndexSubset(1:nEdgesOnCell(iCell),1:nEdgesOnCell(iCell)))
 
-       call wachspress_indexes(&
+    ! loop over vertices again - derivative position
+    do iGradientVertex = 1, nEdgesOnCell(iCell)
+
+       x(iGradientVertex) = xLocal(iGradientVertex)
+       y(iGradientVertex) = yLocal(iGradientVertex)
+
+    enddo ! iGradientVertex
+
+    ! loop over vertices - basis function
+    do iBasisVertex = 1, nEdgesOnCell(iCell)
+
+       call wachspress_basis_derivative(&
             nEdgesOnCell(iCell), &
+            iBasisVertex, &
+            x(1:nEdgesOnCell(iCell)), &
+            y(1:nEdgesOnCell(iCell)), &
+            wachspressKappa, &
+            wachspressA, &
+            wachspressB, &
             nEdgesOnCellSubset(1:nEdgesOnCell(iCell)), &
-            vertexIndexSubset(1:nEdgesOnCell(iCell),1:nEdgesOnCell(iCell)))
+            vertexIndexSubset(1:nEdgesOnCell(iCell),1:nEdgesOnCell(iCell)), &
+            derivativeU(1:nEdgesOnCell(iCell)), &
+            derivativeV(1:nEdgesOnCell(iCell)))
 
-       ! loop over vertices again - derivative position
-       do iGradientVertex = 1, nEdgesOnCell(iCell)
+       basisGradientU(iBasisVertex,:) = 0.0_RKIND
+       basisGradientV(iBasisVertex,:) = 0.0_RKIND
 
-          x(iGradientVertex) = xLocal(iGradientVertex,iCell)
-          y(iGradientVertex) = yLocal(iGradientVertex,iCell)
+       iGradientVertex = iBasisVertex
+       basisGradientU(iBasisVertex,iGradientVertex) = derivativeU(iGradientVertex)
+       basisGradientV(iBasisVertex,iGradientVertex) = derivativeV(iGradientVertex)
 
-       enddo ! iGradientVertex
+       iGradientVertex = seaice_wrapped_index(iBasisVertex - 1, nEdgesOnCell(iCell))
+       basisGradientU(iBasisVertex,iGradientVertex) = derivativeU(iGradientVertex)
+       basisGradientV(iBasisVertex,iGradientVertex) = derivativeV(iGradientVertex)
 
-       ! loop over vertices - basis function
-       do iBasisVertex = 1, nEdgesOnCell(iCell)
+       iGradientVertex = seaice_wrapped_index(iBasisVertex + 1, nEdgesOnCell(iCell))
+       basisGradientU(iBasisVertex,iGradientVertex) = derivativeU(iGradientVertex)
+       basisGradientV(iBasisVertex,iGradientVertex) = derivativeV(iGradientVertex)
 
-          call wachspress_basis_derivative(&
-               nEdgesOnCell(iCell), &
-               iBasisVertex, &
-               x(1:nEdgesOnCell(iCell)), &
-               y(1:nEdgesOnCell(iCell)), &
-               wachspressKappa(:,:,iCell), &
-               wachspressA(:,iCell), &
-               wachspressB(:,iCell), &
-               nEdgesOnCellSubset(1:nEdgesOnCell(iCell)), &
-               vertexIndexSubset(1:nEdgesOnCell(iCell),1:nEdgesOnCell(iCell)), &
-               derivativeU(1:nEdgesOnCell(iCell)), &
-               derivativeV(1:nEdgesOnCell(iCell)))
-
-          basisGradientU(iBasisVertex,:,iCell) = 0.0_RKIND
-          basisGradientV(iBasisVertex,:,iCell) = 0.0_RKIND
-
-          iGradientVertex = iBasisVertex
-          basisGradientU(iBasisVertex,iGradientVertex,iCell) = derivativeU(iGradientVertex)
-          basisGradientV(iBasisVertex,iGradientVertex,iCell) = derivativeV(iGradientVertex)
-
-          iGradientVertex = seaice_wrapped_index(iBasisVertex - 1, nEdgesOnCell(iCell))
-          basisGradientU(iBasisVertex,iGradientVertex,iCell) = derivativeU(iGradientVertex)
-          basisGradientV(iBasisVertex,iGradientVertex,iCell) = derivativeV(iGradientVertex)
-
-          iGradientVertex = seaice_wrapped_index(iBasisVertex + 1, nEdgesOnCell(iCell))
-          basisGradientU(iBasisVertex,iGradientVertex,iCell) = derivativeU(iGradientVertex)
-          basisGradientV(iBasisVertex,iGradientVertex,iCell) = derivativeV(iGradientVertex)
-
-       enddo ! iBasisVertex
-
-    enddo ! iCell
+    enddo ! iBasisVertex
 
     deallocate(nEdgesOnCellSubset)
     deallocate(vertexIndexSubset)

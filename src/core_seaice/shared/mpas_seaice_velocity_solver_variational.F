@@ -130,6 +130,7 @@ contains
 
     use seaice_velocity_solver_variational_shared, only: &
          seaice_calc_local_coords, &
+         seaice_calc_local_coords_c_grid, &
          seaice_calc_variational_metric_terms
 
     use seaice_velocity_solver_wachspress, only: &
@@ -169,21 +170,27 @@ contains
          tanLatEdgeRotatedOverRadius, &
          variationalDenominator, &
          variationalDenominatorCGrid, &
-         variationalDenominatorCGridAlt, &
          areaCellCGrid, &
          areaTriCGrid
 
     real(kind=RKIND), dimension(:,:,:), pointer :: &
          basisGradientU, &
          basisGradientV, &
-         basisGradientUTri, &
-         basisGradientVTri, &
          basisIntegralsMetric, &
          basisIntegralsU, &
-         basisIntegralsV, &
-         basisIntegralsMetricTri, &
-         basisIntegralsUTri, &
-         basisIntegralsVTri
+         basisIntegralsV 
+
+    real(kind=RKIND), dimension(:,:,:,:), pointer :: &
+         basisGradientUNew, &
+         basisGradientVNew, &
+         basisIntegralsMetricNew, &
+         basisIntegralsUNew, &
+         basisIntegralsVNew, &
+         basisGradientUTriNew, &
+         basisGradientVTriNew, &
+         basisIntegralsMetricTriNew, &
+         basisIntegralsUTriNew, &
+         basisIntegralsVTriNew
 
     integer, pointer :: &
          nCells, &
@@ -235,9 +242,15 @@ contains
 
     real(kind=RKIND), dimension(:,:), allocatable :: &
          xLocal, &
-         yLocal, &
-         xLocalTri, &
-         yLocalTri
+         yLocal
+
+    real(kind=RKIND), dimension(:,:,:), allocatable :: &
+         xLocalNew, &
+         yLocalNew, &
+         xLocalTriNew, &
+         yLocalTriNew
+
+    integer :: iEdge, iCell, iVertex, iCellOnEdge, iVertexOnEdge
 
     call MPAS_pool_get_config(mesh, "on_a_sphere", on_a_sphere)
     call MPAS_pool_get_config(mesh, "sphere_radius", sphere_radius)
@@ -283,17 +296,21 @@ contains
     call MPAS_pool_get_array(velocity_variational, "tanLatEdgeRotatedOverRadius", tanLatEdgeRotatedOverRadius)
     call MPAS_pool_get_array(velocity_variational, "basisGradientU", basisGradientU)
     call MPAS_pool_get_array(velocity_variational, "basisGradientV", basisGradientV)
-    call MPAS_pool_get_array(velocity_variational, "basisGradientUTri", basisGradientUTri)
-    call MPAS_pool_get_array(velocity_variational, "basisGradientVTri", basisGradientVTri)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsU", basisIntegralsU)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsV", basisIntegralsV)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetric", basisIntegralsMetric)
-    call MPAS_pool_get_array(velocity_variational, "basisIntegralsUTri", basisIntegralsUTri)
-    call MPAS_pool_get_array(velocity_variational, "basisIntegralsVTri", basisIntegralsVTri)
-    call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricTri", basisIntegralsMetricTri)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsUNew", basisIntegralsUNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsVNew", basisIntegralsVNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricNew", basisIntegralsMetricNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsUTriNew", basisIntegralsUTriNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsVTriNew", basisIntegralsVTriNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricTriNew", basisIntegralsMetricTriNew)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientUNew", basisGradientUNew)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientVNew", basisGradientVNew)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientUTriNew", basisGradientUTriNew)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientVTriNew", basisGradientVTriNew)
     call MPAS_pool_get_array(velocity_variational, "variationalDenominator", variationalDenominator)
     call MPAS_pool_get_array(velocity_variational, "variationalDenominatorCGrid", variationalDenominatorCGrid)
-    call MPAS_pool_get_array(velocity_variational, "variationalDenominatorCGridAlt", variationalDenominatorCGridAlt)
     call MPAS_pool_get_array(velocity_variational, "areaCellCGrid", areaCellCGrid)
     call MPAS_pool_get_array(velocity_variational, "areaTriCGrid", areaTriCGrid)
 
@@ -347,15 +364,23 @@ contains
     call mpas_timer_stop("variational vertices_at_vertex")
 
     call mpas_timer_start("variational calc_local_coords")
-    allocate(xLocal(maxEdges,nCells))
-    allocate(yLocal(maxEdges,nCells))
 
-    allocate(xLocalTri(vertexDegree,nVertices))
-    allocate(yLocalTri(vertexDegree,nVertices))
+    if (.not. useCGrid) then
+       allocate(xLocal(maxEdges,nCells))
+       allocate(yLocal(maxEdges,nCells))
 
-    allocate(nEdgesOnVertex(nVertices))
+    else 
 
-    nEdgesOnVertex(:) = vertexDegree
+       allocate(xLocalNew(nEdges,maxEdges,2))
+       allocate(yLocalNew(nEdges,maxEdges,2))
+
+       allocate(xLocalTriNew(nEdges,vertexDegree,2))
+       allocate(yLocalTriNew(nEdges,vertexDegree,2))
+
+       allocate(nEdgesOnVertex(nVertices))
+       nEdgesOnVertex(:) = vertexDegree
+
+    end if
 
     if ( .not. useCGrid ) then
        call seaice_calc_local_coords(&
@@ -371,123 +396,147 @@ contains
             yCell, &
             zCell, &
             rotateCartesianGrid, &
-            on_a_sphere, &
-            dvEdge)
+            on_a_sphere)
     else
-       call seaice_calc_local_coords(&
-            xLocal, &
-            yLocal, &
-            nCells, &
-            nEdgesOnCell, &
-            edgesOnCell, &
-            xEdge, &
-            yEdge, &
-            zEdge, &
-            xCell, &
-            yCell, &
-            zCell, &
-            rotateCartesianGrid, &
-            on_a_sphere, &
-            dvEdge)
 
-       call seaice_calc_local_coords(&
-            xLocalTri, &
-            yLocalTri, &
-            nVertices, &
-            nEdgesOnVertex, &
-            edgesOnVertex, &
-            xEdge, &
-            yEdge, &
-            zEdge, &
-            xVertex, &
-            yVertex, &
-            zVertex, &
-            rotateCartesianGrid, &
-            on_a_sphere, &
-            dvEdge, &
-            interiorVertex)
+          call seaice_calc_local_coords_c_grid(&
+             xLocalNew, &
+             yLocalNew, &
+             xLocalTriNew, &
+             yLocalTriNew, &
+             nEdges, &
+             cellsOnEdge, &
+             verticesOnEdge, &
+             edgesOnCell, &
+             edgesOnVertex, &
+             nEdgesOnCell, &
+             vertexDegree, &
+             xCell, &
+             yCell, &
+             zCell, &
+             xVertex, &
+             yVertex, &
+             zVertex, &
+             xEdge, &
+             yEdge, &
+             zEdge, &
+             rotateCartesianGrid, &
+             on_a_sphere, &
+             dvEdge, &
+             interiorVertex)
 
     end if
 
     call mpas_timer_stop("variational calc_local_coords")
 
     if (useCGrid) then
-       call mpas_timer_start("variational denominator_c_grid")
-       call variational_denominator_c_grid(&
-          on_a_sphere, &
-          sphere_radius, &
-          cellsOnEdge, &
-          edgesOnCell, &
-          verticesOnEdge, &
-          edgesOnVertex, &
-          nEdges, &
-          nCells, &
-          nVertices, &
-          nEdgesOnCell, &
-          vertexDegree, &
-          xCell, &
-       yCell, &
-       zCell, &
-       xVertex, &
-       yVertex, &
-       zVertex, &
-       xEdge, &
-       yEdge, &
-       zEdge, &
-       latCell, &
-       lonCell, &
-       latVertex, &
-       lonVertex, &
-       latEdge, &
-       lonEdge, &
-       variationalDenominatorCGrid, &
-       variationalDenominatorCGridAlt, &
-       basisIntegralsMetric, &
-       basisIntegralsMetricTri, &
-       cellEdgesAtEdge, &
-       triangleEdgesAtEdge, &
-       areaCellCGrid, &
-       areaTriCGrid)
-       call mpas_timer_stop("variational denominator_c_grid")
+       call mpas_timer_start("compute_c_grid_polygon_and_tri_areas")
+       call compute_c_grid_polygon_and_tri_areas(&
+           on_a_sphere, &
+           sphere_radius, &
+           edgesOnCell, &
+           edgesOnVertex, &
+           nEdges, &
+           nCells, &
+           nVertices, &
+           nEdgesOnCell, &
+           vertexDegree, &
+           xCell, &
+           yCell, &
+           zCell, &
+           xVertex, &
+           yVertex, &
+           zVertex, &
+           xEdge, &
+           yEdge, &
+           zEdge, &
+           latCell, &
+           lonCell, &
+           latVertex, &
+           lonVertex, &
+           latEdge, &
+           lonEdge, &
+           areaCellCGrid, &
+           areaTriCGrid)
+       call mpas_timer_stop("compute_c_grid_polygon_and_tri_areas")
     end if
 
     if (trim(variationalBasisType) == "wachspress") then
 
-       call seaice_init_velocity_solver_wachspress(&
-            nCells, &
-            maxEdges, &
-            nEdgesOnCell, &
-            xLocal, &
-            yLocal, &
-            rotateCartesianGrid, &
-            includeMetricTerms, &
-            on_a_sphere, &
-            integrationType, &
-            integrationOrder, &
-            sphere_radius, &
-            basisGradientU, &
-            basisGradientV, &
-            basisIntegralsU, &
-            basisIntegralsV, &
-            basisIntegralsMetric)
-       if (useCGrid) then
-          call seaice_init_velocity_solver_wachspress(&
-              nVertices, &
-              vertexDegree, &
-              nEdgesOnVertex, &
-              xLocalTri, &
-              yLocalTri, &
-              rotateCartesianGrid, &
-              includeMetricTerms, &
-              on_a_sphere, &
-              integrationType, &
-              integrationOrder, &
-              sphere_radius, &
-              basisGradientUTri, &
-              basisGradientVTri, &
-              basisIntegralsUTri, &
-              basisIntegralsVTri, &
-              basisIntegralsMetricTri)
+       if( .not. useCGrid) then
+
+          do iCell = 1, nCells
+             call seaice_init_velocity_solver_wachspress(&
+                iCell, &
+                maxEdges, &
+                nEdgesOnCell, &
+                xLocal(:,iCell), &
+                yLocal(:,iCell), &
+                rotateCartesianGrid, &
+                includeMetricTerms, &
+                on_a_sphere, &
+                integrationType, &
+                integrationOrder, &
+                sphere_radius, &
+                basisGradientU(:,:,iCell), &
+                basisGradientV(:,:,iCell), &
+                basisIntegralsU(:,:,iCell), &
+                basisIntegralsV(:,:,iCell), &
+                basisIntegralsMetric(:,:,iCell))
+          end do
+
+       else
+
+          do iEdge = 1, nEdges
+
+             do iCellOnEdge = 1, 2
+
+                iCell = cellsOnEdge(iCellOnEdge,iEdge)
+                call seaice_init_velocity_solver_wachspress(&
+                   iCell, &
+                   maxEdges, &
+                   nEdgesOnCell, &
+                   xLocalNew(iEdge,:,iCellOnEdge), &
+                   yLocalNew(iEdge,:,iCellOnEdge), &
+                   rotateCartesianGrid, &
+                   includeMetricTerms, &
+                   on_a_sphere, &
+                   integrationType, &
+                   integrationOrder, &
+                   sphere_radius, &
+                   basisGradientUNew(iEdge,:,:,iCellOnEdge), &
+                   basisGradientVNew(iEdge,:,:,iCellOnEdge), &
+                   basisIntegralsUNew(iEdge,:,:,iCellOnEdge), &
+                   basisIntegralsVNew(iEdge,:,:,iCellOnEdge), &
+                   basisIntegralsMetricNew(iEdge,:,:,iCellOnEdge))
+
+              end do
+
+              do iVertexOnEdge = 1, 2
+
+                 iVertex = verticesOnEdge(iVertexOnEdge,iEdge)
+                 call seaice_init_velocity_solver_wachspress(&
+                    iVertex, &
+                    vertexDegree, &
+                    nEdgesOnVertex, &
+                    xLocalTriNew(iEdge,:,iVertexOnEdge), &
+                    yLocalTriNew(iEdge,:,iVertexOnEdge), &
+                    rotateCartesianGrid, &
+                    includeMetricTerms, &
+                    on_a_sphere, &
+                    integrationType, &
+                    integrationOrder, &
+                    sphere_radius, &
+                    basisGradientUTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisGradientVTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisIntegralsUTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisIntegralsVTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisIntegralsMetricTriNew(iEdge,:,:,iVertexOnEdge))
+
+               end do
+
+          end do
+
        end if
 
     else if (trim(variationalBasisType) == "pwl") then
@@ -509,31 +558,49 @@ contains
                basisIntegralsU, &
                basisIntegralsV)
        else
-          call seaice_init_velocity_solver_pwl_c_grid(&
-               nCells, &
-               maxEdges, &
-               nEdgesOnCell, &
-               areaCellCGrid, &
-               xLocal, &
-               yLocal, &
-               basisGradientU, &
-               basisGradientV, &
-               basisIntegralsMetric, &
-               basisIntegralsU, &
-               basisIntegralsV)
 
-          call seaice_init_velocity_solver_pwl_c_grid(&
-               nVertices, &
-               vertexDegree, &
-               nEdgesOnVertex, &
-               areaTriCGrid, &
-               xLocalTri, &
-               yLocalTri, &
-               basisGradientUTri, &
-               basisGradientVTri, &
-               basisIntegralsMetricTri, &
-               basisIntegralsUTri, &
-               basisIntegralsVTri)
+          do iEdge = 1, nEdges
+
+             do iCellOnEdge = 1, 2
+
+                iCell = cellsOnEdge(iCellOnEdge,iEdge)
+
+                call seaice_init_velocity_solver_pwl_c_grid(&
+                   iCell, &
+                   maxEdges, &
+                   nEdgesOnCell, &
+                   areaCellCGrid, &
+                   xLocalNew(iEdge,:,iCellOnEdge), &
+                   yLocalNew(iEdge,:,iCellOnEdge), &
+                   basisGradientUNew(iEdge,:,:,iCellOnEdge), &
+                   basisGradientVNew(iEdge,:,:,iCellOnEdge), &
+                   basisIntegralsMetricNew(iEdge,:,:,iCellOnEdge), &
+                   basisIntegralsUNew(iEdge,:,:,iCellOnEdge), &
+                   basisIntegralsVNew(iEdge,:,:,iCellOnEdge))
+
+              end do
+
+             do iVertexOnEdge = 1, 2
+
+                 iVertex = verticesOnEdge(iVertexOnEdge,iEdge)
+
+                 call seaice_init_velocity_solver_pwl_c_grid(&
+                    iVertex, &
+                    vertexDegree, &
+                    nEdgesOnVertex, &
+                    areaTriCGrid, &
+                    xLocalTriNew(iEdge,:,iVertexOnEdge), &
+                    yLocalTriNew(iEdge,:,iVertexOnEdge), &
+                    basisGradientUTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisGradientVTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisIntegralsMetricTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisIntegralsUTriNew(iEdge,:,:,iVertexOnEdge), &
+                    basisIntegralsVTriNew(iEdge,:,:,iVertexOnEdge))
+
+              end do
+
+          end do
+
        end if
 
     else if (trim(variationalBasisType) == "none") then
@@ -561,7 +628,7 @@ contains
             variationalDenominator)
        call mpas_timer_stop("variational denominator")
     else
-       call mpas_timer_start("variational denominator_c_grid_again")
+       call mpas_timer_start("variational denominator_c_grid")
        call variational_denominator_c_grid(&
           on_a_sphere, &
           sphere_radius, &
@@ -575,37 +642,40 @@ contains
           nEdgesOnCell, &
           vertexDegree, &
           xCell, &
-       yCell, &
-       zCell, &
-       xVertex, &
-       yVertex, &
-       zVertex, &
-       xEdge, &
-       yEdge, &
-       zEdge, &
-       latCell, &
-       lonCell, &
-       latVertex, &
-       lonVertex, &
-       latEdge, &
-       lonEdge, &
-       variationalDenominatorCGrid, &
-       variationalDenominatorCGridAlt, &
-       basisIntegralsMetric, &
-       basisIntegralsMetricTri, &
-       cellEdgesAtEdge, &
-       triangleEdgesAtEdge, &
-       areaCellCGrid, &
-       areaTriCGrid)
-       call mpas_timer_stop("variational denominator_c_grid_again")
+          yCell, &
+          zCell, &
+          xVertex, &
+          yVertex, &
+          zVertex, &
+          xEdge, &
+          yEdge, &
+          zEdge, &
+          latCell, &
+          lonCell, &
+          latVertex, &
+          lonVertex, &
+          latEdge, &
+          lonEdge, &
+          variationalDenominatorCGrid, &
+          variationalDenominatorType, &
+          basisIntegralsMetricNew, &
+          basisIntegralsMetricTriNew, &
+          cellEdgesAtEdge, &
+          triangleEdgesAtEdge)
+       call mpas_timer_stop("variational denominator_c_grid")
     end if
 
     ! clean up
-    deallocate(xLocal)
-    deallocate(yLocal)
-    deallocate(xLocalTri)
-    deallocate(yLocalTri)
-    deallocate(nEdgesOnVertex)
+    if (.not. useCGrid) then
+       deallocate(xLocal)
+       deallocate(yLocal)
+    else 
+       deallocate(xLocalNew)
+       deallocate(yLocalNew)
+       deallocate(xLocalTriNew)
+       deallocate(yLocalTriNew)
+       deallocate(nEdgesOnVertex)
+    end if
 
     !call homogenize_variational_basis_field()
 
@@ -714,12 +784,10 @@ contains
 
 !-----------------------------------------------------------------------
 
-  subroutine variational_denominator_c_grid(&
+  subroutine compute_c_grid_polygon_and_tri_areas(&
        on_a_sphere, &
        sphere_radius, &
-       cellsOnEdge, &
        edgesOnCell, &
-       verticesOnEdge, &
        edgesOnVertex, &
        nEdges, &
        nCells, &
@@ -741,12 +809,6 @@ contains
        lonVertex, &
        latEdge, &
        lonEdge, &
-       variationalDenominatorCGrid, &
-       variationalDenominatorCGridAlt, &
-       basisIntegralsMetric, &
-       basisIntegralsMetricTri, &
-       cellEdgesAtEdge, &
-       triangleEdgesAtEdge, &
        areaCellCGrid, &
        areaTriCGrid)
 
@@ -766,14 +828,6 @@ contains
     real(kind=RKIND), intent(in) :: &
          sphere_radius !<Input:
 
-    integer, dimension(:,:), intent(in) :: &
-         cellEdgesAtEdge,     &   !< Input:
-         triangleEdgesAtEdge      !< Input:
-
-    real(kind=RKIND), dimension(:,:,:), intent(in) :: &
-         basisIntegralsMetric, & !< Input:
-         basisIntegralsMetricTri !< Input:
-
     logical, intent(in) :: &
          on_a_sphere !< Input:
 
@@ -781,9 +835,7 @@ contains
          nEdgesOnCell     !<Input:
 
     integer, dimension(:,:), intent(in) :: &
-         cellsOnEdge, &     !<Input:
          edgesOnCell, &     !<Input:
-         verticesOnEdge, &  !<Input:
          edgesOnVertex      !<Input:
 
     real(kind=RKIND), dimension(:), intent(in) :: &
@@ -804,8 +856,6 @@ contains
          lonEdge          !< Input:
 
     real(kind=RKIND), dimension(:), intent(out) :: &
-         variationalDenominatorCGrid, & !< Output:
-         variationalDenominatorCGridAlt, & !< Output:
          areaCellCGrid, & !< Output:
          areaTriCGrid     !< Output:
 
@@ -859,34 +909,10 @@ contains
     real(kind=RKIND) :: &
          triangleArea 
 
-    variationalDenominatorCGrid(:) = 0.0_RKIND
-    variationalDenominatorCGridAlt(:) = 0.0_RKIND
     areaCellCGrid(:) = 0.0_RKIND
     areaTriCGrid(:) = 0.0_RKIND
 
     if(on_a_sphere) then
-
-          do iEdge = 1, nEdges
-
-             vertOnEdge1 = verticesOnEdge(1, iEdge)
-             vertOnEdge2 = verticesOnEdge(2, iEdge)
-             laVert1 = latVertex(vertOnEdge1)
-             loVert1 = lonVertex(vertOnEdge1)
-             laVert2 = latVertex(vertOnEdge2)
-             loVert2 = lonVertex(vertOnEdge2)
-
-             do iCellOnEdge = 1, 2
-
-                cellOnEdge = cellsOnEdge(iCellOnEdge, iEdge)
-                laCell = latCell(cellOnEdge)             
-                loCell = lonCell(cellOnEdge)
-
-                triangleArea = spherical_triangle_area(laCell, loCell, laVert1, loVert1, laVert2, loVert2, sphere_radius)                 
-                variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + triangleArea 
-
-             end do
-          
-          end do
 
        do iCell = 1, nCells
 
@@ -927,31 +953,6 @@ contains
        end do
 
     else
-
-          do iEdge = 1, nEdges
-
-             vertOnEdge1 = verticesOnEdge(1, iEdge)
-             vertOnEdge2 = verticesOnEdge(2, iEdge)
-             xv1 = xVertex(vertOnEdge1)
-             yv1 = yVertex(vertOnEdge1)
-             zv1 = zVertex(vertOnEdge1)
-             xv2 = xVertex(vertOnEdge2)
-             yv2 = yVertex(vertOnEdge2)
-             zv2 = zVertex(vertOnEdge2)
-
-             do iCellOnEdge = 1, 2
-
-                cellOnEdge = cellsOnEdge(iCellOnEdge, iEdge)
-                xc = xCell(cellOnEdge)
-                yc = yCell(cellOnEdge)
-                zc = zCell(cellOnEdge)
-
-                triangleArea = planar_triangle_area(xc, yc, zc, xv1, yv1, zv1, xv2, yv2, zv2)
-                variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + triangleArea
-
-             end do
-
-         end do
 
        do iCell = 1, nCells
 
@@ -999,42 +1000,244 @@ contains
 
     end if
 
-       do iEdge = 1, nEdges
+end subroutine compute_c_grid_polygon_and_tri_areas
 
-          variationalDenominatorCGridAlt(iEdge) = 0.0_RKIND
+!-----------------------------------------------------------------------
 
-          do iCellOnEdge = 1, 2
+  subroutine variational_denominator_c_grid(&
+       on_a_sphere, &
+       sphere_radius, &
+       cellsOnEdge, &
+       edgesOnCell, &
+       verticesOnEdge, &
+       edgesOnVertex, &
+       nEdges, &
+       nCells, &
+       nVertices, &
+       nEdgesOnCell, &
+       vertexDegree, &
+       xCell, &
+       yCell, &
+       zCell, &
+       xVertex, &
+       yVertex, &
+       zVertex, &
+       xEdge, &
+       yEdge, &
+       zEdge, &
+       latCell, &
+       lonCell, &
+       latVertex, &
+       lonVertex, &
+       latEdge, &
+       lonEdge, &
+       variationalDenominatorCGrid, &
+       variationalDenominatorType, &
+       basisIntegralsMetricNew, &
+       basisIntegralsMetricTriNew, &
+       cellEdgesAtEdge, &
+       triangleEdgesAtEdge)
 
-             iCell = cellsOnEdge(iCellOnEdge, iEdge)
+    use seaice_mesh, only: &
+         spherical_triangle_area, &
+         planar_triangle_area
 
-             iVelocityEdge = cellEdgesAtEdge(iCellOnEdge,iEdge) 
+    use seaice_velocity_solver_variational_shared, only: &
+         seaice_wrapped_index
 
-             ! loop over the vertices of the surrounding cell
-             do iStressEdge = 1, nEdgesOnCell(iCell)
+    integer, intent(in) :: &
+         nEdges, &     !< Input:
+         nCells, &     !< Input:
+         nVertices, &  !< Input:
+         vertexDegree  !< Input:
 
-                variationalDenominatorCGridAlt(iEdge) = variationalDenominatorCGridAlt(iEdge) + &
-                     basisIntegralsMetric(iStressEdge,iVelocityEdge,iCell)
+    real(kind=RKIND), intent(in) :: &
+         sphere_radius !<Input:
 
-             end do ! iStressEdge
+    integer, dimension(:,:), intent(in) :: &
+         cellEdgesAtEdge,     &   !< Input:
+         triangleEdgesAtEdge      !< Input:
 
-          end do ! iSurroundingCell
+    character(len=*), intent(in) :: &
+         variationalDenominatorType !< Input:
 
-          do iTriangleOnEdge = 1, 2
+    real(kind=RKIND), dimension(:,:,:,:), intent(in) :: &
+         basisIntegralsMetricNew, & !< Input:
+         basisIntegralsMetricTriNew !< Input:
 
-             iVertex = verticesOnEdge(iTriangleOnEdge, iEdge)
+    logical, intent(in) :: &
+         on_a_sphere !< Input:
 
-             iVelocityEdge = triangleEdgesAtEdge(iTriangleOnEdge,iEdge)
+    integer, dimension(:), intent(in) :: &
+         nEdgesOnCell     !<Input:
 
-             do iStressEdge = 1, vertexDegree
+    integer, dimension(:,:), intent(in) :: &
+         cellsOnEdge, &     !<Input:
+         edgesOnCell, &     !<Input:
+         verticesOnEdge, &  !<Input:
+         edgesOnVertex      !<Input:
 
-                variationalDenominatorCGridAlt(iEdge) = variationalDenominatorCGridAlt(iEdge) + &
-                     basisIntegralsMetricTri(iStressEdge,iVelocityEdge,iVertex)
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         xCell,         & !< Input:
+         yCell,         & !< Input:
+         zCell,         & !< Input:
+         xVertex,       & !< Input:
+         yVertex,       & !< Input:
+         zVertex,       & !< Input:
+         xEdge,         & !< Input:
+         yEdge,         & !< Input:
+         zEdge,         & !< Input:
+         latCell,       & !< Input:
+         lonCell,       & !< Input:
+         latVertex,     & !< Input:
+         lonVertex,     & !< Input:
+         latEdge,       & !< Input:
+         lonEdge          !< Input:
+
+    real(kind=RKIND), dimension(:), intent(out) :: &
+         variationalDenominatorCGrid !< Output:
+
+    integer :: &
+         iEdge, &
+         jEdge, &
+         iCell, &
+         iVertex, &
+         iEdgeOnVertex, &
+         jEdgeOnVertex, &
+         iCellOnEdge, &
+         iTriangleOnEdge, &
+         cellOnEdge, &
+         vertOnEdge1, &
+         vertOnEdge2, &
+         iStressEdge, &
+         iVelocityEdge
+
+    real(kind=RKIND) :: &
+         laCell, &
+         loCell, &
+         laVertex, &
+         loVertex, &
+         laVert1, &
+         loVert1, &
+         laVert2, &
+         loVert2, &
+         laEdge1, &
+         loEdge1, &
+         laEdge2, &
+         loEdge2, &
+         xc, &
+         yc, &
+         zc, &
+         xv1, &
+         yv1, &
+         zv1, &
+         xv2, &
+         yv2, &
+         zv2, &
+         xe1, &
+         ye1, &
+         ze1, &
+         xe2, &
+         ye2, &
+         ze2, &
+         xe3, &
+         ye3, &
+         ze3
+     
+    real(kind=RKIND) :: &
+         triangleArea 
+
+    variationalDenominatorCGrid(:) = 0.0_RKIND
+
+    if(on_a_sphere) then
+
+       if (trim(variationalDenominatorType) == "original") then
+
+          do iEdge = 1, nEdges
+
+             vertOnEdge1 = verticesOnEdge(1, iEdge)
+             vertOnEdge2 = verticesOnEdge(2, iEdge)
+             laVert1 = latVertex(vertOnEdge1)
+             loVert1 = lonVertex(vertOnEdge1)
+             laVert2 = latVertex(vertOnEdge2)
+             loVert2 = lonVertex(vertOnEdge2)
+
+             do iCellOnEdge = 1, 2
+
+                cellOnEdge = cellsOnEdge(iCellOnEdge, iEdge)
+                laCell = latCell(cellOnEdge)             
+                loCell = lonCell(cellOnEdge)
+
+                triangleArea = spherical_triangle_area(laCell, loCell, laVert1, loVert1, laVert2, loVert2, sphere_radius)                 
+                variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + triangleArea 
+
+             end do
+          
+          end do
+
+       else if (trim(variationalDenominatorType) == "alternate") then
+
+          do iEdge = 1, nEdges
+
+             do iCellOnEdge = 1, 2
+
+                iCell = cellsOnEdge(iCellOnEdge, iEdge)
+
+                iVelocityEdge = cellEdgesAtEdge(iCellOnEdge,iEdge)
+
+                ! loop over the vertices of the surrounding cell
+                do iStressEdge = 1, nEdgesOnCell(iCell)
+ 
+                   variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge)
+
+                end do ! iStressEdge
+
+             end do ! iSurroundingCell
+
+             do iTriangleOnEdge = 1, 2
+
+                iVelocityEdge = triangleEdgesAtEdge(iTriangleOnEdge,iEdge)
+
+                do iStressEdge = 1, vertexDegree
+
+                   variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iTriangleOnEdge)
+
+                end do
 
              end do
 
+          end do ! iEdge
+
+        end if
+
+    else
+
+       do iEdge = 1, nEdges
+
+          vertOnEdge1 = verticesOnEdge(1, iEdge)
+          vertOnEdge2 = verticesOnEdge(2, iEdge)
+          xv1 = xVertex(vertOnEdge1)
+          yv1 = yVertex(vertOnEdge1)
+          zv1 = zVertex(vertOnEdge1)
+          xv2 = xVertex(vertOnEdge2)
+          yv2 = yVertex(vertOnEdge2)
+          zv2 = zVertex(vertOnEdge2)
+
+          do iCellOnEdge = 1, 2
+
+             cellOnEdge = cellsOnEdge(iCellOnEdge, iEdge)
+             xc = xCell(cellOnEdge)
+             yc = yCell(cellOnEdge)
+             zc = zCell(cellOnEdge)
+
+            triangleArea = planar_triangle_area(xc, yc, zc, xv1, yv1, zv1, xv2, yv2, zv2)
+            variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + triangleArea
+
           end do
 
-       enddo ! iEdge
+      end do
+
+    end if
 
 end subroutine variational_denominator_c_grid
 
@@ -1276,10 +1479,10 @@ end subroutine variational_denominator_c_grid
        strain12Tri, &
        uVelocityCGrid, &
        vVelocityCGrid, &
-       basisGradientU, &
-       basisGradientV, &
-       basisGradientUTri, &
-       basisGradientVTri, &
+       basisGradientUNew, &
+       basisGradientVNew, &
+       basisGradientUTriNew, &
+       basisGradientVTriNew, &
        tanLatEdgeRotatedOverRadius, &
        solveStress, &
        solveStressTri, &
@@ -1290,6 +1493,7 @@ end subroutine variational_denominator_c_grid
          nEdges, &
          nVertices, & 
          vertexDegree, &
+         cellsOnEdge, &
          edgesOnCell, &
          edgesOnVertex, &
          nEdgesOnCell, &
@@ -1313,11 +1517,11 @@ end subroutine variational_denominator_c_grid
          uVelocityCGrid, & !< Input:
          vVelocityCGrid    !< Input:
 
-    real(kind=RKIND), dimension(:,:,:), contiguous, intent(in) :: &
-         basisGradientU, & !< Input:
-         basisGradientV, & !< Input:
-         basisGradientUTri, & !< Input:
-         basisGradientVTri    !< Input:
+    real(kind=RKIND), dimension(:,:,:,:), contiguous, intent(in) :: &
+         basisGradientUNew, & !< Input:
+         basisGradientVNew, & !< Input:
+         basisGradientUTriNew, & !< Input:
+         basisGradientVTriNew    !< Input:
 
     integer, dimension(:), intent(in) :: &
          solveStress, &  !< Input:
@@ -1325,11 +1529,14 @@ end subroutine variational_denominator_c_grid
          solveVelocityCGrid !< Input:
 
     integer :: &
+         iCellOnEdge, &
+         iVertexOnEdge, &
          iCell, &
          iGradientEdge, &
          iBasisEdge, &
          iEdge, &
          jEdge, &
+         kEdge, &
          vertexOnEdge1, & 
          vertexOnEdge2, &
          iVertex
@@ -1339,80 +1546,86 @@ end subroutine variational_denominator_c_grid
          strain22Tmp, &
          strain12Tmp
 
-    do iCell = 1, nCells
+
+    do iEdge = 1, nEdges
+
+       do iCellOnEdge = 1, 2
+          iCell = cellsOnEdge(iCellOnEdge,iEdge)
    
-       if (solveStress(iCell) == 1) then
+          if (solveStress(iCell) == 1) then
 
-          ! loop over velocity points surrounding cell - location of stress and derivative
-          do iGradientEdge = 1, nEdgesOnCell(iCell)
+             ! loop over velocity points surrounding cell - location of stress and derivative
+             do iGradientEdge = 1, nEdgesOnCell(iCell)
 
-             strain11Tmp = 0.0_RKIND
-             strain22Tmp = 0.0_RKIND
-             strain12Tmp = 0.0_RKIND
+                strain11Tmp = 0.0_RKIND
+                strain22Tmp = 0.0_RKIND
+                strain12Tmp = 0.0_RKIND
 
-             ! loop over basis functions
-             do iBasisEdge = 1, nEdgesOnCell(iCell)
+                ! loop over basis functions
+                do iBasisEdge = 1, nEdgesOnCell(iCell)
 
-                iEdge = edgesOnCell(iBasisEdge,iCell)
+                   jEdge = edgesOnCell(iBasisEdge,iCell)
 
-                strain11Tmp = strain11Tmp + uVelocityCGrid(iEdge) * basisGradientU(iBasisEdge,iGradientEdge,iCell)
-                strain22Tmp = strain22Tmp + vVelocityCGrid(iEdge) * basisGradientV(iBasisEdge,iGradientEdge,iCell)
-                strain12Tmp = strain12Tmp + 0.5_RKIND * (&
-                              uVelocityCGrid(iEdge) * basisGradientV(iBasisEdge,iGradientEdge,iCell) + &
-                              vVelocityCGrid(iEdge) * basisGradientU(iBasisEdge,iGradientEdge,iCell))
+                   strain11Tmp = strain11Tmp + uVelocityCGrid(jEdge) * basisGradientUNew(iEdge,iBasisEdge,iGradientEdge,iCellOnEdge)
+                   strain22Tmp = strain22Tmp + vVelocityCGrid(jEdge) * basisGradientVNew(iEdge,iBasisEdge,iGradientEdge,iCellOnEdge)
+                   strain12Tmp = strain12Tmp + 0.5_RKIND * (&
+                              uVelocityCGrid(jEdge) * basisGradientVNew(iEdge,iBasisEdge,iGradientEdge,iCellOnEdge) + &
+                              vVelocityCGrid(jEdge) * basisGradientUNew(iEdge,iBasisEdge,iGradientEdge,iCellOnEdge))
 
-             end do ! iEdgeOnCell
+                 end do ! jEdgeOnCell
 
-             ! metric terms
-             jEdge = edgesOnCell(iGradientEdge,iCell)
+                 ! metric terms
+                 kEdge = edgesOnCell(iGradientEdge,iCell)
 
-                   strain11(iGradientEdge,iCell) = strain11Tmp - vVelocityCGrid(jEdge) * tanLatEdgeRotatedOverRadius(jEdge)
-                   strain12(iGradientEdge,iCell) = strain12Tmp + uVelocityCGrid(jEdge) * tanLatEdgeRotatedOverRadius(jEdge) * 0.5_RKIND
-                   strain22(iGradientEdge,iCell) = strain22Tmp
+                  strain11(iGradientEdge,iCell) = strain11Tmp - vVelocityCGrid(kEdge) * tanLatEdgeRotatedOverRadius(kEdge)
+                  strain12(iGradientEdge,iCell) = strain12Tmp + uVelocityCGrid(kEdge) * tanLatEdgeRotatedOverRadius(kEdge) * 0.5_RKIND
+                  strain22(iGradientEdge,iCell) = strain22Tmp
 
-          end do ! jEdgeOnCell
+               end do ! kEdgeOnCell
 
-       end if !solveStress
+           end if !solveStress
 
-    end do ! iCell
+       end do
 
-    do iVertex = 1, nVertices
+       do iVertexOnEdge = 1, 2
 
-       if (solveStressTri(iVertex) == 1) then
+          iVertex = verticesOnEdge(iVertexOnEdge,iEdge)
+          if (solveStressTri(iVertex) == 1) then
 
-          ! loop over velocity points surrounding triangle - location of stress and derivative
-          do iGradientEdge = 1, vertexDegree
+             ! loop over velocity points surrounding triangle - location of stress and derivative
+             do iGradientEdge = 1, vertexDegree
 
-             strain11Tmp = 0.0_RKIND
-             strain22Tmp = 0.0_RKIND
-             strain12Tmp = 0.0_RKIND
+                strain11Tmp = 0.0_RKIND
+                strain22Tmp = 0.0_RKIND
+                strain12Tmp = 0.0_RKIND
 
-             ! loop over basis functions
-             do iBasisEdge = 1, vertexDegree
+                ! loop over basis functions
+                do iBasisEdge = 1, vertexDegree
 
-                iEdge = edgesOnVertex(iBasisEdge,iVertex)
+                   jEdge = edgesOnVertex(iBasisEdge,iVertex)
+   
+                   strain11Tmp = strain11Tmp + uVelocityCGrid(jEdge) * basisGradientUTriNew(iEdge,iBasisEdge,iGradientEdge,iVertexOnEdge)
+                   strain22Tmp = strain22Tmp + vVelocityCGrid(jEdge) * basisGradientVTriNew(iEdge,iBasisEdge,iGradientEdge,iVertexOnEdge)
+                   strain12Tmp = strain12Tmp + 0.5_RKIND * (&
+                              uVelocityCGrid(jEdge) * basisGradientVTriNew(iEdge,iBasisEdge,iGradientEdge,iVertexOnEdge) + &
+                              vVelocityCGrid(jEdge) * basisGradientUTriNew(iEdge,iBasisEdge,iGradientEdge,iVertexOnEdge))
 
+                 end do ! jEdgeOnVertex
 
-                strain11Tmp = strain11Tmp + uVelocityCGrid(iEdge) * basisGradientUTri(iBasisEdge,iGradientEdge,iVertex)
-                strain22Tmp = strain22Tmp + vVelocityCGrid(iEdge) * basisGradientVTri(iBasisEdge,iGradientEdge,iVertex)
-                strain12Tmp = strain12Tmp + 0.5_RKIND * (&
-                              uVelocityCGrid(iEdge) * basisGradientVTri(iBasisEdge,iGradientEdge,iVertex) + &
-                              vVelocityCGrid(iEdge) * basisGradientUTri(iBasisEdge,iGradientEdge,iVertex))
+                 ! metric terms
+                 kEdge = edgesOnVertex(iGradientEdge,iVertex)
 
-             end do ! iEdgeOnVertex
+                 strain11Tri(iGradientEdge,iVertex) = strain11Tmp - vVelocityCGrid(kEdge) * tanLatEdgeRotatedOverRadius(kEdge)
+                 strain12Tri(iGradientEdge,iVertex) = strain12Tmp + uVelocityCGrid(kEdge) * tanLatEdgeRotatedOverRadius(kEdge) * 0.5_RKIND
+                 strain22Tri(iGradientEdge,iVertex) = strain22Tmp
 
-             ! metric terms
-             jEdge = edgesOnVertex(iGradientEdge,iVertex)
+              end do ! kEdgeOnVertex
 
-             strain11Tri(iGradientEdge,iVertex) = strain11Tmp - vVelocityCGrid(jEdge) * tanLatEdgeRotatedOverRadius(jEdge)
-             strain12Tri(iGradientEdge,iVertex) = strain12Tmp + uVelocityCGrid(jEdge) * tanLatEdgeRotatedOverRadius(jEdge) * 0.5_RKIND
-             strain22Tri(iGradientEdge,iVertex) = strain22Tmp
+          end if !solveStressTri
 
-          end do ! jEdgeOnVertex
+       end do ! iVertex
 
-       end if !solveStressTri
-
-    end do ! iVertex
+    end do !iEdge
 
   end subroutine seaice_strain_tensor_variational_c_grid !}}}
 
@@ -2299,14 +2512,13 @@ end subroutine variational_denominator_c_grid
        stress11Tri, &
        stress22Tri, &
        stress12Tri, &
-       basisIntegralsU, &
-       basisIntegralsV, &
-       basisIntegralsMetric, &
-       basisIntegralsUTri, &
-       basisIntegralsVTri, &
-       basisIntegralsMetricTri, &
+       basisIntegralsUNew, &
+       basisIntegralsVNew, &
+       basisIntegralsMetricNew, &
+       basisIntegralsUTriNew, &
+       basisIntegralsVTriNew, &
+       basisIntegralsMetricTriNew, &
        variationalDenominatorCGrid, &
-       variationalDenominatorCGridAlt, &
        tanLatEdgeRotatedOverRadius, &
        cellEdgesAtEdge, &
        triangleEdgesAtEdge, &
@@ -2320,7 +2532,7 @@ end subroutine variational_denominator_c_grid
          cellsOnEdge,  &
          edgesOnCell, &
          verticesOnEdge, &
-         vertexDegree
+         vertexDegree 
 
     type(MPAS_pool_type), pointer, intent(in) :: &
          mesh, &   !< Input:
@@ -2344,18 +2556,17 @@ end subroutine variational_denominator_c_grid
          stress22Tri,     & !< Input:
          stress12Tri        !< Input:
 
-    real(kind=RKIND), dimension(:,:,:), contiguous, intent(in) :: &
-         basisIntegralsU,        &   !< Input:
-         basisIntegralsV,        &   !< Input:
-         basisIntegralsMetric,   &   !< Input:
-         basisIntegralsUTri,     &   !< Input:
-         basisIntegralsVTri,     &   !< Input:
-         basisIntegralsMetricTri     !< Input:
+    real(kind=RKIND), dimension(:,:,:,:), contiguous, intent(in) :: &
+         basisIntegralsUNew,        &   !< Input:
+         basisIntegralsVNew,        &   !< Input:
+         basisIntegralsMetricNew,   &   !< Input:
+         basisIntegralsUTriNew,     &   !< Input:
+         basisIntegralsVTriNew,     &   !< Input:
+         basisIntegralsMetricTriNew     !< Input:
 
     real(kind=RKIND), dimension(:), intent(in) :: &
          tanLatEdgeRotatedOverRadius, & !< Input:
-         variationalDenominatorCGrid, &    !< Input:
-         variationalDenominatorCGridAlt    !< Input:
+         variationalDenominatorCGrid     !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          cellEdgesAtEdge,     &   !< Input:
@@ -2387,12 +2598,12 @@ end subroutine variational_denominator_c_grid
          iCell, &
          iVertex, &
          iCellOnEdge, &
-         iTriangleOnEdge, &
+         iVertexOnEdge, &
          iVelocityEdge, &
          iStressEdge
 
     logical :: computeVertex
-    real(kind=RKIND) :: coeff, sumOfDiamonds, denomCells, denomTris, signOfTerm
+    real(kind=RKIND) :: coeff, sumOfDiamonds
 
     call MPAS_pool_get_array(mesh, "xCell", xCell)
     call MPAS_pool_get_array(mesh, "xVertex", xVertex)
@@ -2433,48 +2644,43 @@ end subroutine variational_denominator_c_grid
              stressDivergenceUCellMetric = 0.0_RKIND
              stressDivergenceVCellMetric = 0.0_RKIND
 
-             denomCells = 0.0_RKIND
-
              ! loop over the edges of the surrounding cell
              do iStressEdge = 1, nEdgesOnCell(iCell)
 
                 jEdge = edgesOnCell(iStressEdge,iCell)                 
                 ! normal & metric terms
                 stressDivergenceUCell = stressDivergenceUCell - &
-                     stress11(iStressEdge,iCell) * basisIntegralsU(iStressEdge,iVelocityEdge,iCell) - &
-                     stress12(iStressEdge,iCell) * basisIntegralsV(iStressEdge,iVelocityEdge,iCell) - &
-                     stress12(iStressEdge,iCell) * basisIntegralsMetric(iStressEdge,iVelocityEdge,iCell) * &
+                     stress11(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
+                     stress12(iStressEdge,iCell) * basisIntegralsVNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
+                     stress12(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
                      !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCell = stressDivergenceVCell - &
-                     stress22(iStressEdge,iCell) * basisIntegralsV(iStressEdge,iVelocityEdge,iCell) - &
-                     stress12(iStressEdge,iCell) * basisIntegralsU(iStressEdge,iVelocityEdge,iCell) + &
-                     stress11(iStressEdge,iCell) * basisIntegralsMetric(iStressEdge,iVelocityEdge,iCell) * &
+                     stress22(iStressEdge,iCell) * basisIntegralsVNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
+                     stress12(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) + &
+                     stress11(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
                      !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceUCellNoMetric = stressDivergenceUCellNoMetric - &
-                     stress11(iStressEdge,iCell) * basisIntegralsU(iStressEdge,iVelocityEdge,iCell) - &
-                     stress12(iStressEdge,iCell) * basisIntegralsV(iStressEdge,iVelocityEdge,iCell) 
+                     stress11(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
+                     stress12(iStressEdge,iCell) * basisIntegralsVNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) 
 
                 stressDivergenceVCellNoMetric = stressDivergenceVCellNoMetric - &
-                     stress22(iStressEdge,iCell) * basisIntegralsV(iStressEdge,iVelocityEdge,iCell) - &
-                     stress12(iStressEdge,iCell) * basisIntegralsU(iStressEdge,iVelocityEdge,iCell)
+                     stress22(iStressEdge,iCell) * basisIntegralsVNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
+                     stress12(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge)
 
                 stressDivergenceUCellMetric = stressDivergenceUCellMetric - &
-                     stress12(iStressEdge,iCell) * basisIntegralsMetric(iStressEdge,iVelocityEdge,iCell) * &
+                     stress12(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
                      !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCellMetric = stressDivergenceVCellMetric + &
-                     stress11(iStressEdge,iCell) * basisIntegralsMetric(iStressEdge,iVelocityEdge,iCell) * &
+                     stress11(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
                      !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
-    
-                denomCells = denomCells + basisIntegralsMetric(iStressEdge,iVelocityEdge,iCell)
-         
              enddo ! iStressEdge
 
              stressDivergenceUEdge = stressDivergenceUEdge + stressDivergenceUCell
@@ -2488,8 +2694,6 @@ end subroutine variational_denominator_c_grid
 
           enddo ! iCellOnEdge
 
-          !stressDivergenceUCGrid(iEdge) = stressDivergenceUCGrid(iEdge) + stressDivergenceUEdge / variationalDenominatorCGridAlt(iEdge)
-          !stressDivergenceVCGrid(iEdge) = stressDivergenceVCGrid(iEdge) + stressDivergenceVEdge / variationalDenominatorCGridAlt(iEdge)
           stressDivergenceUCGrid(iEdge) = stressDivergenceUCGrid(iEdge) + stressDivergenceUEdge / variationalDenominatorCGrid(iEdge)
           stressDivergenceVCGrid(iEdge) = stressDivergenceVCGrid(iEdge) + stressDivergenceVEdge / variationalDenominatorCGrid(iEdge)
           stressDivergenceUCGridNoMetric(iEdge) = stressDivergenceUCGridNoMetric(iEdge) + stressDivergenceUEdgeNoMetric / variationalDenominatorCGrid(iEdge)
@@ -2504,16 +2708,14 @@ end subroutine variational_denominator_c_grid
           stressDivergenceUEdgeMetric = 0.0_RKIND
           stressDivergenceVEdgeMetric = 0.0_RKIND
 
-          denomTris = 0.0_RKIND
-
           ! loop over surrounding triangles
-          do iTriangleOnEdge = 1, 2
+          do iVertexOnEdge = 1, 2
 
              ! get the vertex number of this triangle
-             iVertex = verticesOnEdge(iTriangleOnEdge, iEdge)
+             iVertex = verticesOnEdge(iVertexOnEdge, iEdge)
 
              ! get the local index of iEdge on iTriangleOnEdge
-             iVelocityEdge = triangleEdgesAtEdge(iTriangleOnEdge,iEdge)
+             iVelocityEdge = triangleEdgesAtEdge(iVertexOnEdge,iEdge)
 
              stressDivergenceUCell = 0.0_RKIND
              stressDivergenceVCell = 0.0_RKIND
@@ -2528,38 +2730,36 @@ end subroutine variational_denominator_c_grid
                 jEdge = edgesOnVertex(iStressEdge,iVertex)
                 ! normal & metric terms
                 stressDivergenceUCell = stressDivergenceUCell - & 
-                     stress11Tri(iStressEdge,iVertex) * basisIntegralsUTri(iStressEdge,iVelocityEdge,iVertex) - &
-                     stress12Tri(iStressEdge,iVertex) * basisIntegralsVTri(iStressEdge,iVelocityEdge,iVertex) - &
-                     stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTri(iStressEdge,iVelocityEdge,iVertex) * &
+                     stress11Tri(iStressEdge,iVertex) * basisIntegralsUTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
+                     stress12Tri(iStressEdge,iVertex) * basisIntegralsVTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
+                     stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
                      !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCell = stressDivergenceVCell - &
-                     stress22Tri(iStressEdge,iVertex) * basisIntegralsVTri(iStressEdge,iVelocityEdge,iVertex) - &
-                     stress12Tri(iStressEdge,iVertex) * basisIntegralsUTri(iStressEdge,iVelocityEdge,iVertex) + &
-                     stress11Tri(iStressEdge,iVertex) * basisIntegralsMetricTri(iStressEdge,iVelocityEdge,iVertex) * &
+                     stress22Tri(iStressEdge,iVertex) * basisIntegralsVTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
+                     stress12Tri(iStressEdge,iVertex) * basisIntegralsUTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) + &
+                     stress11Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
                      !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceUCellNoMetric = stressDivergenceUCellNoMetric - &
-                     stress11Tri(iStressEdge,iVertex) * basisIntegralsUTri(iStressEdge,iVelocityEdge,iVertex) - &
-                     stress12Tri(iStressEdge,iVertex) * basisIntegralsVTri(iStressEdge,iVelocityEdge,iVertex)
+                     stress11Tri(iStressEdge,iVertex) * basisIntegralsUTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
+                     stress12Tri(iStressEdge,iVertex) * basisIntegralsVTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge)
 
                 stressDivergenceVCellNoMetric = stressDivergenceVCellNoMetric - &
-                     stress22Tri(iStressEdge,iVertex) * basisIntegralsVTri(iStressEdge,iVelocityEdge,iVertex) - &
-                     stress12Tri(iStressEdge,iVertex) * basisIntegralsUTri(iStressEdge,iVelocityEdge,iVertex)
+                     stress22Tri(iStressEdge,iVertex) * basisIntegralsVTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
+                     stress12Tri(iStressEdge,iVertex) * basisIntegralsUTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge)
 
                 stressDivergenceUCellMetric = stressDivergenceUCellMetric - &
-                     stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTri(iStressEdge,iVelocityEdge,iVertex) * &
+                     stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
                      !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCellMetric = stressDivergenceVCellMetric + &
-                     stress11Tri(iStressEdge,iVertex) * basisIntegralsMetricTri(iStressEdge,iVelocityEdge,iVertex) * &
+                     stress11Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
                      !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
-
-                denomTris = denomTris + basisIntegralsMetric(iStressEdge,iVelocityEdge,iCell)
 
              enddo ! iStressEdge
 
@@ -2574,8 +2774,6 @@ end subroutine variational_denominator_c_grid
 
           enddo ! iTriangleOnEdge
 
-          !stressDivergenceUCGrid(iEdge) = stressDivergenceUCGrid(iEdge) + stressDivergenceUEdge / variationalDenominatorCGridAlt(iEdge)
-          !stressDivergenceVCGrid(iEdge) = stressDivergenceVCGrid(iEdge) + stressDivergenceVEdge / variationalDenominatorCGridAlt(iEdge)
           stressDivergenceUCGrid(iEdge) = stressDivergenceUCGrid(iEdge) + stressDivergenceUEdge / variationalDenominatorCGrid(iEdge) 
           stressDivergenceVCGrid(iEdge) = stressDivergenceVCGrid(iEdge) + stressDivergenceVEdge / variationalDenominatorCGrid(iEdge) 
           stressDivergenceUCGridNoMetric(iEdge) = stressDivergenceUCGridNoMetric(iEdge) + stressDivergenceUEdgeNoMetric / variationalDenominatorCGrid(iEdge)
@@ -2615,9 +2813,6 @@ end subroutine variational_denominator_c_grid
     end do
 
     ! -END: to be removed
-
-
-
 
   end subroutine seaice_stress_divergence_variational_c_grid!}}}
 

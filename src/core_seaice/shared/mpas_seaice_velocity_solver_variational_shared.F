@@ -22,6 +22,7 @@ module seaice_velocity_solver_variational_shared
 
   public :: &
        seaice_calc_local_coords, &
+       seaice_calc_local_coords_c_grid, &
        seaice_calc_variational_metric_terms, &
        seaice_wrapped_index
 
@@ -52,9 +53,7 @@ contains
        yCell, &
        zCell, &
        rotateCartesianGrid, &
-       onASphere, &
-       dvEdge, &
-       interiorVertex)!{{{
+       onASphere)!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
          xLocal, & !< Output:
@@ -65,12 +64,6 @@ contains
 
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell   !< Input:
-
-    integer, dimension(:), optional, intent(in) :: &
-         interiorVertex  !< Input:
-
-    real(kind=RKIND), dimension(:), intent(in) :: &
-         dvEdge  !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          verticesOnCell !< Input:
@@ -113,9 +106,7 @@ contains
             zVertex, &
             xCell, &
             yCell, &
-            zCell, &
-            dvEdge, &
-            interiorVertex)
+            zCell)
     endif
 
   end subroutine seaice_calc_local_coords!}}}
@@ -143,9 +134,7 @@ contains
        zVertex, &
        xCell, &
        yCell, &
-       zCell, &
-       dvEdge, &
-       interiorVertex )!{{{
+       zCell)!{{{
 
     real(kind=RKIND), dimension(:,:), intent(out) :: &
          xLocal, & !< Output:
@@ -156,12 +145,6 @@ contains
 
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell    !< Input:
-
-    real(kind=RKIND), dimension(:), intent(in) :: &
-         dvEdge  !< Input:
-
-    integer, dimension(:), optional, intent(in) :: &
-         interiorVertex    !< Input:
 
     integer, dimension(:,:), intent(in) :: &
          verticesOnCell !< Input:
@@ -179,9 +162,6 @@ contains
          iVertex, &
          iVertexOnCell
 
-    real(kind=RKIND) :: &
-         halfMeshSize
-
     do iCell = 1, nCells
        do iVertexOnCell = 1, nEdgesOnCell(iCell)
 
@@ -192,33 +172,6 @@ contains
 
         end do
     end do
-
-
-    if(size(xLocal(:,1)) == 4 .and. present(interiorVertex)) then ! the mesh is planar with square cells
-
-       halfMeshSize = abs(maxval(dvEdge(:))) * 0.5_RKIND
-
-       do iCell = 1, nCells
-
-          if(interiorVertex(iCell) == 0) then
-
-             !put in some junk so Wachspress can run (but the edges with at
-             !least one vertex on the boundary should not be considered because
-             !they won't produce a correct value with the trick below)
-             xLocal(1,iCell) = 0.0_RKIND
-             yLocal(1,iCell) = halfMeshSize
-             xLocal(2,iCell) = - halfMeshSize
-             yLocal(2,iCell) = 0.0_RKIND
-             xLocal(3,iCell) = 0.0_RKIND
-             yLocal(3,iCell) = - halfMeshSize
-             xLocal(4,iCell) = halfMeshSize
-             yLocal(4,iCell) = 0.0_RKIND
-  
-          end if
-
-       end do
-
-    end if
 
   end subroutine calc_local_coords_planar!}}}
 
@@ -291,10 +244,7 @@ contains
     real(kind=RKIND) :: &
          xCellRotated, &
          yCellRotated, &
-         zCellRotated, &
-         xCenterRotated, yCenterRotated, zCenterRotated, latCenterRotated, lonCenterRotated, xCenter, yCenter, zCenter, &
-         e1, e2, e3, n1, n2, n3, norm, latCellRotated, lonCellRotated, &
-         xVertexRotated, yVertexRotated, zVertexRotated, difference
+         zCellRotated
 
     do iCell = 1, nCells
 
@@ -327,150 +277,449 @@ contains
 
     enddo ! iCell
 
-    do iCell = 1, nCells
-
-       !if(size(xLocal(:,iCell)) == 3) then
-
-       !    xCenter = 0.0_RKIND
-       !    yCenter = 0.0_RKIND
-       !    zCenter = 0.0_RKIND
-
-       !   do iVertexOnCell = 1, nEdgesOnCell(iCell)
-
-       !      iVertex = verticesOnCell(iVertexOnCell, iCell)
-
-       !      xCenter = xCenter + 1.0_RKIND / 3.0_RKIND * xVertex(iVertex)
-       !      yCenter = yCenter + 1.0_RKIND / 3.0_RKIND * yVertex(iVertex)
-       !      zCenter = zCenter + 1.0_RKIND / 3.0_RKIND * zVertex(iVertex)
-
-             !print*, 'vertex:', xCell(iCell), yCell(iCell), zCell(iCell)
-             !print*, 'new center', xCenter, yCenter, zCenter
-
-       !   end do
-
-       !else 
-
-          xCenter = xCell(iCell)
-          yCenter = yCell(iCell)
-          zCenter = zCell(iCell)
-
-       !end if
-
-       call seaice_grid_rotation_forward(&
-          xCenterRotated, yCenterRotated, zCenterRotated, &
-          xCenter, yCenter, zCenter, &
-          rotateCartesianGrid)
-
-       norm = sqrt(xCenterRotated * xCenterRotated + yCenterRotated * yCenterRotated + zCenterRotated * zCenterRotated)
-       latCenterRotated = asin(zCenterRotated / norm) 
-       lonCenterRotated = atan2(yCenterRotated, xCenterRotated)
-       if (lonCenterRotated < 0.0_RKIND) then
-          lonCenterRotated = 2.0_RKIND * 3.14159265359_RKIND + lonCenterRotated
-       end if
-
-       e1 = - sin(lonCenterRotated)
-       e2 = cos(lonCenterRotated)
-       e3 = 0.0_RKIND
-
-    !   !norm = sqrt(e1*e1 + e2*e2 + e3*e3)
-    !   !print*, 'norm e=', norm
-
-       n1 = - cos(lonCenterRotated) * sin(latCenterRotated)
-       n2 = - sin(latCenterRotated) * sin(lonCenterRotated)
-       n3 = cos(latCenterRotated)
-
-    !   !norm = sqrt(n1*n1 + n2*n2 + n3*n3)
-    !   !print*, 'norm n=', norm
-
-    !   !check to se if e and u are perpendicular to normal vector of plane:
-    !   !print*, "e:", e1 * xCellRotated + e2 * yCellRotated + e3 * zCellRotated
-    !   !print*, "n:", n1 * xCellRotated + n2 * yCellRotated + n3 * zCellRotated
-    !   !print*, "e dot n:", e1*n1 + e2*n2 + e3*n3
-
-       do iVertexOnCell = 1, nEdgesOnCell(iCell)
-
-          iVertex = verticesOnCell(iVertexOnCell, iCell)
-
-          call seaice_grid_rotation_forward(&
-                 xVertexRotated, yVertexRotated, zVertexRotated, &
-                 xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
-                 rotateCartesianGrid)
-
-    !      ! ------------BEGIN: REMOVE THIS IN DUE TIME
-    !      difference = xLocal(iVertexOnCell,iCell) - ((xVertexRotated - xCellRotated)* e1 + &
-    !                                    (yVertexRotated - yCellRotated) * e2 + &
-    !                                    (zVertexRotated - zCellRotated) * e3)
-
-    !      if(abs(difference) > 1.0e-10) then
-    !        print*, iCell,'is no good for xLocal', ' difference:', difference
-    !      end if
-
-    !      !xLocal(iVertexOnCell,iCell) = (xVertexRotated * e1 + &
-    !      !                               yVertexRotated * e2 + &
-    !      !                               zVertexRotated * e3)
-          
-    !      difference = yLocal(iVertexOnCell,iCell) - ((xVertexRotated - xCellRotated) * n1 + &
-    !                                    (yVertexRotated - yCellRotated) * n2 + &
-    !                                    (zVertexRotated - zCellRotated) * n3)
-    !      if(abs(difference) > 1.0e-10 ) then
-    !        print*, iCell,'is no good for yLocal', 'difference:', difference 
-    !      end if
-
-    !      !yLocal(iVertexOnCell,iCell) = (xVertexRotated * n1 + &
-    !      !                               yVertexRotated * n2 + &
-    !      !                               zVertexRotated * n3)
-    !      ! ------------END: REMOVE THIS IN DUE TIME
-
-          xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCenterRotated) * e1 + &
-                                        (yVertexRotated - yCenterRotated) * e2 + &
-                                        (zVertexRotated - zCenterRotated) * e3
-          yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCenterRotated) * n1 + &
-                                        (yVertexRotated - yCenterRotated) * n2 + &
-                                        (zVertexRotated - zCenterRotated) * n3
-
-       end do
-
-    !   difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
-
-    !   if (difference < 0.0_RKIND) then
-
-    !      print*, "HERE BUT SHOULD NOT BE ------------>"
-
-    !      iVertexOnCell = verticesOnCell(2,iCell) 
-    !      jVertexOnCell = verticesOnCell(3,iCell)
-    !      verticesOnCell(2,iCell) = jVertexOnCell
-    !      verticesOnCell(3,iCell) = iVertexOnCell
-
-    !      do iVertexOnCell = 1, nEdgesOnCell(iCell)
-
-    !         iVertex = verticesOnCell(iVertexOnCell, iCell)
-
-    !         call seaice_grid_rotation_forward(&
-    !                xVertexRotated, yVertexRotated, zVertexRotated, &
-    !                xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
-    !                rotateCartesianGrid)          
-
-
-    !         xLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * e1 + &
-    !                                       (yVertexRotated - yCellRotated) * e2 + &
-    !                                       (zVertexRotated - zCellRotated) * e3
-    !         yLocal(iVertexOnCell,iCell) = (xVertexRotated - xCellRotated) * n1 + &
-    !                                       (yVertexRotated - yCellRotated) * n2 + &
-    !                                       (zVertexRotated - zCellRotated) * n3
-
-    !      end do
-
-    !   end if
-
-    !   difference = xLocal(1,iCell) * yLocal(2,iCell) - yLocal(1,iCell) * xLocal(2,iCell)
-    !   if( difference < 0.0_RKIND) then
-    !      print*, 'fix did not work:',  iCell, difference
-    !   end if
-
-    enddo ! iCell
-
   end subroutine calc_local_coords_spherical!}}}
 
+!-----------------------------------------------------------------------
+
+  subroutine seaice_calc_local_coords_c_grid(&
+       xLocalNew, &
+       yLocalNew, &
+       xLocalTriNew, &
+       yLocalTriNew, &
+       nEdges, &
+       cellsOnEdge, &
+       verticesOnEdge, &
+       edgesOnCell, &
+       edgesOnVertex, &
+       nEdgesOnCell, &
+       vertexDegree, &
+       xCell, &
+       yCell, &
+       zCell, &
+       xVertex, &
+       yVertex, &
+       zVertex, &
+       xEdge, &
+       yEdge, &
+       zEdge, &
+       rotateCartesianGrid, &
+       onASphere, &
+       dvEdge, &
+       interiorVertex)!{{{
+
+    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+         xLocalNew, & !< Output:
+         yLocalNew, & !< Output:
+         xLocalTriNew, & !< Output:
+         yLocalTriNew  !< Output:
+
+    integer, dimension(:), intent(in) :: &
+         nEdgesOnCell !< Input:
+
+    integer, intent(in) :: &
+         nEdges, & !< Input:
+         vertexDegree
+
+    integer, dimension(:,:), intent(in) :: &
+         verticesOnEdge, & !< Input:
+         cellsOnEdge, &    !< Input:
+         edgesOnCell, & !< Input:
+         edgesOnVertex       !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         xCell, & !< Input:
+         yCell, & !< Input:
+         zCell, & !< Input:
+         xVertex, &
+         yVertex, &
+         zVertex, &
+         xEdge, &   !< Input:
+         yEdge, &   !< Input:
+         zEdge      !< Input:
+
+    integer, dimension(:), intent(in) :: &
+         interiorVertex  !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         dvEdge  !< Input:
+
+    logical, intent(in) :: &
+         rotateCartesianGrid, & !< Input:
+         onASphere              !< Input:
+
+    if (onASphere) then
+       call calc_local_coords_spherical_c_grid(&
+            xLocalNew, &
+            yLocalNew, &
+            xLocalTriNew, &
+            yLocalTriNew, &
+            nEdges, &
+            cellsOnEdge, &
+            verticesOnEdge, &
+            edgesOnCell, &
+            edgesOnVertex, &
+            nEdgesOnCell, &
+            vertexDegree, &
+            xCell, &
+            yCell, &
+            zCell, &
+            xVertex, &
+            yVertex, &
+            zVertex, &
+            xEdge, &
+            yEdge, &
+            zEdge, &
+            rotateCartesianGrid)
+    else
+       call calc_local_coords_planar_c_grid(&
+            xLocalNew, &
+            yLocalNew, &
+            xLocalTriNew, &
+            yLocalTriNew, &
+            nEdges, &
+            cellsOnEdge, &
+            verticesOnEdge, &
+            edgesOnCell, &
+            edgesOnVertex, &
+            nEdgesOnCell, &
+            vertexDegree, &
+            xCell, &
+            yCell, &
+            zCell, &
+            xVertex, &
+            yVertex, &
+            zVertex, &
+            xEdge, &
+            yEdge, &
+            zEdge, &
+            dvEdge, &
+            interiorVertex )
+    endif
+
+
+  end subroutine seaice_calc_local_coords_c_grid
+
+!-----------------------------------------------------------------------
+
+  subroutine calc_local_coords_planar_c_grid(&
+       xLocalNew, &
+       yLocalNew, &
+       xLocalTriNew, &
+       yLocalTriNew, &
+       nEdges, &
+       cellsOnEdge, &
+       verticesOnEdge, &
+       edgesOnCell, &
+       edgesOnVertex, &
+       nEdgesOnCell, &
+       vertexDegree, &
+       xCell, &
+       yCell, &
+       zCell, &
+       xVertex, &
+       yVertex, &
+       zVertex, &
+       xEdge, &
+       yEdge, &
+       zEdge, &
+       dvEdge, &
+       interiorVertex )!{{{
+
+    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+         xLocalNew, & !< Output:
+         yLocalNew, & !< Output:
+         xLocalTriNew, & !< Output:
+         yLocalTriNew    !< Output:
+
+    integer, dimension(:), intent(in) :: &
+         nEdgesOnCell !< Input:
+
+    integer, intent(in) :: &
+         nEdges, & !< Input:
+         vertexDegree
+
+    integer, dimension(:,:), intent(in) :: &
+         verticesOnEdge, & !< Input:
+         cellsOnEdge, &    !< Input:
+         edgesOnCell, & !< Input:
+         edgesOnVertex       !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         xCell, & !< Input:
+         yCell, & !< Input:
+         zCell, & !< Input:
+         xVertex, &
+         yVertex, &
+         zVertex, &
+         xEdge, &   !< Input:
+         yEdge, &   !< Input:
+         zEdge      !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         dvEdge  !< Input:
+
+    integer, dimension(:), intent(in) :: &
+         interiorVertex    !< Input:
+
+    integer :: &
+         iCell, &
+         iCellOnEdge, &
+         iVertex, &
+         iVertexOnEdge, &
+         iEdgeOnCell, &
+         iEdgeOnVertex, &
+         iEdge, &
+         jEdge
+
+    real(kind=RKIND) :: &
+         halfMeshSize
+
+    do iEdge = 1, nEdges
+
+      do iCellOnEdge = 1, 2
+
+         iCell = cellsOnEdge(iCellOnEdge,iEdge)
+
+         do iEdgeOnCell = 1, nEdgesOnCell(iCell)
+
+            jEdge = edgesOnCell(iEdgeOnCell, iCell)
+
+            xLocalNew(iEdge, iEdgeOnCell, iCellOnEdge) = xEdge(jEdge) - xCell(iCell)
+            yLocalNew(iEdge, iEdgeOnCell, iCellOnEdge) = yEdge(jEdge) - yCell(iCell)
+
+         end do
+
+      end do
+
+      do iVertexOnEdge = 1, 2
+
+         iVertex = verticesOnEdge(iVertexOnEdge,iEdge)
+
+         do iEdgeOnVertex = 1, vertexDegree
+
+            jEdge = edgesOnVertex(iEdgeOnVertex, iVertex)
+
+            xLocalTriNew(iEdge, iEdgeOnVertex, iVertexOnEdge) = xEdge(jEdge) - xVertex(iVertex)
+            yLocalTriNew(iEdge, iEdgeOnVertex, iVertexOnEdge) = yEdge(jEdge) - yVertex(iVertex)
+
+         end do
+
+         if(size(xLocalTriNew(iEdge,:,iVertexOnEdge)) == 4) then ! the mesh is planar with square cells
+
+            halfMeshSize = abs(maxval(dvEdge(:))) * 0.5_RKIND
+
+            if(interiorVertex(iVertex) == 0) then
+
+               xLocalTriNew(iEdge,1,iVertexOnEdge) = 0.0_RKIND
+               yLocalTriNew(iEdge,1,iVertexOnEdge) = halfMeshSize
+               xLocalTriNew(iEdge,2,iVertexOnEdge) = - halfMeshSize
+               yLocalTriNew(iEdge,2,iVertexOnEdge) = 0.0_RKIND
+               xLocalTriNew(iEdge,3,iVertexOnEdge) = 0.0_RKIND
+               yLocalTriNew(iEdge,3,iVertexOnEdge) = - halfMeshSize
+               xLocalTriNew(iEdge,4,iVertexOnEdge) = halfMeshSize
+               yLocalTriNew(iEdge,4,iVertexOnEdge) = 0.0_RKIND
+
+            end if
+
+         end if
+
+      end do
+
+    end do
+
+  end subroutine calc_local_coords_planar_c_grid
+
+  subroutine calc_local_coords_spherical_c_grid(&
+       xLocalNew, &
+       yLocalNew, &
+       xLocalTriNew, &
+       yLocalTriNew, &
+       nEdges, &
+       cellsOnEdge, &
+       verticesOnEdge, &
+       edgesOnCell, &
+       edgesOnVertex, &
+       nEdgesOnCell, &
+       vertexDegree, &
+       xCell, &
+       yCell, &
+       zCell, &
+       xVertex, &
+       yVertex, &
+       zVertex, &
+       xEdge, &
+       yEdge, &
+       zEdge, &
+       rotateCartesianGrid)!{{{
+
+    use seaice_mesh, only: &
+         seaice_grid_rotation_forward
+
+    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+         xLocalNew, & !< Output:
+         yLocalNew, & !< Output:
+         xLocalTriNew, & !< Output:
+         yLocalTriNew    !< Output:
+
+    integer, dimension(:), intent(in) :: &
+         nEdgesOnCell !< Input:
+
+    integer, intent(in) :: &
+         nEdges, & !< Input:
+         vertexDegree
+
+    integer, dimension(:,:), intent(in) :: &
+         verticesOnEdge, & !< Input:
+         cellsOnEdge, &    !< Input:
+         edgesOnCell, & !< Input:
+         edgesOnVertex       !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         xCell, & !< Input:
+         yCell, & !< Input:
+         zCell, & !< Input:
+         xVertex, &
+         yVertex, &
+         zVertex, &
+         xEdge, &   !< Input:
+         yEdge, &   !< Input:
+         zEdge      !< Input:
+
+    logical, intent(in) :: &
+         rotateCartesianGrid !< Input:
+
+    integer :: &
+         iCell, &
+         iCellOnEdge, &
+         iVertex, &
+         iVertexOnEdge, &
+         iEdgeOnCell, &
+         iEdgeOnVertex, &
+         iEdge, &
+         jEdge
+
+    real(kind=RKIND) :: &
+         xCellRotated, &
+         yCellRotated, &
+         zCellRotated, &
+         xEdgeRotated, &
+         yEdgeRotated, &
+         zEdgeRotated, &
+         xCellNew, yCellNew, zCellNew, &
+         xCenterRotated, yCenterRotated, zCenterRotated, latCenterRotated, lonCenterRotated, xCenter, yCenter, zCenter, &
+         e1, e2, e3, n1, n2, n3, norm, latCellRotated, lonCellRotated 
+
+   do iEdge = 1, nEdges
+
+      xCenter = xEdge(iEdge)
+      yCenter = yEdge(iEdge)
+      zCenter = zEdge(iEdge)
+
+      call seaice_grid_rotation_forward(&
+        xCenterRotated, yCenterRotated, zCenterRotated, &
+        xCenter, yCenter, zCenter, &
+        rotateCartesianGrid)
+
+      norm = sqrt(xCenterRotated * xCenterRotated + yCenterRotated * yCenterRotated + zCenterRotated * zCenterRotated)
+      latCenterRotated = asin(zCenterRotated / norm)
+      lonCenterRotated = atan2(yCenterRotated, xCenterRotated)
+      if (lonCenterRotated < 0.0_RKIND) then
+         lonCenterRotated = 2.0_RKIND * 3.14159265359_RKIND + lonCenterRotated
+      end if
+
+      e1 = - sin(lonCenterRotated)
+      e2 = cos(lonCenterRotated)
+      e3 = 0.0_RKIND
+
+      n1 = - cos(lonCenterRotated) * sin(latCenterRotated)
+      n2 = - sin(latCenterRotated) * sin(lonCenterRotated)
+      n3 = cos(latCenterRotated) 
+
+      do iCellOnEdge = 1, 2
+
+         iCell = cellsOnEdge(iCellOnEdge,iEdge)
+
+          call seaice_grid_rotation_forward(&
+               xCellRotated, yCellRotated, zCellRotated, &
+               xCell(iCell), yCell(iCell), zCell(iCell), &
+               rotateCartesianGrid)
+
+          xCellNew = (xCellRotated - xCenterRotated) * e1 + &
+                     (yCellRotated - yCenterRotated) * e2 + &
+                     (zCellRotated - zCenterRotated) * e3
+
+          yCellNew = (xCellRotated - xCenterRotated) * n1 + &
+                     (yCellRotated - yCenterRotated) * n2 + &
+                     (zCellRotated - zCenterRotated) * n3 
+
+         do iEdgeOnCell = 1, nEdgesOnCell(iCell)
+
+            jEdge = edgesOnCell(iEdgeOnCell, iCell)
+
+            call seaice_grid_rotation_forward(&
+                 xEdgeRotated, yEdgeRotated, zEdgeRotated, &
+                 xEdge(jEdge), yEdge(jEdge), zEdge(jEdge), &
+                 rotateCartesianGrid)
+
+             xLocalNew(iEdge,iEdgeOnCell,iCellOnEdge) = (xEdgeRotated - xCenterRotated) * e1 + &
+                                           (yEdgeRotated - yCenterRotated) * e2 + &
+                                           (zEdgeRotated - zCenterRotated) * e3 
+
+             yLocalNew(iEdge,iEdgeOnCell,iCellOnEdge) = (xEdgeRotated - xCenterRotated) * n1 + &
+                                           (yEdgeRotated - yCenterRotated) * n2 + &
+                                           (zEdgeRotated - zCenterRotated) * n3
+
+             xLocalNew(iEdge,iEdgeOnCell,iCellOnEdge) = xLocalNew(iEdge,iEdgeOnCell,iCellOnEdge) - xCellNew
+             yLocalNew(iEdge,iEdgeOnCell,iCellOnEdge) = yLocalNew(iEdge,iEdgeOnCell,iCellOnEdge) - yCellNew
+
+          end do
+
+      end do
+
+      do iVertexOnEdge = 1,2
+
+         iVertex = verticesOnEdge(iVertexOnEdge,iEdge)
+
+         call seaice_grid_rotation_forward(&
+               xCellRotated, yCellRotated, zCellRotated, &
+               xVertex(iVertex), yVertex(iVertex), zVertex(iVertex), &
+               rotateCartesianGrid)
+
+          xCellNew = (xCellRotated - xCenterRotated) * e1 + &
+                     (yCellRotated - yCenterRotated) * e2 + &
+                     (zCellRotated - zCenterRotated) * e3
+
+          yCellNew = (xCellRotated - xCenterRotated) * n1 + &
+                     (yCellRotated - yCenterRotated) * n2 + &
+                     (zCellRotated - zCenterRotated) * n3
+
+         do iEdgeOnVertex = 1, vertexDegree
+
+            jEdge = edgesOnVertex(iEdgeOnVertex, iVertex)
+
+            call seaice_grid_rotation_forward(&
+                 xEdgeRotated, yEdgeRotated, zEdgeRotated, &
+                 xEdge(jEdge), yEdge(jEdge), zEdge(jEdge), &
+                 rotateCartesianGrid)
+
+             xLocalTriNew(iEdge,iEdgeOnVertex,iVertexOnEdge) = (xEdgeRotated - xCenterRotated) * e1 + &
+                                           (yEdgeRotated - yCenterRotated) * e2 + &
+                                           (zEdgeRotated - zCenterRotated) * e3
+
+             yLocalTriNew(iEdge,iEdgeOnVertex,iVertexOnEdge) = (xEdgeRotated - xCenterRotated) * n1 + &
+                                           (yEdgeRotated - yCenterRotated) * n2 + &
+                                           (zEdgeRotated - zCenterRotated) * n3
+
+             xLocalTriNew(iEdge,iEdgeOnVertex,iVertexOnEdge) = xLocalTriNew(iEdge,iEdgeOnVertex,iVertexOnEdge) - xCellNew
+             yLocalTriNew(iEdge,iEdgeOnVertex,iVertexOnEdge) = yLocalTriNew(iEdge,iEdgeOnVertex,iVertexOnEdge) - yCellNew
+
+          end do
+
+      end do
+
+   end do
+
+  end subroutine calc_local_coords_spherical_c_grid
 !|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 !
 !  seaice_calc_variational_metric_terms

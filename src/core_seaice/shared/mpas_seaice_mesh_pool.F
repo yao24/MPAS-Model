@@ -26,7 +26,8 @@ module seaice_mesh_pool
       nEdgesSolve,    &
       nVertices,      &
       nVerticesSolve, &
-      vertexDegree
+      vertexDegree,   &
+      TWO
 
    integer, public, dimension(:), pointer :: & 
       nEdgesOnCell,       &
@@ -70,14 +71,21 @@ module seaice_mesh_pool
    real(kind=RKIND), public, dimension(:,:,:), pointer :: &
       basisGradientU, &
       basisGradientV, &
-      basisGradientUTri, &
-      basisGradientVTri, &
       basisIntegralsU,&
       basisIntegralsV,&
-      basisIntegralsMetric, &
-      basisIntegralsUTri,&
-      basisIntegralsVTri,&
-      basisIntegralsMetricTri
+      basisIntegralsMetric
+
+   real(kind=RKIND), public, dimension(:,:,:,:), pointer :: &
+      basisGradientUNew, &
+      basisGradientVNew, &
+      basisIntegralsUNew,&
+      basisIntegralsVNew,&
+      basisIntegralsMetricNew, &
+      basisGradientUTriNew, &
+      basisGradientVTriNew, &
+      basisIntegralsUTriNew,&
+      basisIntegralsVTriNew,&
+      basisIntegralsMetricTriNew
 
    public ::                   &
       seaice_mesh_pool_create, &
@@ -119,7 +127,8 @@ contains
          nEdgesSolveTmp,    &
          nVerticesTmp,      &
          nVerticesSolveTmp, &
-         vertexDegreeTmp
+         vertexDegreeTmp,   &
+         TWOTmp
 
     blockCount = 0
     block => domain % blocklist
@@ -141,6 +150,7 @@ contains
        call MPAS_pool_get_dimension(meshPool, "nVertices", nVerticesTmp)
        call MPAS_pool_get_dimension(meshPool, "nVerticesSolve", nVerticesSolveTmp)
        call MPAS_pool_get_dimension(meshPool, "vertexDegree", vertexDegreeTmp)
+       call MPAS_pool_get_dimension(meshPool, "TWO", TWOTmp)
 
        nCells         = nCellsTmp
        nEdges         = nEdgesTmp
@@ -148,6 +158,7 @@ contains
        nVertices      = nVerticesTmp
        nVerticesSolve = nVerticesSolveTmp
        vertexDegree   = vertexDegreeTmp
+       TWO = TWOTmp
 
        ! point to existing arrays
        call mpas_pool_get_array(meshPool, 'nEdgesOnCell',   nEdgesOnCell)
@@ -174,14 +185,19 @@ contains
 
        call MPAS_pool_get_array(velocityVariationalPool, "basisGradientU",       basisGradientU)
        call MPAS_pool_get_array(velocityVariationalPool, "basisGradientV",       basisGradientV)
-       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientUTri",       basisGradientUTri)
-       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientVTri",       basisGradientVTri)
        call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsU",      basisIntegralsU)
        call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsV",      basisIntegralsV)
        call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsMetric", basisIntegralsMetric)
-       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsUTri",      basisIntegralsUTri)
-       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsVTri",      basisIntegralsVTri)
-       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsMetricTri", basisIntegralsMetricTri)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientUNew",       basisGradientUNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientVNew",       basisGradientVNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsUNew",      basisIntegralsUNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsVNew",      basisIntegralsVNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsMetricNew", basisIntegralsMetricNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientUTriNew",       basisGradientUTriNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientVTriNew",       basisGradientVTriNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsUTriNew",      basisIntegralsUTriNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsVTriNew",      basisIntegralsVTriNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsMetricTriNew", basisIntegralsMetricTriNew)
        call MPAS_pool_get_array(velocityVariationalPool, "tanLatVertexRotatedOverRadius", tanLatVertexRotatedOverRadius)
        call MPAS_pool_get_array(velocityVariationalPool, "tanLatEdgeRotatedOverRadius", tanLatEdgeRotatedOverRadius)
        call MPAS_pool_get_array(velocityVariationalPool, "cellVerticesAtVertex", cellVerticesAtVertex)
@@ -202,6 +218,7 @@ contains
 !$GPUC   nVertices,                     &
 !$GPUC   nVerticesSolve,                &
 !$GPUC   vertexDegree,                  &
+!$GPUC   TWO,                           &
 !$GPUC   nEdgesOnCell,                  &
 !$GPUC   verticesOnCell,                &
 !$GPUC   cellsOnVertex,                 &
@@ -223,14 +240,19 @@ contains
 !$GPUC   stressDivergenceV,             &
 !$GPUC   basisGradientU,                &
 !$GPUC   basisGradientV,                &
-!$GPUC   basisGradientUTri,             &
-!$GPUC   basisGradientVTri,             &
 !$GPUC   basisIntegralsU,               &
 !$GPUC   basisIntegralsV,               &
 !$GPUC   basisIntegralsMetric,          &
-!$GPUC   basisIntegralsUTri,            &
-!$GPUC   basisIntegralsVTri,            &
-!$GPUC   basisIntegralsMetricTri        &
+!$GPUC   basisGradientUNew,             &
+!$GPUC   basisGradientVNew,             &
+!$GPUC   basisIntegralsUNew,            &
+!$GPUC   basisIntegralsVNew,            &
+!$GPUC   basisIntegralsMetricNew,       &
+!$GPUC   basisGradientUTriNew,          &
+!$GPUC   basisGradientVTriNew,          &
+!$GPUC   basisIntegralsUTriNew,         &
+!$GPUC   basisIntegralsVTriNew,         &
+!$GPUC   basisIntegralsMetricTriNew,    &
 !$GPUC   tanLatVertexRotatedOverRadius, &
 !$GPUC   tanLatEdgeRotatedOverRadius,   &
 !$GPUC   cellVerticesAtVertex,          &
@@ -277,6 +299,7 @@ contains
 !$GPUC   nVertices,                     &
 !$GPUC   nVerticesSolve,                &
 !$GPUC   vertexDegree,                  &
+!$GPUC   TWO,                           &
 !$GPUC   nEdgesOnCell,                  &
 !$GPUC   verticesOnCell,                &
 !$GPUC   cellsOnVertex,                 &
@@ -298,14 +321,19 @@ contains
 !$GPUC   stressDivergenceV,             &
 !$GPUC   basisGradientU,                &
 !$GPUC   basisGradientV,                &
-!$GPUC   basisGradientUTri,             &
-!$GPUC   basisGradientVTri,             &
 !$GPUC   basisIntegralsU,               &
 !$GPUC   basisIntegralsV,               &
 !$GPUC   basisIntegralsMetric,          &
-!$GPUC   basisIntegralsUTri,            &
-!$GPUC   basisIntegralsVTri,            &
-!$GPUC   basisIntegralsMetricTri,       &
+!$GPUC   basisGradientUNew,             &
+!$GPUC   basisGradientVNew,             &
+!$GPUC   basisIntegralsUNew,            &
+!$GPUC   basisIntegralsVNew,            &
+!$GPUC   basisIntegralsMetricNew,       &
+!$GPUC   basisGradientUTriNew,          &
+!$GPUC   basisGradientVTriNew,          &
+!$GPUC   basisIntegralsUTriNew,         &
+!$GPUC   basisIntegralsVTriNew,         &
+!$GPUC   basisIntegralsMetricTriNew,    &
 !$GPUC   tanLatVertexRotatedOverRadius, &
 !$GPUC   tanLatEdgeRotatedOverRadius,   &
 !$GPUC   cellVerticesAtVertex,          &
@@ -343,14 +371,19 @@ contains
          stressDivergenceV,       &
          basisGradientU,          &
          basisGradientV,          &
-         basisGradientUTri,       &
-         basisGradientVTri,       &
          basisIntegralsU,         &
          basisIntegralsV,         &
          basisIntegralsMetric,    &
-         basisIntegralsUTri,      &
-         basisIntegralsVTri,      &
-         basisIntegralsMetricTri, &
+         basisGradientUNew,       &
+         basisGradientVNew,       &
+         basisIntegralsUNew,      &
+         basisIntegralsVNew,      &
+         basisIntegralsMetricNew, &
+         basisGradientUTriNew,       &
+         basisGradientVTriNew,       &
+         basisIntegralsUTriNew,      &
+         basisIntegralsVTriNew,      &
+         basisIntegralsMetricTriNew, &
          tanLatVertexRotatedOverRadius, &
          tanLatEdgeRotatedOverRadius,   &
          cellVerticesAtVertex, &
