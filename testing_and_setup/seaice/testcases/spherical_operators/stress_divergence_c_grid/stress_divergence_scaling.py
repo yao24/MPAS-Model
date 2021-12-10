@@ -25,7 +25,7 @@ def L2_norm(numerical, analytical, nVertices, latVertex, areaTriangle, latitudeL
 
 #--------------------------------------------------------
 
-def Linfinity_norm(numerical, analytical, nVertices, latVertex, areaTriangle, latitudeLimit):
+def Linfinity_norm(numerical, analytical, nVertices, latVertex, latitudeLimit):
 
     degreesToRadians = math.pi / 180.0
 
@@ -58,17 +58,17 @@ def get_norm(filenameIC, filename, latitudeLimit):
 
     latVertex = fileMPAS.variables["latVertex"][:]
 
-    areaTriangle = fileMPAS.variables["areaTriangle"][:]
+    variationalDenominator = fileMPAS.variables["variationalDenominator"][:]
 
     stressDivergenceU = fileMPAS.variables["stressDivergenceU"][0,:]
     stressDivergenceV = fileMPAS.variables["stressDivergenceV"][0,:]
     stressDivergenceUAnalytical = fileMPAS.variables["stressDivergenceUAnalytical"][0,:]
     stressDivergenceVAnalytical = fileMPAS.variables["stressDivergenceVAnalytical"][0,:]
 
-    #normU = Linfinity_norm(stressDivergenceU, stressDivergenceUAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
-    #normV = Linfinity_norm(stressDivergenceV, stressDivergenceVAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
-    normU = L2_norm(stressDivergenceU, stressDivergenceUAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
-    normV = L2_norm(stressDivergenceV, stressDivergenceVAnalytical, nVertices, latVertex, areaTriangle, latitudeLimit)
+    #normU = Linfinity_norm(stressDivergenceU, stressDivergenceUAnalytical, nVertices, latVertex, latitudeLimit)
+    #normV = Linfinity_norm(stressDivergenceV, stressDivergenceVAnalytical, nVertices, latVertex, latitudeLimit)
+    normU = L2_norm(stressDivergenceU, stressDivergenceUAnalytical, nVertices, latVertex, variationalDenominator, latitudeLimit)
+    normV = L2_norm(stressDivergenceV, stressDivergenceVAnalytical, nVertices, latVertex, variationalDenominator, latitudeLimit)
 
     fileMPAS.close()
 
@@ -100,8 +100,8 @@ def get_norm_c_grid(filenameIC, filename, latitudeLimit):
     stressDivergenceUAnalyticalCGrid = fileMPAS.variables["stressDivergenceUAnalyticalCGrid"][0,:]
     stressDivergenceVAnalyticalCGrid = fileMPAS.variables["stressDivergenceVAnalyticalCGrid"][0,:]
 
-    #normU = Linfinity_norm(stressDivergenceUCGrid, stressDivergenceUAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
-    #normV = Linfinity_norm(stressDivergenceVCGrid, stressDivergenceVAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
+    #normU = Linfinity_norm(stressDivergenceUCGrid, stressDivergenceUAnalyticalCGrid, nEdges, latEdge, latitudeLimit)
+    #normV = Linfinity_norm(stressDivergenceVCGrid, stressDivergenceVAnalyticalCGrid, nEdges, latEdge, latitudeLimit)
     normU = L2_norm(stressDivergenceUCGrid, stressDivergenceUAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
     normV = L2_norm(stressDivergenceVCGrid, stressDivergenceVAnalyticalCGrid, nEdges, latEdge, variationalDenominatorCGrid, latitudeLimit)
 
@@ -160,8 +160,8 @@ def scaling_lines(axis, xMin, xMax, yMin):
 def stress_divergence_scaling():
 
     #resolutions = [2562,10242,40962,163842]
-    resolutions = [2562,10242]
-    #resolutions = [2562]
+    #resolutions = [2562,10242]
+    resolutions = [2562]
 
     methods = ["wachspress", "pwl"]
 

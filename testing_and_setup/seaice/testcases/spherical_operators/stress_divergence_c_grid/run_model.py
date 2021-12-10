@@ -15,8 +15,8 @@ def run_model():
         MPAS_SEAICE_TESTCASES_RUN_COMMAND = ""
 
     #gridSizes = [2562, 10242, 40962, 163842]
-    gridSizes = [2562, 10242]
-    #gridSizes = [2562]
+    #gridSizes = [2562, 10242]
+    gridSizes = [2562]
 
     operatorMethods = ["wachspress","pwl"]
 
@@ -35,13 +35,13 @@ def run_model():
             if (operatorMethod == "wachspress"):
                 nmlPatch = {"velocity_solver": {"config_strain_scheme":"variational",
                                                 "config_stress_divergence_scheme":"variational",
-                                                "config_variational_basis":"wachspress",
-                                                "config_variational_denominator_type":"original"}}
+                                                "config_variational_basis":"wachspress"}}
+                                                #"config_variational_denominator_type":"original"}}
             elif (operatorMethod == "pwl"):
                 nmlPatch = {"velocity_solver": {"config_strain_scheme":"variational",
                                                 "config_stress_divergence_scheme":"variational",
-                                                "config_variational_basis":"pwl",
-                                                "config_variational_denominator_type":"original"}}
+                                                "config_variational_basis":"pwl"}}
+                                                #"config_variational_denominator_type":"original"}}
             elif (operatorMethod == "weak"):
                 nmlPatch = {"velocity_solver": {"config_strain_scheme":"weak",
                                                 "config_stress_divergence_scheme":"weak"}}
