@@ -196,6 +196,7 @@ contains
          nCells, &
          nVertices, &
          nEdges, &
+         nEdgesSolve, &
          vertexDegree, &
          maxEdges
 
@@ -258,6 +259,7 @@ contains
     call MPAS_pool_get_dimension(mesh, "nCells", nCells)
     call MPAS_pool_get_dimension(mesh, "nVertices", nVertices)
     call MPAS_pool_get_dimension(mesh, "nEdges", nEdges)
+    call MPAS_pool_get_dimension(mesh, "nEdgesSolve", nEdgesSolve)
     call MPAS_pool_get_dimension(mesh, "vertexDegree", vertexDegree)
     call MPAS_pool_get_dimension(mesh, "maxEdges", maxEdges)
 
@@ -487,11 +489,12 @@ contains
 
        else
 
-          do iEdge = 1, nEdges
+          do iEdge = 1, nEdgesSolve
 
              do iCellOnEdge = 1, 2
 
                 iCell = cellsOnEdge(iCellOnEdge,iEdge)
+
                 call seaice_init_velocity_solver_wachspress(&
                    iCell, &
                    maxEdges, &
@@ -515,6 +518,7 @@ contains
               do iVertexOnEdge = 1, 2
 
                  iVertex = verticesOnEdge(iVertexOnEdge,iEdge)
+
                  call seaice_init_velocity_solver_wachspress(&
                     iVertex, &
                     vertexDegree, &
@@ -559,7 +563,7 @@ contains
                basisIntegralsV)
        else
 
-          do iEdge = 1, nEdges
+          do iEdge = 1, nEdgesSolve
 
              do iCellOnEdge = 1, 2
 
@@ -1208,34 +1212,79 @@ end subroutine compute_c_grid_polygon_and_tri_areas
 
           end do ! iEdge
 
-        end if
+       else
+
+          call MPAS_log_write("Unknown variational denominator type: "//trim(variationalDenominatorType), MPAS_LOG_CRIT)
+
+       end if
 
     else
 
-       do iEdge = 1, nEdges
+       if (trim(variationalDenominatorType) == "original") then
 
-          vertOnEdge1 = verticesOnEdge(1, iEdge)
-          vertOnEdge2 = verticesOnEdge(2, iEdge)
-          xv1 = xVertex(vertOnEdge1)
-          yv1 = yVertex(vertOnEdge1)
-          zv1 = zVertex(vertOnEdge1)
-          xv2 = xVertex(vertOnEdge2)
-          yv2 = yVertex(vertOnEdge2)
-          zv2 = zVertex(vertOnEdge2)
+          do iEdge = 1, nEdges
 
-          do iCellOnEdge = 1, 2
+             vertOnEdge1 = verticesOnEdge(1, iEdge)
+             vertOnEdge2 = verticesOnEdge(2, iEdge)
+             xv1 = xVertex(vertOnEdge1)
+             yv1 = yVertex(vertOnEdge1)
+             zv1 = zVertex(vertOnEdge1)
+             xv2 = xVertex(vertOnEdge2)
+             yv2 = yVertex(vertOnEdge2)
+             zv2 = zVertex(vertOnEdge2)
 
-             cellOnEdge = cellsOnEdge(iCellOnEdge, iEdge)
-             xc = xCell(cellOnEdge)
-             yc = yCell(cellOnEdge)
-             zc = zCell(cellOnEdge)
+             do iCellOnEdge = 1, 2
 
-            triangleArea = planar_triangle_area(xc, yc, zc, xv1, yv1, zv1, xv2, yv2, zv2)
-            variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + triangleArea
+                cellOnEdge = cellsOnEdge(iCellOnEdge, iEdge)
+                xc = xCell(cellOnEdge)
+                yc = yCell(cellOnEdge)
+                zc = zCell(cellOnEdge)
 
-          end do
+               triangleArea = planar_triangle_area(xc, yc, zc, xv1, yv1, zv1, xv2, yv2, zv2)
+               variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + triangleArea
 
-      end do
+             end do
+
+         end do
+
+       else if (trim(variationalDenominatorType) == "alternate") then
+
+          do iEdge = 1, nEdges
+
+             do iCellOnEdge = 1, 2
+
+                iCell = cellsOnEdge(iCellOnEdge, iEdge)
+
+                iVelocityEdge = cellEdgesAtEdge(iCellOnEdge,iEdge)
+
+                ! loop over the vertices of the surrounding cell
+                do iStressEdge = 1, nEdgesOnCell(iCell)
+
+                   variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge)
+
+                end do ! iStressEdge
+
+             end do ! iSurroundingCell
+
+             do iTriangleOnEdge = 1, 2
+
+                iVelocityEdge = triangleEdgesAtEdge(iTriangleOnEdge,iEdge)
+
+                do iStressEdge = 1, vertexDegree
+
+                   variationalDenominatorCGrid(iEdge) = variationalDenominatorCGrid(iEdge) + basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iTriangleOnEdge)
+
+                end do
+
+             end do
+
+          end do ! iEdge
+
+       else
+
+          call MPAS_log_write("Unknown variational denominator type: "//trim(variationalDenominatorType), MPAS_LOG_CRIT)
+
+       end if
 
     end if
 
@@ -2527,7 +2576,7 @@ end subroutine variational_denominator_c_grid
     use seaice_mesh_pool, only: &
          nEdgesSolve, &
          nEdgesOnCell, &
-         nVertices, &
+         nVerticesSolve, &
          edgesOnVertex, &
          cellsOnEdge,  &
          edgesOnCell, &
@@ -2652,7 +2701,7 @@ end subroutine variational_denominator_c_grid
                 stressDivergenceUCell = stressDivergenceUCell - &
                      stress11(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
                      stress12(iStressEdge,iCell) * basisIntegralsVNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
-                     stress12(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
+                     2.0_RKIND * stress12(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
                      !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
@@ -2732,7 +2781,7 @@ end subroutine variational_denominator_c_grid
                 stressDivergenceUCell = stressDivergenceUCell - & 
                      stress11Tri(iStressEdge,iVertex) * basisIntegralsUTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
                      stress12Tri(iStressEdge,iVertex) * basisIntegralsVTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
-                     stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
+                     2.0_RKIND * stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
                      !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
@@ -2791,7 +2840,7 @@ end subroutine variational_denominator_c_grid
     ! INTERPOLATION OF DIV OF STRESS FROM EDGES BACK TO VERTICES
     ! - note: to use this need to do the necessary modification to subroutine def and variable declarations
 
-    do iVertex = 1, nVertices
+    do iVertex = 1, nVerticesSolve
        stressDivergenceU(iVertex) = 0.0_RKIND
        stressDivergenceV(iVertex) = 0.0_RKIND
        sumOfDiamonds = 0.0_RKIND
