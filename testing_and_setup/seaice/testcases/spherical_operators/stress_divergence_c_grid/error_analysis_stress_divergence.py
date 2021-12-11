@@ -24,7 +24,7 @@ def error_analysis_stress_divergence():
     for gridType in gridTypes:
 
         # grid file
-        filegrid = Dataset("x1.2562.grid.nc","r")
+        filegrid = Dataset("grid.2562.nc","r")
 
         nVertices = len(filegrid.dimensions["nVertices"])
         vertexDegree = len(filegrid.dimensions["vertexDegree"])

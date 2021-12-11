@@ -9,7 +9,7 @@ from error_analysis_stress_divergence import error_analysis_stress_divergence
 
 def run_stress_divergence_testcase():
 
-    #get_testcase_data()
+    get_testcase_data()
 
     create_ic()
 
