@@ -2840,26 +2840,26 @@ end subroutine variational_denominator_c_grid
     ! INTERPOLATION OF DIV OF STRESS FROM EDGES BACK TO VERTICES
     ! - note: to use this need to do the necessary modification to subroutine def and variable declarations
 
-    do iVertex = 1, nVerticesSolve
-       stressDivergenceU(iVertex) = 0.0_RKIND
-       stressDivergenceV(iVertex) = 0.0_RKIND
-       sumOfDiamonds = 0.0_RKIND
-       computeVertex = .true.
-       do iEdgeOnVertex = 1, vertexDegree
-          sumOfDiamonds = sumOfDiamonds + variationalDenominatorCGrid(edgesOnVertex(iEdgeOnVertex,iVertex))
-          if (solveVelocityCGrid(edgesOnVertex(iEdgeOnVertex,iVertex)) == 0) then
-             computeVertex = .false.
-          end if
-       end do
-       if (computeVertex) then
-          do iEdgeOnVertex = 1, vertexDegree
-             iEdge = edgesOnVertex(iEdgeOnVertex,iVertex)
-             coeff = variationalDenominatorCGrid(iEdge) / sumOfDiamonds
-             stressDivergenceU(iVertex) = stressDivergenceU(iVertex) + coeff * stressDivergenceUCGrid(iEdge)
-             stressDivergenceV(iVertex) = stressDivergenceV(iVertex) + coeff * stressDivergenceVCGrid(iEdge)
-          end do
-       end if
-    end do
+    !do iVertex = 1, nVerticesSolve
+    !   stressDivergenceU(iVertex) = 0.0_RKIND
+    !   stressDivergenceV(iVertex) = 0.0_RKIND
+    !   sumOfDiamonds = 0.0_RKIND
+    !   computeVertex = .true.
+    !   do iEdgeOnVertex = 1, vertexDegree
+    !      sumOfDiamonds = sumOfDiamonds + variationalDenominatorCGrid(edgesOnVertex(iEdgeOnVertex,iVertex))
+    !      if (solveVelocityCGrid(edgesOnVertex(iEdgeOnVertex,iVertex)) == 0) then
+    !         computeVertex = .false.
+    !      end if
+    !   end do
+    !   if (computeVertex) then
+    !      do iEdgeOnVertex = 1, vertexDegree
+    !         iEdge = edgesOnVertex(iEdgeOnVertex,iVertex)
+    !         coeff = variationalDenominatorCGrid(iEdge) / sumOfDiamonds
+    !         stressDivergenceU(iVertex) = stressDivergenceU(iVertex) + coeff * stressDivergenceUCGrid(iEdge)
+    !         stressDivergenceV(iVertex) = stressDivergenceV(iVertex) + coeff * stressDivergenceVCGrid(iEdge)
+    !      end do
+    !   end if
+    !end do
 
     ! -END: to be removed
 
