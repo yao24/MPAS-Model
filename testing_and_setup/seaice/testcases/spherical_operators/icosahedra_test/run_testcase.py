@@ -16,7 +16,7 @@ def run_stress_divergence_testcase():
 
     stress_divergence_scaling()    
  
-    error_analysis_stress_divergence()
+    #error_analysis_stress_divergence()
 
 #-------------------------------------------------------------------------------
 
