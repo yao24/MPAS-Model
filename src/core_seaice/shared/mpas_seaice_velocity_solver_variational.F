@@ -2702,15 +2702,15 @@ end subroutine variational_denominator_c_grid
                      stress11(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
                      stress12(iStressEdge,iCell) * basisIntegralsVNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
                      2.0_RKIND * stress12(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
-                     !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCell = stressDivergenceVCell - &
                      stress22(iStressEdge,iCell) * basisIntegralsVNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
                      stress12(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) + &
                      stress11(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
-                     !tan(asin(xCell(iCell)))
-                     tanLatEdgeRotatedOverRadius(iEdge)
+                     tanLatEdgeRotatedOverRadius(iEdge) - &
+                     stress22(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
+                     tanLatEdgeRotatedOverRadius(iEdge) 
 
                 stressDivergenceUCellNoMetric = stressDivergenceUCellNoMetric - &
                      stress11(iStressEdge,iCell) * basisIntegralsUNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) - &
@@ -2722,12 +2722,10 @@ end subroutine variational_denominator_c_grid
 
                 stressDivergenceUCellMetric = stressDivergenceUCellMetric - &
                      stress12(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
-                     !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCellMetric = stressDivergenceVCellMetric + &
                      stress11(iStressEdge,iCell) * basisIntegralsMetricNew(iEdge,iStressEdge,iVelocityEdge,iCellOnEdge) * &
-                     !tan(asin(xCell(iCell)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
              enddo ! iStressEdge
@@ -2782,14 +2780,14 @@ end subroutine variational_denominator_c_grid
                      stress11Tri(iStressEdge,iVertex) * basisIntegralsUTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
                      stress12Tri(iStressEdge,iVertex) * basisIntegralsVTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
                      2.0_RKIND * stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
-                     !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCell = stressDivergenceVCell - &
                      stress22Tri(iStressEdge,iVertex) * basisIntegralsVTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) - &
                      stress12Tri(iStressEdge,iVertex) * basisIntegralsUTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) + &
                      stress11Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
-                     !tan(asin(xVertex(iVertex)))
+                     tanLatEdgeRotatedOverRadius(iEdge) - &
+                     stress22Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceUCellNoMetric = stressDivergenceUCellNoMetric - &
@@ -2802,12 +2800,10 @@ end subroutine variational_denominator_c_grid
 
                 stressDivergenceUCellMetric = stressDivergenceUCellMetric - &
                      stress12Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
-                     !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
                 stressDivergenceVCellMetric = stressDivergenceVCellMetric + &
                      stress11Tri(iStressEdge,iVertex) * basisIntegralsMetricTriNew(iEdge,iStressEdge,iVelocityEdge,iVertexOnEdge) * &
-                     !tan(asin(xVertex(iVertex)))
                      tanLatEdgeRotatedOverRadius(iEdge)
 
              enddo ! iStressEdge
