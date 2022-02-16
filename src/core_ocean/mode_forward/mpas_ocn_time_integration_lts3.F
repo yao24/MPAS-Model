@@ -2760,7 +2760,7 @@ module ocn_time_integration_lts3
     type (block_type), pointer :: block
     type (mpas_pool_type), pointer :: statePool, meshPool, tendPool, LTSPool
     integer, dimension(:), allocatable :: isLTSRegionEdgeAssigned
-    integer :: nLTSHalos
+    integer :: nLTSHalos, fineRegions, coarseRegions, fineRegionsM1
     integer :: i, iCell, iEdge, iVertex, iRegion, iHalo, iHaloP1, iCellHalo, cell1, cell2, nLTSHalosCopy, haveFineCounter, haveCoarseCounter, moreCellsOnInterface
     integer, pointer :: nCells, nCellsSolve, nEdges, nEdgesSolve, haveFine, haveCoarse, haveInterface, doExtraLayers
     real (kind=RKIND), dimension(:), pointer :: latCell, lonCell, areaCell
@@ -3160,14 +3160,16 @@ module ocn_time_integration_lts3
           end do
        end do
 
-       do iHalo = 1, nLTSHalos
-          do iCell = 1, nCellsInLTSHalo(1, nLTSHalos - iHalo + 2)
-             do i = 1, nEdgesOnCell(cellsInLTSHalo(1, nLTSHalos- iHalo + 2, iCell))
-                iEdge = edgesOnCell(i,cellsInLTSHalo(1, nLTSHalos - iHalo + 2, iCell))
+       fineRegions = 3
+       fineRegionsM1 = 2
+       do iHalo = 1, fineRegionsM1
+          do iCell = 1, nCellsInLTSHalo(1, fineRegions - iHalo + 1)
+             do i = 1, nEdgesOnCell(cellsInLTSHalo(1, fineRegions - iHalo + 1, iCell))
+                iEdge = edgesOnCell(i,cellsInLTSHalo(1, fineRegions - iHalo + 1, iCell))
                 if (iEdge .le. nEdgesSolve) then
                    if (isLTSRegionEdgeAssigned(iEdge) == 0) then 
-                      nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) = nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2) + 1
-                      edgesInLTSHalo(1, nLTSHalos - iHalo + 2, nEdgesInLTSHalo(1, nLTSHalos - iHalo + 2)) = iEdge
+                      nEdgesInLTSHalo(1, fineRegions - iHalo + 1) = nEdgesInLTSHalo(1, fineRegions - iHalo + 1) + 1
+                      edgesInLTSHalo(1, fineRegions - iHalo + 1, nEdgesInLTSHalo(1, fineRegions - iHalo + 1)) = iEdge
                       isLTSRegionEdgeAssigned(iEdge) = 1
                    end if
                 end if
@@ -3175,31 +3177,19 @@ module ocn_time_integration_lts3
           end do
        end do
 
-       do iHalo = 1, nLTSHalos
-          do iCell = 1, nCellsInLTSHalo(2, iHalo+1)
-             do i = 1, nEdgesOnCell(cellsInLTSHalo(2,iHalo+1,iCell))
-                iEdge = edgesOnCell(i,cellsInLTSHalo(2,iHalo+1,iCell))
+       coarseRegions = 2
+       do iHalo = 1, coarseRegions
+          do iCell = 1, nCellsInLTSHalo(2, coarseRegions - iHalo + 1)
+             do i = 1, nEdgesOnCell(cellsInLTSHalo(2,coarseRegions - iHalo + 1,iCell))
+                iEdge = edgesOnCell(i,cellsInLTSHalo(2,coarseRegions - iHalo + 1,iCell))
                 if (iEdge .le. nEdgesSolve) then
                    if (isLTSRegionEdgeAssigned(iEdge) == 0) then
-                      nEdgesInLTSHalo(2, iHalo+1) = nEdgesInLTSHalo(2, iHalo+1) + 1
-                      edgesInLTSHalo(2, iHalo+1,  nEdgesInLTSHalo(2, iHalo+1)) = iEdge
+                      nEdgesInLTSHalo(2, coarseRegions - iHalo + 1) = nEdgesInLTSHalo(2, coarseRegions - iHalo + 1) + 1
+                      edgesInLTSHalo(2, coarseRegions - iHalo + 1,  nEdgesInLTSHalo(2, coarseRegions - iHalo + 1)) = iEdge
                       isLTSRegionEdgeAssigned(iEdge) = 1
                    end if
                 end if
              end do
-          end do
-       end do
-
-       do iCell = 1, nCellsInLTSHalo(2,1)
-          do i = 1, nEdgesOnCell(cellsInLTSHalo(2,1,iCell))
-             iEdge = edgesOnCell(i,cellsInLTSHalo(2,1,iCell))
-             if (iEdge .le. nEdgesSolve) then
-                if(isLTSRegionEdgeAssigned(iEdge) == 0) then
-                   nEdgesInLTSHalo(2,1) = nEdgesInLTSHalo(2,1) + 1
-                   edgesInLTSHalo(2,1,nEdgesInLTSHalo(2,1)) = iEdge
-                   isLTSRegionEdgeAssigned(iEdge) = 1
-                end if
-             end if
           end do
        end do
 
