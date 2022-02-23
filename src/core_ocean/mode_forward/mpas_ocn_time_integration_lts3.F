@@ -1032,6 +1032,7 @@ module ocn_time_integration_lts3
             call mpas_pool_get_subpool(block % structs, 'tend', tendPool)
             call mpas_pool_get_array(LTSPool, 'haveFine', haveFine)
             call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
+            call mpas_pool_get_dimension(block % dimensions, 'nEdges', nEdges)
 
             call mpas_pool_get_array(statePool, 'normalVelocity', normalVelocityCur, 1)
             call mpas_pool_get_array(diagnosticsPool, 'normalTransportVelocity', normalTransportVelocity)
