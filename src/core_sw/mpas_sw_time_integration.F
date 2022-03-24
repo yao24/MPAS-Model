@@ -269,6 +269,9 @@ module sw_time_integration
              if (config_test_case == 1) then    ! For case 1, wind field should be fixed
                 uProvis(:,:) = uOld(:,:)
              end if
+             !TODO: if config_apvm_upwinding is not zero, the dt on the call
+             !below has to be fixed, likely it has to be
+             !rk_substep_weights(rk_step) but should be tested to be sure 
              call sw_compute_solve_diagnostics(dt, provisStatePool, meshPool)
              block => block % next
           end do
@@ -571,6 +574,9 @@ call mpas_timer_start("solution advancement SSPRK")
 
 
 call mpas_timer_start("tendencies SSPRK")
+          !TODO: if config_apvm_upwinding is not zero, the dt on the call
+          !below has to be fixed, likely it has to be
+          !dt, dt/2, dt but should be tested to be sure
           call sw_compute_solve_diagnostics(dt, statePool, meshPool, 2)
 call mpas_timer_stop("tendencies SSPRK")
           block => block % next
@@ -883,6 +889,10 @@ call cpu_time(startTendencies)
         call mpas_pool_get_array(LTSPool, 'haveInterface', haveInterface)
 
         if(haveCoarse == 1 .or. haveInterface == 1) then
+        !TODO: if config_apvm_upwinding is not zero, the dt on the call
+        !below has to be fixed, likely it has to be
+        !dt, dt/2, dt but should be tested (dtFine, dtFine/2 dtFine 
+        !for the substepping) to be sure
         call sw_compute_solve_diagnostics(dt, statePool, meshPool, 1) 
         call sw_compute_tend(tendPool, statePool, meshPool, 1) 
         call sw_compute_scalar_tend(tendPool, statePool, meshPool, 1)  
