@@ -472,6 +472,8 @@ module ocn_time_integration_lts3
 
          ! DIAGNOSTICS UPDATE ---
 
+         !TODO: when config_apvm_scale_factor is not zero, need to check
+         !if it is correct to pass dt below
          call ocn_diagnostic_solve(dt, statePool, forcingPool, meshPool, diagnosticsPool, scratchPool, tracersPool, 1)
          call mpas_threading_barrier()
 
@@ -499,6 +501,9 @@ module ocn_time_integration_lts3
          call mpas_pool_get_array(diagnosticsPool, 'vertAleTransportTop', vertAleTransportTop)
 
          ! VELOCITY: VERTICAL TRANSPORT COMPUTATION --- 
+         ! TODO: check that the dt below is correct, it's possible that it has to be changed 
+         ! for instance in RK4 it uses the RK substep, so maybe here it should
+         ! be dt,dt/2,dt (depending on the stage)
          call ocn_vert_transport_velocity_top(meshPool, verticalMeshPool, scratchPool, layerThicknessCur, &
                                               layerThicknessEdge, normalVelocityCur, sshCur, dt, vertAleTransportTop, err)
          call mpas_threading_barrier()
