@@ -178,7 +178,7 @@ contains
          basisGradientV, &
          basisIntegralsMetric, &
          basisIntegralsU, &
-         basisIntegralsV 
+         basisIntegralsV
 
     real(kind=RKIND), dimension(:,:,:,:), pointer :: &
          basisGradientUNew, &
@@ -489,29 +489,34 @@ contains
 
        else
 
-          do iEdge = 1, nEdgesSolve
+          do iEdge = 1, nEdges
 
              do iCellOnEdge = 1, 2
 
                 iCell = cellsOnEdge(iCellOnEdge,iEdge)
 
-                call seaice_init_velocity_solver_wachspress(&
-                   iCell, &
-                   maxEdges, &
-                   nEdgesOnCell, &
-                   xLocalNew(iEdge,:,iCellOnEdge), &
-                   yLocalNew(iEdge,:,iCellOnEdge), &
-                   rotateCartesianGrid, &
-                   includeMetricTerms, &
-                   on_a_sphere, &
-                   integrationType, &
-                   integrationOrder, &
-                   sphere_radius, &
-                   basisGradientUNew(iEdge,:,:,iCellOnEdge), &
-                   basisGradientVNew(iEdge,:,:,iCellOnEdge), &
-                   basisIntegralsUNew(iEdge,:,:,iCellOnEdge), &
-                   basisIntegralsVNew(iEdge,:,:,iCellOnEdge), &
-                   basisIntegralsMetricNew(iEdge,:,:,iCellOnEdge))
+                if (iCell <= nCells) then
+
+                   call seaice_init_velocity_solver_wachspress(&
+                      iCell, &
+                      maxEdges, &
+                      nEdgesOnCell, &
+                      xLocalNew(iEdge,:,iCellOnEdge), &
+                      yLocalNew(iEdge,:,iCellOnEdge), &
+                      rotateCartesianGrid, &
+                      includeMetricTerms, &
+                      on_a_sphere, &
+                      integrationType, &
+                      integrationOrder, &
+                      sphere_radius, &
+                      basisGradientUNew(iEdge,:,:,iCellOnEdge), &
+                      basisGradientVNew(iEdge,:,:,iCellOnEdge), &
+                      basisIntegralsUNew(iEdge,:,:,iCellOnEdge), &
+                      basisIntegralsVNew(iEdge,:,:,iCellOnEdge), &
+                      basisIntegralsMetricNew(iEdge,:,:,iCellOnEdge))
+
+
+                 end if
 
               end do
 
@@ -563,26 +568,30 @@ contains
                basisIntegralsV)
        else
 
-          do iEdge = 1, nEdgesSolve
+          do iEdge = 1, nEdges
 
              do iCellOnEdge = 1, 2
 
                 iCell = cellsOnEdge(iCellOnEdge,iEdge)
 
-                call seaice_init_velocity_solver_pwl_c_grid(&
-                   iCell, &
-                   maxEdges, &
-                   nEdgesOnCell, &
-                   areaCellCGrid, &
-                   xLocalNew(iEdge,:,iCellOnEdge), &
-                   yLocalNew(iEdge,:,iCellOnEdge), &
-                   basisGradientUNew(iEdge,:,:,iCellOnEdge), &
-                   basisGradientVNew(iEdge,:,:,iCellOnEdge), &
-                   basisIntegralsMetricNew(iEdge,:,:,iCellOnEdge), &
-                   basisIntegralsUNew(iEdge,:,:,iCellOnEdge), &
-                   basisIntegralsVNew(iEdge,:,:,iCellOnEdge))
+                if (iCell <= nCells) then
 
-              end do
+                   call seaice_init_velocity_solver_pwl_c_grid(&
+                      iCell, &
+                      maxEdges, &
+                      nEdgesOnCell, &
+                      areaCellCGrid, &
+                      xLocalNew(iEdge,:,iCellOnEdge), &
+                      yLocalNew(iEdge,:,iCellOnEdge), &
+                      basisGradientUNew(iEdge,:,:,iCellOnEdge), &
+                      basisGradientVNew(iEdge,:,:,iCellOnEdge), &
+                      basisIntegralsMetricNew(iEdge,:,:,iCellOnEdge), &
+                      basisIntegralsUNew(iEdge,:,:,iCellOnEdge), &
+                      basisIntegralsVNew(iEdge,:,:,iCellOnEdge))
+
+                end if
+
+             end do
 
              do iVertexOnEdge = 1, 2
 
