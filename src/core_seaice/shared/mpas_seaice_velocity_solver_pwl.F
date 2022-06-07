@@ -514,14 +514,15 @@ contains
        s = (a + b + c) * 0.5_RKIND
 
        ! Heron's formula
-       basisSubArea(iSubCell) = sqrt(s * (s-a) * (s-b) * (s-c))
+       basisSubArea(iSubCell) = sqrt(abs(s * (s-a) * (s-b) * (s-c)))
 
        basisSubAreaSum = basisSubAreaSum + basisSubArea(iSubCell)
 
     enddo ! iSubCell
 
     ! ensure sum of subareas equals the area of the cell
-    basisSubArea(:) = basisSubArea(:) * (areaCell(iCell) / basisSubAreaSum)
+    ! (if basisSubAreaSum=0 this produces a NaN so I am removing it)
+    !basisSubArea(:) = basisSubArea(:) * (areaCell(iCell) / basisSubAreaSum)
 
     ! calculate the linear basis on the sub triangle
     do iSubCell = 1, nEdgesOnCell(iCell)
