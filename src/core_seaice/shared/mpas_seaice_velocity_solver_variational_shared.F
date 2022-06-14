@@ -58,7 +58,7 @@ contains
     real(kind=RKIND), dimension(:,:), intent(out) :: &
          xLocal, & !< Output:
          yLocal    !< Output:
-
+         
     integer, intent(in) :: &
          nCells !< Input:
 
@@ -78,7 +78,7 @@ contains
 
     logical, intent(in) :: &
          rotateCartesianGrid, & !< Input:
-         onASphere              !< Input:
+         onASphere, &           !< Input:
 
     if (onASphere) then
        call calc_local_coords_spherical(&
@@ -110,6 +110,85 @@ contains
     endif
 
   end subroutine seaice_calc_local_coords!}}}
+
+
+  subroutine seaice_calc_local_coords_projected_b_grid(&
+       xLocalNewNew, &
+       yLocalNewNew, &
+       nCells, &
+       nEdgesOnCell, &
+       verticesOnCell, &
+       nVertices, &  !new
+       cellsOnVertex, &  !new
+       xVertex, &
+       yVertex, &
+       zVertex, &
+       xCell, &
+       yCell, &
+       zCell, &
+       rotateCartesianGrid, &
+       onASphere)!{{{
+
+    real(kind=RKIND), dimension(:,:), intent(out) :: &
+         xLocalNewNew, & !< Output:
+         yLocalNewNew    !< Output:
+         
+    integer, intent(in) :: &
+         nCells !< Input:
+
+    integer, dimension(:), intent(in) :: &
+         nEdgesOnCell   !< Input:
+
+    integer, dimension(:,:), intent(in) :: &
+         verticesOnCell !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         xVertex, & !< Input:
+         yVertex, & !< Input:
+         zVertex, & !< Input:
+         xCell, &   !< Input:
+         yCell, &   !< Input:
+         zCell      !< Input:
+
+    logical, intent(in) :: &
+         rotateCartesianGrid, & !< Input:
+         onASphere, &           !< Input:
+         !projectedBGrid         !< Input:
+
+    if (onASphere) then
+
+        call calc_local_coords_spherical_projected_b_grid(&
+                
+             xLocalNewNew, &
+             yLocalNewNew, &
+             nVertices, &
+             cellsOnVertex, &
+             verticesOnCell, &
+             nEdgesOnCell, &
+             vertexDegree, &
+             xCell, &
+             yCell, &
+             zCell, &
+             xVertex, &
+             yVertex, &
+             zVertex, &
+             rotateCartesianGrid)
+    else
+       call calc_local_coords_planar(&
+            xLocal, &
+            yLocal, &
+            nCells, &
+            nEdgesOnCell, &
+            verticesOnCell, &
+            xVertex, &
+            yVertex, &
+            zVertex, &
+            xCell, &
+            yCell, &
+            zCell)
+    endif
+
+  end subroutine seaice_calc_local_coords_projected_b_grid!}}}
 
 !|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 !
@@ -720,6 +799,143 @@ contains
    end do
 
   end subroutine calc_local_coords_spherical_c_grid
+  
+  subroutine calc_local_coords_spherical_projected_b_grid(&
+       xLocalNew, &
+       yLocalNew, &
+       nVertices, &
+       cellsOnVertex, &
+       verticesOnCell, &
+       nEdgesOnCell, &
+       vertexDegree, &
+       xCell, &
+       yCell, &
+       zCell, &
+       xVertex, &
+       yVertex, &
+       zVertex, &
+       rotateCartesianGrid)!{{{
+
+    use seaice_mesh, only: &
+         seaice_grid_rotation_forward
+
+    real(kind=RKIND), dimension(:,:,:), intent(out) :: &
+         xLocalNew, & !< Output:
+         yLocalNew, & !< Output:
+         xLocalTriNew, & !< Output:
+         yLocalTriNew    !< Output:
+
+    integer, dimension(:), intent(in) :: &
+         nEdgesOnCell !< Input:
+
+    integer, intent(in) :: &
+         nVertices, & !< Input:
+         vertexDegree
+
+    integer, dimension(:,:), intent(in) :: &
+         cellsOnVertex, &    !< Input:
+         VerticesOnCell, & !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         xCell, & !< Input:
+         yCell, & !< Input:
+         zCell, & !< Input:
+         xVertex, &
+         yVertex, &
+         zVertex
+
+    logical, intent(in) :: &
+         rotateCartesianGrid !< Input:
+
+    integer :: &
+         iCell, &
+         iCellOnVertex, &
+         iVertex, &
+         iVertexOnCell, &
+         jVertex
+
+    real(kind=RKIND) :: &
+         xCellRotated, &
+         yCellRotated, &
+         zCellRotated, &
+         xVertexRotated, &
+         yVertexRotated, &
+         zVertexRotated, &
+         xCellNew, yCellNew, zCellNew, &
+         xCenterRotated, yCenterRotated, zCenterRotated, latCenterRotated, lonCenterRotated, xCenter, yCenter, zCenter, &
+         e1, e2, e3, n1, n2, n3, norm, latCellRotated, lonCellRotated 
+
+   do iVertex = 1, nVertices
+
+      xCenter = xVertex(iVertex)
+      yCenter = yVertex(iVertex)
+      zCenter = zVertex(iVertex)
+
+      call seaice_grid_rotation_forward(&
+        xCenterRotated, yCenterRotated, zCenterRotated, &
+        xCenter, yCenter, zCenter, &
+        rotateCartesianGrid)
+
+      norm = sqrt(xCenterRotated * xCenterRotated + yCenterRotated * yCenterRotated + zCenterRotated * zCenterRotated)
+      latCenterRotated = asin(zCenterRotated / norm)
+      lonCenterRotated = atan2(yCenterRotated, xCenterRotated)
+      if (lonCenterRotated < 0.0_RKIND) then
+         lonCenterRotated = 2.0_RKIND * 3.14159265359_RKIND + lonCenterRotated
+      end if
+
+      e1 = - sin(lonCenterRotated)
+      e2 = cos(lonCenterRotated)
+      e3 = 0.0_RKIND
+
+      n1 = - cos(lonCenterRotated) * sin(latCenterRotated)
+      n2 = - sin(latCenterRotated) * sin(lonCenterRotated)
+      n3 = cos(latCenterRotated) 
+
+      do iCellOnVertex = 1, vertexDegree
+
+         iCell = cellsOnVertex(iCellOnVertex,iVertex)
+
+          call seaice_grid_rotation_forward(&
+               xCellRotated, yCellRotated, zCellRotated, &
+               xCell(iCell), yCell(iCell), zCell(iCell), &
+               rotateCartesianGrid)
+
+          xCellNew = (xCellRotated - xCenterRotated) * e1 + &
+                     (yCellRotated - yCenterRotated) * e2 + &
+                     (zCellRotated - zCenterRotated) * e3
+
+          yCellNew = (xCellRotated - xCenterRotated) * n1 + &
+                     (yCellRotated - yCenterRotated) * n2 + &
+                     (zCellRotated - zCenterRotated) * n3 
+
+         do iVertexOnCell = 1, nEdgesOnCell(iCell)  !double check
+
+            jVertex = verticesOnCell(iVertexOnCell, iCell)  !double check
+
+            call seaice_grid_rotation_forward(&
+                 xVertexRotated, yVertexRotated, zVertexRotated, &
+                 xVertex(jVertex), yVertex(jVertex), zVertex(jVertex), &
+                 rotateCartesianGrid)
+
+             xLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = (xVertexRotated - xCenterRotated) * e1 + &
+                                           (yVertexRotated - yCenterRotated) * e2 + &
+                                           (zVertexRotated - zCenterRotated) * e3 
+
+             yLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = (xVertexRotated - xCenterRotated) * n1 + &
+                                           (yVertexRotated - yCenterRotated) * n2 + &
+                                           (zVertexRotated - zCenterRotated) * n3
+
+             xLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = xLocalNew(iVertex,iVertexOnCell,iCellOnVertex) - xCellNew
+             yLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = yLocalNew(iVertex,iVertexOnCell,iCellOnVertex) - yCellNew
+
+          end do
+
+      end do
+
+   end do
+
+  end subroutine calc_local_coords_spherical_projected_b_grid
+
 !|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 !
 !  seaice_calc_variational_metric_terms

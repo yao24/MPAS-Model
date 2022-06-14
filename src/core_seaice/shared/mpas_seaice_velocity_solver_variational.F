@@ -121,7 +121,7 @@ contains
        variationalDenominatorType, &
        integrationType, &
        integrationOrder, &
-       useCGrid)!{{{
+       useCGrid,useProjectedBGrid)!{{{
 
     use seaice_mesh, only: &
          seaice_cell_vertices_at_vertex, &
@@ -130,6 +130,7 @@ contains
 
     use seaice_velocity_solver_variational_shared, only: &
          seaice_calc_local_coords, &
+         seaice_calc_local_coords_projected_b_grid, &
          seaice_calc_local_coords_c_grid, &
          seaice_calc_variational_metric_terms
 
@@ -150,7 +151,8 @@ contains
     logical, intent(in) :: &
          rotateCartesianGrid, & !< Input:
          includeMetricTerms, &  !< Input:
-         useCGrid               !< Input:
+         useCGrid, &               !< Input:
+         useProjectedBGrid
 
     character(len=*), intent(in) :: &
          variationalBasisType, &       !< Input:
@@ -248,6 +250,8 @@ contains
     real(kind=RKIND), dimension(:,:,:), allocatable :: &
          xLocalNew, &
          yLocalNew, &
+         xLocalNewNew, &
+         yLocalNewNew, &
          xLocalTriNew, &
          yLocalTriNew
 
@@ -368,9 +372,14 @@ contains
     call mpas_timer_start("variational calc_local_coords")
 
     if (.not. useCGrid) then
-       allocate(xLocal(maxEdges,nCells))
-       allocate(yLocal(maxEdges,nCells))
-
+       if(.not. useProjectedBGrid) then 
+            allocate(xLocal(maxEdges,nCells))
+            allocate(yLocal(maxEdges,nCells))
+        else
+            allocate(xLocalNewNew(nVertices,maxEdges,3))
+            allocate(yLocalNewNew(nVertices,maxEdges,3))
+        endif
+       
     else 
 
        allocate(xLocalNew(nEdges,maxEdges,2))
@@ -385,20 +394,38 @@ contains
     end if
 
     if ( .not. useCGrid ) then
-       call seaice_calc_local_coords(&
-            xLocal, &
-            yLocal, &
-            nCells, &
-            nEdgesOnCell, &
-            verticesOnCell, &
-            xVertex, &
-            yVertex, &
-            zVertex, &
-            xCell, &
-            yCell, &
-            zCell, &
-            rotateCartesianGrid, &
-            on_a_sphere)
+       if (.not. useProjectedBGrid) then 
+            call seaice_calc_local_coords(&
+                 xLocal, &
+                 yLocal, &
+                 nCells, &
+                 nEdgesOnCell, &
+                 verticesOnCell, &
+                 xVertex, &
+                 yVertex, &
+                 zVertex, &
+                 xCell, &
+                 yCell, &
+                 zCell, &
+                 rotateCartesianGrid, &
+                 on_a_sphere)
+        else
+            call seaice_calc_local_coords_projected_b_grid(&
+                xLocalNewNew, &
+                yLocalNewNew, &
+                nCells, &
+                nEdgesOnCell, &
+                verticesOnCell, &
+                nVertices, &  !new
+                cellsOnVertex, &  !new
+                xVertex, &
+                yVertex, &
+                zVertex, &
+                xCell, &
+                yCell, &
+                zCell, &
+                rotateCartesianGrid, &
+                on_a_sphere)
     else
 
           call seaice_calc_local_coords_c_grid(&
@@ -680,8 +707,14 @@ contains
 
     ! clean up
     if (.not. useCGrid) then
-       deallocate(xLocal)
-       deallocate(yLocal)
+       if (.not. useProjectedBGrid) then 
+           deallocate(xLocal)
+           deallocate(yLocal)
+       else
+           deallocate(xLocalNewNew)
+           deallocate(yLocalNewNew)
+       endif
+           
     else 
        deallocate(xLocalNew)
        deallocate(yLocalNew)

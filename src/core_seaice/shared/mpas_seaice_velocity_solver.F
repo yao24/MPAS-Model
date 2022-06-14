@@ -235,6 +235,7 @@ contains
               stressDivergenceSchemeType == VARIATIONAL_STRESS_DIVERGENCE_SCHEME) then
 
              call MPAS_pool_get_config(block % configs, "config_use_c_grid", config_use_c_grid)
+             call MPAS_pool_get_config(block % configs, "config_use_projected_b_grid", config_use_projected_b_grid)
 
              call seaice_init_velocity_solver_variational(&
                   mesh, &
@@ -246,7 +247,8 @@ contains
                   config_variational_denominator_type, &
                   config_wachspress_integration_type, &
                   config_wachspress_integration_order, &
-                  config_use_c_grid)
+                  config_use_c_grid, &
+                  config_use_projected_b_grid)
 
           endif
 
