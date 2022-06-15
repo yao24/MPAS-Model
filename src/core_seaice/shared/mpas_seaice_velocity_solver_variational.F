@@ -188,8 +188,13 @@ contains
          basisGradientUNew, &
          basisGradientVNew, &
          basisIntegralsMetricNew, &
+         basisGradientUNewNew, &
+         basisGradientVNewNew, &
+         basisIntegralsMetricNewNew, &
          basisIntegralsUNew, &
          basisIntegralsVNew, &
+         basisIntegralsUNewNew, &
+         basisIntegralsVNewNew, &
          basisGradientUTriNew, &
          basisGradientVTriNew, &
          basisIntegralsMetricTriNew, &
@@ -257,7 +262,7 @@ contains
          xLocalTriNew, &
          yLocalTriNew
 
-    integer :: iEdge, iCell, iVertex, iCellOnEdge, iVertexOnEdge
+    integer :: iEdge, iCell, iVertex, iCellOnEdge, iVertexOnEdge, iCellOnVertex
 
     call MPAS_pool_get_config(mesh, "on_a_sphere", on_a_sphere)
     call MPAS_pool_get_config(mesh, "sphere_radius", sphere_radius)
@@ -310,11 +315,16 @@ contains
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsUNew", basisIntegralsUNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsVNew", basisIntegralsVNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricNew", basisIntegralsMetricNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsUNewNew", basisIntegralsUNewNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsVNewNew", basisIntegralsVNewNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricNewNew", basisIntegralsMetricNewNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsUTriNew", basisIntegralsUTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsVTriNew", basisIntegralsVTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricTriNew", basisIntegralsMetricTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisGradientUNew", basisGradientUNew)
     call MPAS_pool_get_array(velocity_variational, "basisGradientVNew", basisGradientVNew)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientUNewNew", basisGradientUNewNew)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientVNewNew", basisGradientVNewNew)
     call MPAS_pool_get_array(velocity_variational, "basisGradientUTriNew", basisGradientUTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisGradientVTriNew", basisGradientVTriNew)
     call MPAS_pool_get_array(velocity_variational, "variationalDenominator", variationalDenominator)
@@ -497,26 +507,60 @@ contains
     if (trim(variationalBasisType) == "wachspress") then
 
        if( .not. useCGrid) then
+          if (.not. useProjectedBGrid) then
+                  do iCell = 1, nCells
+                     call seaice_init_velocity_solver_wachspress(&
+                        iCell, &
+                        maxEdges, &
+                        nEdgesOnCell, &
+                        xLocal(:,iCell), &
+                        yLocal(:,iCell), &
+                        rotateCartesianGrid, &
+                        includeMetricTerms, &
+                        on_a_sphere, &
+                        integrationType, &
+                        integrationOrder, &
+                        sphere_radius, &
+                        basisGradientU(:,:,iCell), &
+                        basisGradientV(:,:,iCell), &
+                        basisIntegralsU(:,:,iCell), &
+                        basisIntegralsV(:,:,iCell), &
+                        basisIntegralsMetric(:,:,iCell))
+                  end do
+          else
+                
+                  do iVertex = 1, nVertices
 
-          do iCell = 1, nCells
-             call seaice_init_velocity_solver_wachspress(&
-                iCell, &
-                maxEdges, &
-                nEdgesOnCell, &
-                xLocal(:,iCell), &
-                yLocal(:,iCell), &
-                rotateCartesianGrid, &
-                includeMetricTerms, &
-                on_a_sphere, &
-                integrationType, &
-                integrationOrder, &
-                sphere_radius, &
-                basisGradientU(:,:,iCell), &
-                basisGradientV(:,:,iCell), &
-                basisIntegralsU(:,:,iCell), &
-                basisIntegralsV(:,:,iCell), &
-                basisIntegralsMetric(:,:,iCell))
-          end do
+                     do iCellOnVertex = 1, vertexDegree
+
+                        iCell = cellsOnVertex(iCellOnVertex,iVertex)
+
+                        if (iCell <= nCells) then
+
+                           call seaice_init_velocity_solver_wachspress(&
+                              iCell, &
+                              maxEdges, &
+                              nEdgesOnCell, &
+                              xLocalNewNew(iVertex,:,iCellOnVertex), &
+                              yLocalNewNew(iVertex,:,iCellOnVertex), &
+                              rotateCartesianGrid, &
+                              includeMetricTerms, &
+                              on_a_sphere, &
+                              integrationType, &
+                              integrationOrder, &
+                              sphere_radius, &
+                              basisGradientUNewNew(iVertex,:,:,iCellOnVertex), &
+                              basisGradientVNewNew(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsUNewNew(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsVNewNew(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsMetricNewNew(iVertex,:,:,iCellOnVertex))
+
+
+                         end if
+
+                      end do
+                   end do
+           endif
 
        else
 
