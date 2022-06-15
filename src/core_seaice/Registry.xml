@@ -649,7 +649,7 @@
 			possible_values="true or false"
 		/>
 		<nml_option name="config_use_projected_b_grid" type="logical" default_value="false" units="unitless"
-			description="Use in the projection of B-grid formulation for the variational approach."
+			description="To project the contribution for the stress on a common tg plane for the B-grid"
 			possible_values="true or false"
 		/>
 		
@@ -3810,9 +3810,9 @@
 		<var name="basisIntegralsUNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"	name_in_code="basisIntegralsUNew"/>
 		<var name="basisIntegralsVNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"	name_in_code="basisIntegralsVNew"/>
 		<var name="basisIntegralsMetricNew"		type="real"	dimensions="nEdges maxEdges maxEdges TWO"	name_in_code="basisIntegralsMetricNew"/>
-		<var name="basisIntegralsUNewNew"			type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsUNewNew"/>
-		<var name="basisIntegralsVNewNew"			type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsVNewNew"/>
-		<var name="basisIntegralsMetricNewNew"		type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsMetricNewNew"/>
+		<var name="basisIntegralsUNewBGrid"		type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsUNewBGrid"/>
+		<var name="basisIntegralsVNewBGrid"		type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsVNewBGrid"/>
+		<var name="basisIntegralsMetricNewBGrid"	type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsMetricNewBGrid"/>
 		<var name="basisIntegralsUTriNew"	       	type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisIntegralsUTriNew"/>
 		<var name="basisIntegralsVTriNew"    		type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisIntegralsVTriNew"/>
 		<var name="basisIntegralsMetricTriNew"     	type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisIntegralsMetricTriNew"/>
@@ -3820,8 +3820,8 @@
 		<var name="basisGradientV"			type="real"	dimensions="maxEdges maxEdges nCells"		name_in_code="basisGradientV"/>
 		<var name="basisGradientUNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"		name_in_code="basisGradientUNew"/>
 		<var name="basisGradientVNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"		name_in_code="basisGradientVNew"/>
-		<var name="basisGradientUNewNew"			type="real"	dimensions="nVertices maxEdges maxEdges R3"		name_in_code="basisGradientUNewNew"/>
-		<var name="basisGradientVNewNew"			type="real"	dimensions="nVertices maxEdges maxEdges R3"		name_in_code="basisGradientVNewNew"/>
+		<var name="basisGradientUNewBGrid"			type="real"	dimensions="nVertices maxEdges maxEdges R3"		name_in_code="basisGradientUNewBGrid"/>
+		<var name="basisGradientVNewBGrid"			type="real"	dimensions="nVertices maxEdges maxEdges R3"		name_in_code="basisGradientVNewBGrid"/>
 		<var name="basisGradientUTriNew"			type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisGradientUTriNew"/>
 		<var name="basisGradientVTriNew"			type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisGradientVTriNew"/>
 		<var name="principalStress1Var"		        type="real"	dimensions="maxEdges nCells Time"		name_in_code="principalStress1"/>
