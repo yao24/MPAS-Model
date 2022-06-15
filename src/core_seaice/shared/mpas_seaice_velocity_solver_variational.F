@@ -63,7 +63,7 @@ contains
        variationalDenominatorType, &
        integrationType, &
        integrationOrder, &
-       useCGrid)!{{{
+       useCGrid,useProjectedBGrid)!{{{
 
     type(MPAS_pool_type), pointer, intent(in) :: &
          mesh !< Input:
@@ -75,7 +75,8 @@ contains
     logical, intent(in) :: &
          rotateCartesianGrid, & !< Input:
          includeMetricTerms, &  !< Input:
-         useCGrid               !< Input:
+         useCGrid, &               !< Input:
+         useProjectedBGrid
 
     character(len=*), intent(in) :: &
          variationalBasisType, &       !< Input:
@@ -95,7 +96,7 @@ contains
          variationalDenominatorType, &
          integrationType, &
          integrationOrder, &
-         useCGrid)
+         useCGrid,useProjectedBGrid)
 
   end subroutine seaice_init_velocity_solver_variational
 
