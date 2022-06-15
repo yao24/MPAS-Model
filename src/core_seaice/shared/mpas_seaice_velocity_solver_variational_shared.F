@@ -114,8 +114,8 @@ contains
 
 
   subroutine seaice_calc_local_coords_projected_b_grid(&
-       xLocalNewNew, &
-       yLocalNewNew, &
+       xLocalNewBGrid, &
+       yLocalNewBGrid, &
        nCells, &
        nEdgesOnCell, &
        verticesOnCell, &
@@ -132,8 +132,8 @@ contains
        onASphere)!{{{
 
     real(kind=RKIND), dimension(:,:,:), intent(out) :: &
-         xLocalNewNew, & !< Output:
-         yLocalNewNew    !< Output:
+         xLocalNewBGrid, & !< Output:
+         yLocalNewBGrid    !< Output:
          
     integer, intent(in) :: &
          nCells, & !< Input:
@@ -162,8 +162,8 @@ contains
     if (onASphere) then
 
         call calc_local_coords_spherical_projected_b_grid(& 
-             xLocalNewNew, &
-             yLocalNewNew, &
+             xLocalNewBGrid, &
+             yLocalNewBGrid, &
              nVertices, &
              cellsOnVertex, &
              verticesOnCell, &
@@ -176,6 +176,12 @@ contains
              yVertex, &
              zVertex, &
              rotateCartesianGrid)
+
+     else
+
+        call mpas_log_write('the projected B-grid method is defined only on a sphere')
+        call abort
+
      endif
   end subroutine seaice_calc_local_coords_projected_b_grid!}}}
 

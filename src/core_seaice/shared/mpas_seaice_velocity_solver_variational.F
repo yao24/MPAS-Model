@@ -96,7 +96,8 @@ contains
          variationalDenominatorType, &
          integrationType, &
          integrationOrder, &
-         useCGrid,useProjectedBGrid)
+         useCGrid, &
+         useProjectedBGrid)
 
   end subroutine seaice_init_velocity_solver_variational
 
@@ -252,8 +253,8 @@ contains
     real(kind=RKIND), dimension(:,:,:), allocatable :: &
          xLocalNew, &
          yLocalNew, &
-         xLocalNewNew, &
-         yLocalNewNew, &
+         xLocalNewBGrid, &
+         yLocalNewBGrid, &
          xLocalTriNew, &
          yLocalTriNew
 
@@ -378,8 +379,8 @@ contains
             allocate(xLocal(maxEdges,nCells))
             allocate(yLocal(maxEdges,nCells))
         else
-            allocate(xLocalNewNew(nVertices,maxEdges,3))
-            allocate(yLocalNewNew(nVertices,maxEdges,3))
+            allocate(xLocalNewBGrid(nVertices,maxEdges,3))
+            allocate(yLocalNewBGrid(nVertices,maxEdges,3))
         endif
        
     else 
@@ -413,8 +414,8 @@ contains
                  on_a_sphere)
         else
             call seaice_calc_local_coords_projected_b_grid(&
-                xLocalNewNew, &
-                yLocalNewNew, &
+                xLocalNewBGrid, &
+                yLocalNewBGrid, &
                 nCells, &
                 nEdgesOnCell, &
                 verticesOnCell, &
@@ -715,8 +716,8 @@ contains
            deallocate(xLocal)
            deallocate(yLocal)
        else
-           deallocate(xLocalNewNew)
-           deallocate(yLocalNewNew)
+           deallocate(xLocalNewBGrid)
+           deallocate(yLocalNewBGrid)
        endif
            
     else 
