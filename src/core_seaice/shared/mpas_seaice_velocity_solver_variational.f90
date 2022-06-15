@@ -1,3 +1,14 @@
+
+
+
+
+
+
+
+
+
+
+
 !|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 !
 !  seaice_velocity_solver_variational
@@ -12,7 +23,9 @@
 
 module seaice_velocity_solver_variational
 
-#include "gpu_macros.inc"
+
+
+
 
   use mpas_derived_types
   use mpas_pool_routines
@@ -373,7 +386,7 @@ contains
     call mpas_timer_start("variational calc_local_coords")
 
     if (.not. useCGrid) then
-       if (.not. useProjectedBGrid) then 
+       if(.not. useProjectedBGrid) then 
             allocate(xLocal(maxEdges,nCells))
             allocate(yLocal(maxEdges,nCells))
         else
@@ -417,8 +430,8 @@ contains
                 nCells, &
                 nEdgesOnCell, &
                 verticesOnCell, &
-                nVertices, & 
-                cellsOnVertex, & 
+                nVertices, &  !new
+                cellsOnVertex, &  !new
                 vertexDegree, &
                 xVertex, &
                 yVertex, &
@@ -1513,14 +1526,8 @@ end subroutine variational_denominator_c_grid
          strain12Tmp
 
     ! loop over cells
-#ifdef MPAS_OPENMP_OFFLOAD
-!$omp target teams distribute parallel do
-#elif MPAS_OPENACC
-!$acc parallel loop gang worker
-#else
 !$omp parallel do default(shared) private(iGradientVertex, iBasisVertex, iVertex, jVertex, &
 !$omp&                                    strain11Tmp, strain22Tmp, strain12Tmp)
-#endif
 
     do iCell = 1, nCells
    
@@ -1906,50 +1913,13 @@ end subroutine variational_denominator_c_grid
 
        denominator = 1.0_RKIND + (0.5_RKIND * dtElastic) / dampingTimescale
 
-#ifdef MPAS_OPENMP_OFFLOAD
-!$omp target teams distribute parallel do
-#elif MPAS_OPENACC
-!$acc parallel loop gang worker
-#else
 !$omp parallel do default(shared) private(iVertexOnCell)
-#endif
        do iCell = 1, nCells
 
           replacementPressure(:,iCell) = 0.0_RKIND
 
           if (solveStress(iCell) == 1) then
 
-#if defined(MPAS_OPENMP_OFFLOAD) || defined(MPAS_OPENACC)
-             ! inline call to seaice_evp_constitutive_relation for GPUs
-             do iVertexOnCell = 1, nEdgesOnCell(iCell)
-
-                ! convert from stress11 to stress1 etc
-                strainDivergence = strain11(iVertexOnCell,iCell) + strain22(iVertexOnCell,iCell)
-                strainTension    = strain11(iVertexOnCell,iCell) - strain22(iVertexOnCell,iCell)
-                strainShearing   = strain12(iVertexOnCell,iCell) * 2.0_RKIND
-
-                stress1 = stress11(iVertexOnCell,iCell) + stress22(iVertexOnCell,iCell)
-                stress2 = stress11(iVertexOnCell,iCell) - stress22(iVertexOnCell,iCell)
-
-                ! perform the constituitive relation
-                Delta = sqrt(strainDivergence*strainDivergence + &
-                             (strainTension*strainTension + strainShearing*strainShearing) / eccentricitySquared)
-
-                pressureCoefficient                      = icePressure(iCell) / max(Delta,puny)
-                replacementPressure(iVertexOnCell,iCell) = pressureCoefficient * Delta
-
-                pressureCoefficient = (pressureCoefficient * dtElastic) / (2.0_RKIND * dampingTimescale)
-
-                stress1  = (stress1  +  pressureCoefficient                        * (strainDivergence - Delta)) / denominator
-                stress2  = (stress2  + (pressureCoefficient / eccentricitySquared) *  strainTension            ) / denominator
-                stress12(iVertexOnCell,iCell) = (stress12(iVertexOnCell,iCell) &
-                                     + (pressureCoefficient / eccentricitysquared) * strainShearing * 0.5_RKIND) / denominator
-
-                ! convert back
-                stress11(iVertexOnCell,iCell) = 0.5_RKIND * (stress1 + stress2)
-                stress22(iVertexOnCell,iCell) = 0.5_RKIND * (stress1 - stress2)
-
-#else
              !$omp simd
              do iVertexOnCell = 1, nEdgesOnCell(iCell)
 
@@ -1964,7 +1934,6 @@ end subroutine variational_denominator_c_grid
                      replacementPressure(iVertexOnCell,iCell), &
                      areaCell(iCell), &
                      dtElastic)
-#endif
              enddo ! iVertexOnCell
 
           endif ! solveStress
@@ -1973,9 +1942,6 @@ end subroutine variational_denominator_c_grid
 
     else if (constitutiveRelationType == REVISED_EVP_CONSTITUTIVE_RELATION) then
 
-#ifdef MPAS_OPENMP
-!$omp parallel do default(shared) private(iVertexOnCell)
-#endif
        do iCell = 1, nCells
 
           if (solveStress(iCell) == 1) then
@@ -2002,9 +1968,6 @@ end subroutine variational_denominator_c_grid
 
     else if (constitutiveRelationType == LINEAR_CONSTITUTIVE_RELATION) then
 
-#ifdef MPAS_OPENMP
-!$omp parallel do default(shared) private(iCell, iVertexOnCell)
-#endif
        do iCell = 1, nCells
 
           if (solveStress(iCell) == 1) then
@@ -2354,9 +2317,6 @@ end subroutine variational_denominator_c_grid
          iCell, &
          iVertexOnCell
 
-#ifdef MPAS_OPENMP
-!$omp parallel do default(shared) private(iCell, iVertexOnCell)
-#endif
     do iCell = 1, nCells
 
        if (solveStress(iCell) == 1) then
@@ -2481,14 +2441,8 @@ end subroutine variational_denominator_c_grid
          vert2
 
     ! loop over velocity positions
-#ifdef MPAS_OPENMP_OFFLOAD
-!$omp target teams distribute parallel do
-#elif MPAS_OPENACC
-!$acc parallel loop gang worker
-#else
 !$omp parallel do default(shared) private(stressDivergenceUVertex, stressDivergenceVVertex, &
 !$omp&   iSurroundingCell, iCell, iVelocityVertex, stressDivergenceUCell, stressDivergenceVCell, iStressVertex)
-#endif
     do iVertex = 1, nVerticesSolve
 
        if (solveVelocity(iVertex) == 1) then

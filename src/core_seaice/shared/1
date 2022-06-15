@@ -115,8 +115,7 @@ contains
          config_include_metric_terms, &
          config_aggregate_halo_exch, &
          config_reuse_halo_exch, &
-         config_use_c_grid, &
-         config_use_projected_b_grid
+         config_use_c_grid
 
     type (MPAS_pool_type), pointer :: &
          mesh, &
