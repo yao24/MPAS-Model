@@ -189,13 +189,13 @@ contains
          basisGradientUNew, &
          basisGradientVNew, &
          basisIntegralsMetricNew, &
-         basisGradientUNewNew, &
-         basisGradientVNewNew, &
-         basisIntegralsMetricNewNew, &
+         basisGradientUNewBGrid, &
+         basisGradientVNewBGrid, &
+         basisIntegralsMetricNewBGrid, &
          basisIntegralsUNew, &
          basisIntegralsVNew, &
-         basisIntegralsUNewNew, &
-         basisIntegralsVNewNew, &
+         basisIntegralsUNewBGrid, &
+         basisIntegralsVNewBGrid, &
          basisGradientUTriNew, &
          basisGradientVTriNew, &
          basisIntegralsMetricTriNew, &
@@ -316,16 +316,16 @@ contains
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsUNew", basisIntegralsUNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsVNew", basisIntegralsVNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricNew", basisIntegralsMetricNew)
-    call MPAS_pool_get_array(velocity_variational, "basisIntegralsUNewNew", basisIntegralsUNewNew)
-    call MPAS_pool_get_array(velocity_variational, "basisIntegralsVNewNew", basisIntegralsVNewNew)
-    call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricNewNew", basisIntegralsMetricNewNew)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsUNewBGrid", basisIntegralsUNewBGrid)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsVNewBGrid", basisIntegralsVNewBGrid)
+    call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricNewBGrid", basisIntegralsMetricNewBGrid)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsUTriNew", basisIntegralsUTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsVTriNew", basisIntegralsVTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisIntegralsMetricTriNew", basisIntegralsMetricTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisGradientUNew", basisGradientUNew)
     call MPAS_pool_get_array(velocity_variational, "basisGradientVNew", basisGradientVNew)
-    call MPAS_pool_get_array(velocity_variational, "basisGradientUNewNew", basisGradientUNewNew)
-    call MPAS_pool_get_array(velocity_variational, "basisGradientVNewNew", basisGradientVNewNew)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientUNewBGrid", basisGradientUNewBGrid)
+    call MPAS_pool_get_array(velocity_variational, "basisGradientVNewBGrid", basisGradientVNewBGrid)
     call MPAS_pool_get_array(velocity_variational, "basisGradientUTriNew", basisGradientUTriNew)
     call MPAS_pool_get_array(velocity_variational, "basisGradientVTriNew", basisGradientVTriNew)
     call MPAS_pool_get_array(velocity_variational, "variationalDenominator", variationalDenominator)
@@ -542,19 +542,19 @@ contains
                               iCell, &
                               maxEdges, &
                               nEdgesOnCell, &
-                              xLocalNewNew(iVertex,:,iCellOnVertex), &
-                              yLocalNewNew(iVertex,:,iCellOnVertex), &
+                              xLocalNewBGrid(iVertex,:,iCellOnVertex), &
+                              yLocalNewBGrid(iVertex,:,iCellOnVertex), &
                               rotateCartesianGrid, &
                               includeMetricTerms, &
                               on_a_sphere, &
                               integrationType, &
                               integrationOrder, &
                               sphere_radius, &
-                              basisGradientUNewNew(iVertex,:,:,iCellOnVertex), &
-                              basisGradientVNewNew(iVertex,:,:,iCellOnVertex), &
-                              basisIntegralsUNewNew(iVertex,:,:,iCellOnVertex), &
-                              basisIntegralsVNewNew(iVertex,:,:,iCellOnVertex), &
-                              basisIntegralsMetricNewNew(iVertex,:,:,iCellOnVertex))
+                              basisGradientUNewBGrid(iVertex,:,:,iCellOnVertex), &
+                              basisGradientVNewBGrid(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsUNewBGrid(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsVNewBGrid(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsMetricNewBGrid(iVertex,:,:,iCellOnVertex))
 
 
                          end if
