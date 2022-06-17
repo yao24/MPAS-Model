@@ -627,6 +627,7 @@ contains
     else if (trim(variationalBasisType) == "pwl") then
 
        if ( .not. useCGrid ) then
+          if (.not. useProjectedBGrid) then
           call seaice_init_velocity_solver_pwl(&
                nCells, &
                maxEdges, &
@@ -642,6 +643,33 @@ contains
                basisIntegralsMetric, &
                basisIntegralsU, &
                basisIntegralsV)
+          else 
+                  do iVertex = 1, nVertices
+
+                     do iCellOnVertex = 1, vertexDegree
+
+                        iCell = cellsOnEdge(iCellOnVertex,iVertex)
+
+                        if (iCell <= nCells) then
+
+                           call seaice_init_velocity_solver_pwl_c_grid(&
+                              iCell, &
+                              maxEdges, &
+                              nEdgesOnCell, &
+                              areaCellCGrid, &
+                              xLocalNewBGrid(iVertex,:,iCellOnVertex), &
+                              yLocalNewBGrid(iVertex,:,iCellOnVertex), &
+                              basisGradientUNewBGrid(iVertex,:,:,iCellOnVertex), &
+                              basisGradientVNewBGrid(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsMetricNewBGrid(iEdge,:,:,iCellOnVertex), &
+                              basisIntegralsUNewBGrid(iVertex,:,:,iCellOnVertex), &
+                              basisIntegralsVNewBGrid(iVertex,:,:,iCellOnVertex))
+
+                        end if
+
+                     end do
+                  end do
+           end if 
        else
 
           do iEdge = 1, nEdges
