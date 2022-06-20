@@ -656,12 +656,12 @@ contains
                               iCell, &
                               maxEdges, &
                               nEdgesOnCell, &
-                              areaCellCGrid, &
+                              areaCell, &
                               xLocalNewBGrid(iVertex,:,iCellOnVertex), &
                               yLocalNewBGrid(iVertex,:,iCellOnVertex), &
                               basisGradientUNewBGrid(iVertex,:,:,iCellOnVertex), &
                               basisGradientVNewBGrid(iVertex,:,:,iCellOnVertex), &
-                              basisIntegralsMetricNewBGrid(iEdge,:,:,iCellOnVertex), &
+                              basisIntegralsMetricNewBGrid(iVertex,:,:,iCellOnVertex), &
                               basisIntegralsUNewBGrid(iVertex,:,:,iCellOnVertex), &
                               basisIntegralsVNewBGrid(iVertex,:,:,iCellOnVertex))
 
