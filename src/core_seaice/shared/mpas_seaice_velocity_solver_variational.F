@@ -741,8 +741,10 @@ contains
             cellsOnVertex, &
             cellVerticesAtVertex, &
             basisIntegralsMetric, &
+            basisIntegralsMetricNewBGrid, &
             variationalDenominatorType, &
-            variationalDenominator)
+            variationalDenominator, &
+            useProjectedBGrid)
        call mpas_timer_stop("variational denominator")
     else
        call mpas_timer_start("variational denominator_c_grid")
@@ -825,8 +827,10 @@ contains
        cellsOnVertex, &
        cellVerticesAtVertex, &
        basisIntegralsMetric, &
+       basisIntegralsMetricNewBGrid, &
        variationalDenominatorType, &
-       variationalDenominator)
+       variationalDenominator, &
+       useProjectedBGrid)
 
     integer, intent(in) :: &
          nVertices, & !< Input:
@@ -848,8 +852,14 @@ contains
     real(kind=RKIND), dimension(:,:,:), intent(in) :: &
          basisIntegralsMetric !< Input:
 
+    real(kind=RKIND), dimension(:,:,:,:), intent(in) :: &
+         basisIntegralsMetricNewBGrid !< Input:
+
     character(len=*), intent(in) :: &
          variationalDenominatorType !< Input:
+
+    logical, intent(in) :: &
+         useProjectedBGrid
 
     real(kind=RKIND), dimension(:), intent(out) :: &
          variationalDenominator
@@ -862,35 +872,65 @@ contains
          iVelocityVertex
 
     if (trim(variationalDenominatorType) == "alternate") then
+        
+       if (.not. useProjectedBGrid) then 
+               do iVertex = 1, nVertices
 
-       do iVertex = 1, nVertices
+                  variationalDenominator(iVertex) = 0.0_RKIND
 
-          variationalDenominator(iVertex) = 0.0_RKIND
+                  ! loop over surrounding cells
+                  do iSurroundingCell = 1, vertexDegree
 
-          ! loop over surrounding cells
-          do iSurroundingCell = 1, vertexDegree
+                     ! get the cell number of this cell
+                     iCell = cellsOnVertex(iSurroundingCell, iVertex)
 
-             ! get the cell number of this cell
-             iCell = cellsOnVertex(iSurroundingCell, iVertex)
+                     ! get the vertexOnCell number of the iVertex velocity point from cell iCell
+                     iVelocityVertex = cellVerticesAtVertex(iSurroundingCell,iVertex)
 
-             ! get the vertexOnCell number of the iVertex velocity point from cell iCell
-             iVelocityVertex = cellVerticesAtVertex(iSurroundingCell,iVertex)
+                     ! loop over the vertices of the surrounding cell
+                     do iStressVertex = 1, nEdgesOnCell(iCell)
 
-             ! loop over the vertices of the surrounding cell
-             do iStressVertex = 1, nEdgesOnCell(iCell)
+                        variationalDenominator(iVertex) = variationalDenominator(iVertex) + &
+                             basisIntegralsMetric(iStressVertex,iVelocityVertex,iCell)
 
-                variationalDenominator(iVertex) = variationalDenominator(iVertex) + &
-                     basisIntegralsMetric(iStressVertex,iVelocityVertex,iCell)
+                     enddo ! iStressVertex
 
-             enddo ! iStressVertex
+                  enddo ! iSurroundingCell
 
-          enddo ! iSurroundingCell
+                  ! inverse
+                  variationalDenominator(iVertex) = variationalDenominator(iVertex)
 
-          ! inverse
-          variationalDenominator(iVertex) = variationalDenominator(iVertex)
+               enddo ! iVertex
+        else
+               do iVertex = 1, nVertices
 
-       enddo ! iVertex
+                  variationalDenominator(iVertex) = 0.0_RKIND
 
+                  ! loop over surrounding cells
+                  do iSurroundingCell = 1, vertexDegree
+
+                     ! get the cell number of this cell
+                     iCell = cellsOnVertex(iSurroundingCell, iVertex)
+
+                     ! get the vertexOnCell number of the iVertex velocity point from cell iCell
+                     iVelocityVertex = cellVerticesAtVertex(iSurroundingCell,iVertex)
+
+                     ! loop over the vertices of the surrounding cell
+                     do iStressVertex = 1, nEdgesOnCell(iCell)
+
+                        variationalDenominator(iVertex) = variationalDenominator(iVertex) + &
+                             basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCell)
+
+                     enddo ! iStressVertex
+
+                  enddo ! iSurroundingCell
+
+                  ! inverse
+                  variationalDenominator(iVertex) = variationalDenominator(iVertex)
+
+               enddo ! iVertex
+              
+        end if 
     else if (trim(variationalDenominatorType) == "original") then
 
        do iVertex = 1, nVertices
@@ -1409,6 +1449,7 @@ end subroutine compute_c_grid_polygon_and_tri_areas
 
 end subroutine variational_denominator_c_grid
 
+
 !|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 !
 !  homogenize_variational_basis_field
@@ -1595,7 +1636,7 @@ end subroutine variational_denominator_c_grid
 !$omp parallel do default(shared) private(iGradientVertex, iBasisVertex, iVertex, jVertex, &
 !$omp&                                    strain11Tmp, strain22Tmp, strain12Tmp)
 #endif
-
+    
     do iCell = 1, nCells
    
        if (solveStress(iCell) == 1) then
@@ -1796,6 +1837,110 @@ end subroutine variational_denominator_c_grid
     end do !iEdge
 
   end subroutine seaice_strain_tensor_variational_c_grid !}}}
+!-----------------------------------------------------------------------
+
+  subroutine seaice_strain_tensor_variational_projected_b_grid(&
+       mesh, &
+       strain11, &
+       strain22, &
+       strain12, &
+       uVelocityBGrid, &
+       vVelocityBGrid, &
+       basisGradientUNewBGrid, &
+       basisGradientVNewBGrid, &
+       tanLatEdgeRotatedOverRadius, &
+       solveStress)!{{{
+
+    use seaice_mesh_pool, only: &
+         nCells, &
+         nVertices, & 
+         vertexDegree, &
+         cellsOnVertex, &
+         verticesOnCell, &
+         edgesOnVertex, &
+         nEdgesOnCell, &
+         verticesOnEdge
+
+    type(MPAS_pool_type), pointer, intent(in) :: &
+         mesh !< Input:
+
+    real(kind=RKIND), dimension(:,:), intent(out) :: &
+         strain11,    & !< Output:
+         strain22,    & !< Output:
+         strain12       !< Output:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         tanLatEdgeRotatedOverRadius !< Input:
+
+    real(kind=RKIND), dimension(:), intent(inout) :: &
+         uVelocityBGrid, & !< Input:
+         vVelocityBGrid    !< Input:
+
+    real(kind=RKIND), dimension(:,:,:,:), contiguous, intent(in) :: &
+         basisGradientUNewBGrid, & !< Input:
+         basisGradientVNewBGrid   !< Input:
+
+    integer, dimension(:), intent(in) :: &
+         solveStress  !< Input:
+
+    integer :: &
+         iCellOnVertex, &
+         iCell, &
+         iGradientVertex, &
+         iBasisVertex, &
+         iVertex, &
+         jVertex, &
+         kVertex 
+
+    real(kind=RKIND) :: &
+         strain11Tmp, &
+         strain22Tmp, &
+         strain12Tmp
+
+
+    do iVertex = 1, nVertices
+
+       do iCellOnVertex = 1, vertexDegree
+          iCell = cellsOnVertex(iCellOnVertex,iVertex)
+   
+          if (solveStress(iCell) == 1) then
+
+             ! loop over velocity points surrounding cell - location of stress and derivative
+             do iGradientVertex = 1, nEdgesOnCell(iCell)
+
+                strain11Tmp = 0.0_RKIND
+                strain22Tmp = 0.0_RKIND
+                strain12Tmp = 0.0_RKIND
+
+                ! loop over basis functions
+                do iBasisVertex = 1, nEdgesOnCell(iCell)
+
+                   jVertex = verticesOnCell(iBasisVertex,iCell)
+
+                   strain11Tmp = strain11Tmp + uVelocityBGrid(jVertex) * basisGradientUNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex)
+                   strain22Tmp = strain22Tmp + vVelocityBGrid(jVertex) * basisGradientVNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex)
+                   strain12Tmp = strain12Tmp + 0.5_RKIND * (&
+                              uVelocityBGrid(jVertex) * basisGradientVNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex) + &
+                              vVelocityBGrid(jVertex) * basisGradientUNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex))
+
+                 end do ! jVertexOnCell
+
+                 ! metric terms
+                 kVertex = verticesOnCell(iGradientVertex,iCell)
+
+                  strain11(iGradientVertex,iCell) = strain11Tmp - vVelocityBGrid(kVertex) * tanLatEdgeRotatedOverRadius(kVertex)
+                  strain12(iGradientVertex,iCell) = strain12Tmp + uVelocityBGrid(kVertex) * tanLatEdgeRotatedOverRadius(kVertex) * 0.5_RKIND
+                  strain22(iGradientVertex,iCell) = strain22Tmp
+
+               end do ! kVertexOnCell
+
+           end if !solveStress
+
+       end do
+
+    end do !iVertex
+
+  end subroutine seaice_strain_tensor_variational_projected_b_grid !}}}
 
 !-----------------------------------------------------------------------
 
@@ -2376,6 +2521,180 @@ end subroutine variational_denominator_c_grid
   deallocate(icePressureTriCGrid)
 
   end subroutine seaice_stress_tensor_variational_c_grid!}}}
+!-----------------------------------------------------------------------
+
+  subroutine seaice_stress_tensor_variational_projected_b_grid(&
+       mesh, &
+       velocityVariational, &
+       stress11, &
+       stress22, &
+       stress12, &
+       strain11, &
+       strain22, &
+       strain12, &
+       icePressure, &
+       replacementPressure, &
+       solveStress, &
+       dtElastic)!{{{
+
+    use seaice_velocity_solver_constitutive_relation, only: &
+         constitutiveRelationType, &
+         EVP_CONSTITUTIVE_RELATION, &
+         REVISED_EVP_CONSTITUTIVE_RELATION, &
+         LINEAR_CONSTITUTIVE_RELATION, &
+         seaice_evp_constitutive_relation, &
+         seaice_evp_constitutive_relation_revised, &
+         seaice_linear_constitutive_relation, &
+         eccentricitySquared, puny, dampingTimescale
+
+    use seaice_mesh_pool, only: &
+         nCells, &
+         nVertices, &
+         nEdgesOnCell, &
+         cellsOnVertex, &
+         vertexDegree
+
+    type(MPAS_pool_type), pointer, intent(in) :: &
+         mesh, & !< Input:
+         velocityVariational !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         icePressure !< Input:
+
+    integer, dimension(:), intent(in) :: &
+         solveStress  !< Input:
+
+    real(kind=RKIND), dimension(:,:), contiguous, intent(inout) :: &
+         stress11,    & !< Input/Output:
+         stress22,    & !< Input/Output:
+         stress12      !< Input/Output:
+
+    real(kind=RKIND), dimension(:,:), contiguous, intent(out) :: &
+         replacementPressure    !< Output:
+
+    real(kind=RKIND), dimension(:,:), contiguous, intent(in) :: &
+         strain11,    & !< Input:
+         strain22,    & !< Input:
+         strain12      !< Input:
+
+    real(kind=RKIND), intent(in) :: &
+         dtElastic !< Input:
+
+    real(kind=RKIND), dimension(:), pointer :: &
+         areaCell 
+
+    integer :: &
+         iCell, &
+         iVertex, &
+         iVerticesOnCell
+
+    real(kind=RKIND), dimension(:), allocatable :: &
+         icePressureCellBGrid  !TODO: give as input!!!!
+
+    real(kind=RKIND) :: &
+         strainDivergence,    &
+         strainTension,       &
+         strainShearing,      &
+         stress1,             &
+         stress2,             &
+         Delta,               &
+         pressureCoefficient, &
+         denominator
+
+    ! TODO: I removed the OpenMP parts!
+
+    allocate(icePressureCellBGrid(nCells))
+
+    ! TODO: this has to be handled properly in the future
+    do iCell = 1, nCells
+       icePressureCellBGrid(iCell) = icePressure(iCell)
+    end do
+
+
+    ! init variables
+    call MPAS_pool_get_array(velocityVariational, "areaCell", areaCell)
+
+    if (constitutiveRelationType == EVP_CONSTITUTIVE_RELATION) then
+
+       denominator = 1.0_RKIND + (0.5_RKIND * dtElastic) / dampingTimescale
+
+       do iCell = 1, nCells
+
+          if (solveStress(iCell) == 1) then
+
+             do iVerticesOnCell = 1, nEdgesOnCell(iCell)
+
+                call seaice_evp_constitutive_relation(&
+                     stress11(iVerticesOnCell,iCell), &
+                     stress22(iVerticesOnCell,iCell), &
+                     stress12(iVerticesOnCell,iCell), &
+                     strain11(iVerticesOnCell,iCell), &
+                     strain22(iVerticesOnCell,iCell), &
+                     strain12(iVerticesOnCell,iCell), &
+                     icePressureCellBGrid(iCell), &
+                     replacementPressure(iVerticesOnCell,iCell), &
+                     areaCell(iCell), &
+                     dtElastic)
+
+              end do ! iVerticesOnCell
+ 
+          end if 
+     
+       end do ! iCell
+
+
+    else if (constitutiveRelationType == REVISED_EVP_CONSTITUTIVE_RELATION) then
+
+       do iCell = 1, nCells
+
+          if (solveStress(iCell) == 1) then
+
+             do iVerticesOnCell = 1, nEdgesOnCell(iCell)
+
+                call seaice_evp_constitutive_relation_revised(&
+                     stress11(iVerticesOnCell,iCell), &
+                     stress22(iVerticesOnCell,iCell), &
+                     stress12(iVerticesOnCell,iCell), &
+                     strain11(iVerticesOnCell,iCell), &
+                     strain22(iVerticesOnCell,iCell), &
+                     strain12(iVerticesOnCell,iCell), &
+                     icePressureCellBGrid(iCell), &
+                     replacementPressure(iVerticesOnCell,iCell), &
+                     areaCell(iCell))
+
+              end do ! iVerticesOnCell
+
+          end if
+
+       end do ! iCell
+
+    else if (constitutiveRelationType == LINEAR_CONSTITUTIVE_RELATION) then
+
+       do iCell = 1, nCells
+
+          if (solveStress(iCell) == 1) then
+
+             do iVerticesOnCell = 1, nEdgesOnCell(iCell)
+
+                call seaice_linear_constitutive_relation(&
+                     stress11(iVerticesOnCell,iCell), &
+                     stress22(iVerticesOnCell,iCell), &
+                     stress12(iVerticesOnCell,iCell), &
+                     strain11(iVerticesOnCell,iCell), &
+                     strain22(iVerticesOnCell,iCell), &
+                     strain12(iVerticesOnCell,iCell))
+
+             end do ! iVerticesOnCell
+
+          end if  
+
+       end do ! iCell
+
+    end if ! constitutiveRelationType
+
+  deallocate(icePressureCellBGrid)
+
+  end subroutine seaice_stress_tensor_variational_projected_b_grid!}}}
 
 !-----------------------------------------------------------------------
 
