@@ -28,6 +28,7 @@ module seaice_velocity_solver_variational
        seaice_init_velocity_solver_variational, &
        seaice_strain_tensor_variational, &
        seaice_strain_tensor_variational_c_grid, &
+       seaice_strain_tensor_variational_projected_b_grid, &
        seaice_average_strains_on_vertex, &
        seaice_stress_tensor_variational, &
        seaice_stress_tensor_variational_c_grid, &
