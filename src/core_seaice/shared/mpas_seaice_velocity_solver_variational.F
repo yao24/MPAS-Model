@@ -1874,8 +1874,8 @@ end subroutine variational_denominator_c_grid
          tanLatEdgeRotatedOverRadius !< Input:
 
     real(kind=RKIND), dimension(:), intent(inout) :: &
-         uVelocityBGrid, & !< Input:
-         vVelocityBGrid    !< Input:
+         uVelocity, & !< Input:
+         vVelocity    !< Input:
 
     real(kind=RKIND), dimension(:,:,:,:), contiguous, intent(in) :: &
          basisGradientUNewBGrid, & !< Input:
