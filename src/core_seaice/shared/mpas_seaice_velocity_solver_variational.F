@@ -1844,8 +1844,8 @@ end subroutine variational_denominator_c_grid
        strain11, &
        strain22, &
        strain12, &
-       uVelocityBGrid, &
-       vVelocityBGrid, &
+       uVelocity, &
+       vVelocity, &
        basisGradientUNewBGrid, &
        basisGradientVNewBGrid, &
        tanLatEdgeRotatedOverRadius, &
@@ -1917,19 +1917,19 @@ end subroutine variational_denominator_c_grid
 
                    jVertex = verticesOnCell(iBasisVertex,iCell)
 
-                   strain11Tmp = strain11Tmp + uVelocityBGrid(jVertex) * basisGradientUNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex)
-                   strain22Tmp = strain22Tmp + vVelocityBGrid(jVertex) * basisGradientVNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex)
+                   strain11Tmp = strain11Tmp + uVelocity(jVertex) * basisGradientUNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex)
+                   strain22Tmp = strain22Tmp + vVelocity(jVertex) * basisGradientVNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex)
                    strain12Tmp = strain12Tmp + 0.5_RKIND * (&
-                              uVelocityBGrid(jVertex) * basisGradientVNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex) + &
-                              vVelocityBGrid(jVertex) * basisGradientUNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex))
+                              uVelocity(jVertex) * basisGradientVNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex) + &
+                              vVelocity(jVertex) * basisGradientUNewBGrid(iVertex,iBasisVertex,iGradientVertex,iCellOnVertex))
 
                  end do ! jVertexOnCell
 
                  ! metric terms
                  kVertex = verticesOnCell(iGradientVertex,iCell)
 
-                  strain11(iGradientVertex,iCell) = strain11Tmp - vVelocityBGrid(kVertex) * tanLatEdgeRotatedOverRadius(kVertex)
-                  strain12(iGradientVertex,iCell) = strain12Tmp + uVelocityBGrid(kVertex) * tanLatEdgeRotatedOverRadius(kVertex) * 0.5_RKIND
+                  strain11(iGradientVertex,iCell) = strain11Tmp - vVelocity(kVertex) * tanLatEdgeRotatedOverRadius(kVertex)
+                  strain12(iGradientVertex,iCell) = strain12Tmp + uVelocity(kVertex) * tanLatEdgeRotatedOverRadius(kVertex) * 0.5_RKIND
                   strain22(iGradientVertex,iCell) = strain22Tmp
 
                end do ! kVertexOnCell
@@ -2521,193 +2521,6 @@ end subroutine variational_denominator_c_grid
   deallocate(icePressureTriCGrid)
 
   end subroutine seaice_stress_tensor_variational_c_grid!}}}
-!-----------------------------------------------------------------------
-
-  subroutine seaice_stress_tensor_variational_projected_b_grid(&
-       mesh, &
-       velocityVariational, &
-       stress11, &
-       stress22, &
-       stress12, &
-       strain11, &
-       strain22, &
-       strain12, &
-       icePressure, &
-       replacementPressure, &
-       solveStress, &
-       dtElastic)!{{{
-
-    use seaice_velocity_solver_constitutive_relation, only: &
-         constitutiveRelationType, &
-         EVP_CONSTITUTIVE_RELATION, &
-         REVISED_EVP_CONSTITUTIVE_RELATION, &
-         LINEAR_CONSTITUTIVE_RELATION, &
-         seaice_evp_constitutive_relation, &
-         seaice_evp_constitutive_relation_revised, &
-         seaice_linear_constitutive_relation, &
-         eccentricitySquared, puny, dampingTimescale
-
-    use seaice_mesh_pool, only: &
-         nCells, &
-         nVertices, &
-         nEdgesOnCell, &
-         cellsOnVertex, &
-         vertexDegree
-
-    type(MPAS_pool_type), pointer, intent(in) :: &
-         mesh, & !< Input:
-         velocityVariational !< Input:
-
-    real(kind=RKIND), dimension(:), intent(in) :: &
-         icePressure !< Input:
-
-    integer, dimension(:), intent(in) :: &
-         solveStress  !< Input:
-
-    real(kind=RKIND), dimension(:,:), contiguous, intent(inout) :: &
-         stress11,    & !< Input/Output:
-         stress22,    & !< Input/Output:
-         stress12      !< Input/Output:
-
-    real(kind=RKIND), dimension(:,:), contiguous, intent(out) :: &
-         replacementPressure    !< Output:
-
-    real(kind=RKIND), dimension(:,:), contiguous, intent(in) :: &
-         strain11,    & !< Input:
-         strain22,    & !< Input:
-         strain12      !< Input:
-
-    real(kind=RKIND), intent(in) :: &
-         dtElastic !< Input:
-
-    real(kind=RKIND), dimension(:), pointer :: &
-         areaCell 
-
-    integer :: &
-         iCell, &
-         iVertex, &
-         iVerticesOnCell
-
-    real(kind=RKIND), dimension(:), allocatable :: &
-         icePressureCellBGrid  !TODO: give as input!!!!
-
-    real(kind=RKIND) :: &
-         strainDivergence,    &
-         strainTension,       &
-         strainShearing,      &
-         stress1,             &
-         stress2,             &
-         Delta,               &
-         pressureCoefficient, &
-         denominator
-
-    ! TODO: I removed the OpenMP parts!
-
-    allocate(icePressureCellBGrid(nCells))
-
-    ! TODO: this has to be handled properly in the future
-    do iCell = 1, nCells
-       icePressureCellBGrid(iCell) = icePressure(iCell)
-    end do
-
-
-    ! init variables
-    call MPAS_pool_get_array(velocityVariational, "areaCell", areaCell)
-
-    if (constitutiveRelationType == EVP_CONSTITUTIVE_RELATION) then
-
-       denominator = 1.0_RKIND + (0.5_RKIND * dtElastic) / dampingTimescale
-
-       do iCell = 1, nCells
-
-          if (solveStress(iCell) == 1) then
-
-             do iVerticesOnCell = 1, nEdgesOnCell(iCell)
-
-                call seaice_evp_constitutive_relation(&
-                     stress11(iVerticesOnCell,iCell), &
-                     stress22(iVerticesOnCell,iCell), &
-                     stress12(iVerticesOnCell,iCell), &
-                     strain11(iVerticesOnCell,iCell), &
-                     strain22(iVerticesOnCell,iCell), &
-                     strain12(iVerticesOnCell,iCell), &
-                     icePressureCellBGrid(iCell), &
-                     replacementPressure(iVerticesOnCell,iCell), &
-                     areaCell(iCell), &
-                     dtElastic)
-
-              end do ! iVerticesOnCell
- 
-          end if 
-     
-       end do ! iCell
-
-
-    else if (constitutiveRelationType == REVISED_EVP_CONSTITUTIVE_RELATION) then
-
-       do iCell = 1, nCells
-
-          if (solveStress(iCell) == 1) then
-
-             do iVerticesOnCell = 1, nEdgesOnCell(iCell)
-
-                call seaice_evp_constitutive_relation_revised(&
-                     stress11(iVerticesOnCell,iCell), &
-                     stress22(iVerticesOnCell,iCell), &
-                     stress12(iVerticesOnCell,iCell), &
-                     strain11(iVerticesOnCell,iCell), &
-                     strain22(iVerticesOnCell,iCell), &
-                     strain12(iVerticesOnCell,iCell), &
-                     icePressureCellBGrid(iCell), &
-                     replacementPressure(iVerticesOnCell,iCell), &
-                     areaCell(iCell))
-
-              end do ! iVerticesOnCell
-
-          end if
-
-       end do ! iCell
-
-    else if (constitutiveRelationType == LINEAR_CONSTITUTIVE_RELATION) then
-
-       do iCell = 1, nCells
-
-          if (solveStress(iCell) == 1) then
-
-             do iVerticesOnCell = 1, nEdgesOnCell(iCell)
-
-                call seaice_linear_constitutive_relation(&
-                     stress11(iVerticesOnCell,iCell), &
-                     stress22(iVerticesOnCell,iCell), &
-                     stress12(iVerticesOnCell,iCell), &
-                     strain11(iVerticesOnCell,iCell), &
-                     strain22(iVerticesOnCell,iCell), &
-                     strain12(iVerticesOnCell,iCell))
-
-             end do ! iVerticesOnCell
-
-          end if  
-
-       end do ! iCell
-
-    end if ! constitutiveRelationType
-
-  deallocate(icePressureCellBGrid)
-
-  end subroutine seaice_stress_tensor_variational_projected_b_grid!}}}
-
-!-----------------------------------------------------------------------
-
-!|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-!
-!  seaice_stress_tensor_variational_linear
-!
-!> \brief
-!> \author Adrian K. Turner, LANL
-!> \date 3rd October 2019
-!> \details
-!>
-!
 !-----------------------------------------------------------------------
 
   subroutine seaice_stress_tensor_variational_linear(&
