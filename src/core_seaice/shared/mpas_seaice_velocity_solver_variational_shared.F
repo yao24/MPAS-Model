@@ -901,9 +901,9 @@ contains
                      (yCellRotated - yCenterRotated) * n2 + &
                      (zCellRotated - zCenterRotated) * n3 
 
-         do iVertexOnCell = 1, nEdgesOnCell(iCell)  !double check
+         do iVertexOnCell = 1, nEdgesOnCell(iCell)  
 
-            jVertex = verticesOnCell(iVertexOnCell, iCell)  !double check
+            jVertex = verticesOnCell(iVertexOnCell, iCell)  
 
             call seaice_grid_rotation_forward(&
                  xVertexRotated, yVertexRotated, zVertexRotated, &

@@ -649,7 +649,7 @@
 			possible_values="true or false"
 		/>
 		<nml_option name="config_use_projected_b_grid" type="logical" default_value="false" units="unitless"
-			description="To project the contribution for the stress on a common tg plane for the B-grid"
+			description="To project the contributions for the stress on a common tg plane for the B-grid"
 			possible_values="true or false"
 		/>
 		
