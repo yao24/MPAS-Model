@@ -921,7 +921,7 @@ contains
                      do iStressVertex = 1, nEdgesOnCell(iCell)
 
                         variationalDenominator(iVertex) = variationalDenominator(iVertex) + &
-                             basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCell)
+                             basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iSurroundingCell)
 
                      enddo ! iStressVertex
 
