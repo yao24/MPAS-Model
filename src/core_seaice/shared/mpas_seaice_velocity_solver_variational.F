@@ -650,7 +650,7 @@ contains
 
                      do iCellOnVertex = 1, vertexDegree
 
-                        iCell = cellsOnEdge(iCellOnVertex,iVertex)
+                        iCell = cellsOnVertex(iCellOnVertex,iVertex)
 
                         if (iCell <= nCells) then
 
