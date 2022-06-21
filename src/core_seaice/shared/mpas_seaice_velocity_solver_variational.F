@@ -34,6 +34,7 @@ module seaice_velocity_solver_variational
        seaice_stress_tensor_variational_c_grid, &
        seaice_stress_divergence_variational, &
        seaice_stress_divergence_variational_c_grid, &
+       seaice_stress_divergence_variational_projected_b_grid, &
        seaice_final_divergence_shear_variational
 
 contains
@@ -3112,6 +3113,180 @@ end subroutine variational_denominator_c_grid
     ! -END: to be removed
 
   end subroutine seaice_stress_divergence_variational_c_grid!}}}
+
+!-----------------------------------------------------------------------
+
+  subroutine seaice_stress_divergence_variational_projected_b_grid(&
+       stressDivergenceU, &
+       stressDivergenceV, &
+       stressDivergenceUNoMetric, &
+       stressDivergenceVNoMetric, &
+       stressDivergenceUMetric, &
+       stressDivergenceVMetric, &
+       stress11, &
+       stress22, &
+       stress12, &
+       basisIntegralsUNewBGrid, &
+       basisIntegralsVNewBGrid, &
+       basisIntegralsMetricNewBGrid, &
+       variationalDenominator, &
+       tanLatEdgeRotatedOverRadius, &
+       cellVerticesAtVertex, &
+       solveVelocity)!{{{
+
+    use seaice_mesh_pool, only: &
+         nEdgesOnCell, &
+         nVerticesSolve, &
+         cellsOnVertex,  &
+         edgesOnCell, &
+         vertexDegree 
+
+    real(kind=RKIND), dimension(:), intent(out) :: &
+         stressDivergenceU,    & !< Output:
+         stressDivergenceV,    &    !< Output:
+         stressDivergenceUNoMetric,    & !< Output:
+         stressDivergenceVNoMetric,    &    !< Output:
+         stressDivergenceUMetric,    & !< Output:
+         stressDivergenceVMetric    !< Output:
+
+    real(kind=RKIND), dimension(:,:), contiguous, intent(in) :: &
+         stress11,        & !< Input:
+         stress22,        & !< Input:
+         stress12           !< Input:
+
+    real(kind=RKIND), dimension(:,:,:,:), contiguous, intent(in) :: &
+         basisIntegralsUNewBGrid,        &   !< Input:
+         basisIntegralsVNewBGrid,        &   !< Input:
+         basisIntegralsMetricNewBGrid   !< Input:
+
+    real(kind=RKIND), dimension(:), intent(in) :: &
+         tanLatEdgeRotatedOverRadius, & !< Input:
+         variationalDenominator     !< Input:
+
+    integer, dimension(:,:), intent(in) :: &
+         cellVerticesAtVertex   !< Input:
+
+    integer, dimension(:), intent(in) :: &
+         solveVelocity !< Input:
+
+    real(kind=RKIND) :: &
+         stressDivergenceUVertex, &
+         stressDivergenceVVertex, &
+         stressDivergenceUCell, &
+         stressDivergenceVCell, &
+         stressDivergenceUVertexNoMetric, &
+         stressDivergenceVVertexNoMetric, &
+         stressDivergenceUCellNoMetric, &
+         stressDivergenceVCellNoMetric, &
+         stressDivergenceUVertexMetric, &
+         stressDivergenceVVertexMetric, &
+         stressDivergenceUCellMetric, &
+         stressDivergenceVCellMetric
+
+    integer :: &
+         iCell, &
+         iVertex, &
+         iCellOnVertex, &
+         iVelocityVertex, &
+         iStressVertex
+
+
+!!!!!!!!!! TODO: I REMOVED THE STUFF ON OpenMP
+
+    do iVertex = 1, nVerticesSolve
+
+       if (solveVelocity(iVertex)==1) then
+
+          stressDivergenceU(iVertex) = 0.0_RKIND
+          stressDivergenceV(iVertex) = 0.0_RKIND
+          stressDivergenceUNoMetric(iVertex) = 0.0_RKIND
+          stressDivergenceVNoMetric(iVertex) = 0.0_RKIND
+          stressDivergenceUMetric(iVertex) = 0.0_RKIND
+          stressDivergenceVMetric(iVertex) = 0.0_RKIND
+
+          stressDivergenceUVertex = 0.0_RKIND
+          stressDivergenceVVertex = 0.0_RKIND
+          stressDivergenceUVertexNoMetric = 0.0_RKIND
+          stressDivergenceVVertexNoMetric = 0.0_RKIND
+          stressDivergenceUVertexMetric = 0.0_RKIND
+          stressDivergenceVVertexMetric = 0.0_RKIND
+
+          ! loop over surrounding cells
+          do iCellOnVertex = 1, vertexDegree
+
+             ! get the cell number of this cell
+             iCell = cellsOnVertex(iCellOnVertex, iVertex)
+
+             ! get the local index of iEdge on iCellOnEdge 
+             iVelocityVertex = cellVerticesAtVertex(iCellOnVertex,iVertex)
+
+             stressDivergenceUCell = 0.0_RKIND
+             stressDivergenceVCell = 0.0_RKIND
+             stressDivergenceUCellNoMetric = 0.0_RKIND
+             stressDivergenceVCellNoMetric = 0.0_RKIND
+             stressDivergenceUCellMetric = 0.0_RKIND
+             stressDivergenceVCellMetric = 0.0_RKIND
+
+             ! loop over the edges of the surrounding cell
+             do iStressVertex = 1, nEdgesOnCell(iCell)
+                 
+                ! normal & metric terms
+                stressDivergenceUCell = stressDivergenceUCell - &
+                     stress11(iStressVertex,iCell) * basisIntegralsUNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
+                     stress12(iStressVertex,iCell) * basisIntegralsVNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
+                     2.0_RKIND * stress12(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
+                     tanLatEdgeRotatedOverRadius(iVertex)
+
+                stressDivergenceVCell = stressDivergenceVCell - &
+                     stress22(iStressVertex,iCell) * basisIntegralsVNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
+                     stress12(iStressVertex,iCell) * basisIntegralsUNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) + &
+                     stress11(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
+                     tanLatEdgeRotatedOverRadius(iVertex) - &
+                     stress22(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
+                     tanLatEdgeRotatedOverRadius(iVertex) 
+
+                stressDivergenceUCellNoMetric = stressDivergenceUCellNoMetric - &
+                     stress11(iStressVertex,iCell) * basisIntegralsUNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
+                     stress12(iStressVertex,iCell) * basisIntegralsVNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) 
+
+                stressDivergenceVCellNoMetric = stressDivergenceVCellNoMetric - &
+                     stress22(iStressVertex,iCell) * basisIntegralsVNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
+                     stress12(iStressVertex,iCell) * basisIntegralsUNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex)
+
+                stressDivergenceUCellMetric = stressDivergenceUCellMetric - &
+                     stress12(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
+                     tanLatEdgeRotatedOverRadius(iVertex)
+
+                stressDivergenceVCellMetric = stressDivergenceVCellMetric + &
+                     stress11(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
+                     tanLatEdgeRotatedOverRadius(iVertex)
+
+             enddo ! iStressVertex
+
+             stressDivergenceUVertex = stressDivergenceUVertex + stressDivergenceUCell
+             stressDivergenceVVertex = stressDivergenceVVertex + stressDivergenceVCell
+
+             stressDivergenceUVertexNoMetric = stressDivergenceUVertexNoMetric + stressDivergenceUCellNoMetric
+             stressDivergenceVVertexNoMetric = stressDivergenceVVertexNoMetric + stressDivergenceVCellNoMetric
+
+             stressDivergenceUVertexMetric = stressDivergenceUVertexMetric + stressDivergenceUCellMetric
+             stressDivergenceVVertexMetric = stressDivergenceVVertexMetric + stressDivergenceVCellMetric
+
+          enddo ! iCellOnVertex
+
+          stressDivergenceU(iVertex) = stressDivergenceU(iVertex) + stressDivergenceUVertex / variationalDenominator(iVertex)
+          stressDivergenceV(iVertex) = stressDivergenceV(iVertex) + stressDivergenceVVertex / variationalDenominator(iVertex)
+          stressDivergenceUNoMetric(iVertex) = stressDivergenceUNoMetric(iVertex) + stressDivergenceUVertexNoMetric / variationalDenominator(iVertex)
+          stressDivergenceVNoMetric(iVertex) = stressDivergenceVNoMetric(iVertex) + stressDivergenceVVertexNoMetric / variationalDenominator(iVertex)
+          stressDivergenceUMetric(iVertex) = stressDivergenceUMetric(iVertex) + stressDivergenceUVertexMetric / variationalDenominator(iVertex)
+          stressDivergenceVMetric(iVertex) = stressDivergenceVMetric(iVertex) + stressDivergenceVVertexMetric / variationalDenominator(iVertex)
+
+       endif ! solveVelocity
+
+    enddo ! iVertex
+
+
+  end subroutine seaice_stress_divergence_variational_projected_b_grid!}}}
 
 !-----------------------------------------------------------------------
 

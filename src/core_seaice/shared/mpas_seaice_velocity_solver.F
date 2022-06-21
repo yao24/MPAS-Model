@@ -3176,6 +3176,9 @@ contains
          basisGradientUNew, &
          basisGradientVNew, &
          basisIntegralsMetricNew, &
+         basisGradientUNewBGrid, &
+         basisGradientVNewBGrid, &
+         basisIntegralsMetricNewBGrid, &
          basisGradientUTriNew, &
          basisGradientVTriNew, &
          basisIntegralsMetricTriNew, &
@@ -3183,6 +3186,8 @@ contains
          basisIntegralsV, &
          basisIntegralsUNew, &
          basisIntegralsVNew, &
+         basisIntegralsUNewBGrid, &
+         basisIntegralsVNewBGrid, &
          basisIntegralsUTriNew, &
          basisIntegralsVTriNew, &
          cellVerticesAtVertex, &
@@ -3214,10 +3219,12 @@ contains
     use seaice_velocity_solver_variational, only: &
          seaice_strain_tensor_variational, &
          seaice_strain_tensor_variational_c_grid, &
+         seaice_strain_tensor_variational_projected_b_grid, &
          seaice_stress_tensor_variational, &
          seaice_stress_tensor_variational_c_grid, &
          seaice_stress_divergence_variational, &
          seaice_stress_divergence_variational_c_grid, &
+         seaice_stress_divergence_variational_projected_b_grid, &
          seaice_average_strains_on_vertex
 
     type(domain_type), intent(inout) :: &
@@ -3282,7 +3289,8 @@ contains
          variationalDenominatorCGrid 
 
     logical, pointer :: &
-         config_use_c_grid
+         config_use_c_grid, &
+         config_use_projected_b_grid
 
     blockPtr => domain % blocklist
     do while (associated(blockPtr))
@@ -3337,6 +3345,8 @@ contains
 
           call MPAS_pool_get_config(blockPtr % configs, "config_use_c_grid", config_use_c_grid)
 
+          call MPAS_pool_get_config(blockPtr % configs, "config_use_projected_b_grid", config_use_projected_b_grid)
+
           if (config_use_c_grid) then
              call MPAS_pool_get_array(velocityVariationalPool, "strain11Tri", strain11varTri)
              call MPAS_pool_get_array(velocityVariationalPool, "strain22Tri", strain22varTri)
@@ -3367,7 +3377,9 @@ contains
 
           call mpas_timer_start("Velocity solver strain tensor")
           if ( .not. config_use_c_grid ) then
-             call seaice_strain_tensor_variational(&
+             
+             if( .not. config_use_projected_b_grid) then 
+                call seaice_strain_tensor_variational(&
                   meshPool, &
                   strain11var, &
                   strain22var, &
@@ -3378,6 +3390,20 @@ contains
                   basisGradientV, &
                   tanLatVertexRotatedOverRadius, &
                   solveStress)
+            else
+
+                call seaice_strain_tensor_variational_projected_b_grid(&
+                       meshPool, &
+                       strain11var, &
+                       strain22var, &
+                       strain12var, &
+                       uVelocity, &
+                       vVelocity, &
+                       basisGradientUNewBGrid, &
+                       basisGradientVNewBGrid, &
+                       tanLatEdgeRotatedOverRadius, &
+                       solveStress)
+             end if
           else 
 
              call seaice_strain_tensor_variational_c_grid(&
@@ -3514,7 +3540,10 @@ contains
 
           call mpas_timer_start("Velocity solver stress divergence")
           if ( .not. config_use_c_grid ) then
-             call seaice_stress_divergence_variational(&
+
+             if (.not. config_use_projected_b_grid) then 
+
+               call seaice_stress_divergence_variational(&
                   meshPool, &
                   stressDivergenceU, &
                   stressDivergenceV, &
@@ -3534,6 +3563,26 @@ contains
                   tanLatVertexRotatedOverRadius, &
                   cellVerticesAtVertex, &
                   solveVelocity)
+            else
+
+                  call seaice_stress_divergence_variational_projected_b_grid(&
+                       stressDivergenceU, &
+                       stressDivergenceV, &
+                       stressDivergenceUNoMetric, &
+                       stressDivergenceVNoMetric, &
+                       stressDivergenceUMetric, &
+                       stressDivergenceVMetric, &
+                       stress11var, &
+                       stress22var, &
+                       stress12var, &
+                       basisIntegralsUNewBGrid, &
+                       basisIntegralsVNewBGrid, &
+                       basisIntegralsMetricNewBGrid, &
+                       variationalDenominator, &
+                       tanLatEdgeRotatedOverRadius, &
+                       cellVerticesAtVertex, &
+                       solveVelocity)
+            end if 
           else
              call seaice_stress_divergence_variational_c_grid(&
                   meshPool, &

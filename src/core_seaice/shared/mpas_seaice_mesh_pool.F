@@ -81,6 +81,11 @@ module seaice_mesh_pool
       basisIntegralsUNew,&
       basisIntegralsVNew,&
       basisIntegralsMetricNew, &
+      basisGradientUNewBGrid, &
+      basisGradientVNewBGrid, &
+      basisIntegralsMetricNewBGrid, &
+      basisIntegralsUNewBGrid, &
+      basisIntegralsVNewBGrid, &
       basisGradientUTriNew, &
       basisGradientVTriNew, &
       basisIntegralsUTriNew,&
@@ -193,6 +198,11 @@ contains
        call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsUNew",      basisIntegralsUNew)
        call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsVNew",      basisIntegralsVNew)
        call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsMetricNew", basisIntegralsMetricNew)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientUNewBGrid",       basisGradientUNewBGrid)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisGradientVNewBGrid",       basisGradientVNewBGrid)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsUNewBGrid",      basisIntegralsUNewBGrid)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsVNewBGrid",      basisIntegralsVNewBGrid)
+       call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsMetricNewBGrid", basisIntegralsMetricNewBGrid)
        call MPAS_pool_get_array(velocityVariationalPool, "basisGradientUTriNew",       basisGradientUTriNew)
        call MPAS_pool_get_array(velocityVariationalPool, "basisGradientVTriNew",       basisGradientVTriNew)
        call MPAS_pool_get_array(velocityVariationalPool, "basisIntegralsUTriNew",      basisIntegralsUTriNew)
@@ -248,6 +258,11 @@ contains
 !$GPUC   basisIntegralsUNew,            &
 !$GPUC   basisIntegralsVNew,            &
 !$GPUC   basisIntegralsMetricNew,       &
+!$GPUC   basisGradientUNewBGrid,             &
+!$GPUC   basisGradientVNewBGrid,             &
+!$GPUC   basisIntegralsUNewBGrid,            &
+!$GPUC   basisIntegralsVNewBGrid,            &
+!$GPUC   basisIntegralsMetricNewBGrid,       &
 !$GPUC   basisGradientUTriNew,          &
 !$GPUC   basisGradientVTriNew,          &
 !$GPUC   basisIntegralsUTriNew,         &
@@ -329,6 +344,11 @@ contains
 !$GPUC   basisIntegralsUNew,            &
 !$GPUC   basisIntegralsVNew,            &
 !$GPUC   basisIntegralsMetricNew,       &
+!$GPUC   basisGradientUNewBGrid,             &
+!$GPUC   basisGradientVNewBGrid,             &
+!$GPUC   basisIntegralsUNewBGrid,            &
+!$GPUC   basisIntegralsVNewBGrid,            &
+!$GPUC   basisIntegralsMetricNewBGrid,       &
 !$GPUC   basisGradientUTriNew,          &
 !$GPUC   basisGradientVTriNew,          &
 !$GPUC   basisIntegralsUTriNew,         &
@@ -379,6 +399,11 @@ contains
          basisIntegralsUNew,      &
          basisIntegralsVNew,      &
          basisIntegralsMetricNew, &
+         basisGradientUNewBGrid,       &
+         basisGradientVNewBGrid,       &
+         basisIntegralsUNewBGrid,      &
+         basisIntegralsVNewBGrid,      &
+         basisIntegralsMetricNewBGrid, &
          basisGradientUTriNew,       &
          basisGradientVTriNew,       &
          basisIntegralsUTriNew,      &
