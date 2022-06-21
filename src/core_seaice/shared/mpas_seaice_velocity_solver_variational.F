@@ -3138,7 +3138,6 @@ end subroutine variational_denominator_c_grid
          nEdgesOnCell, &
          nVerticesSolve, &
          cellsOnVertex,  &
-         edgesOnCell, &
          vertexDegree 
 
     real(kind=RKIND), dimension(:), intent(out) :: &
@@ -3217,7 +3216,7 @@ end subroutine variational_denominator_c_grid
              ! get the cell number of this cell
              iCell = cellsOnVertex(iCellOnVertex, iVertex)
 
-             ! get the local index of iEdge on iCellOnEdge 
+             ! get the local index of iVertex on iCellOnVertex 
              iVelocityVertex = cellVerticesAtVertex(iCellOnVertex,iVertex)
 
              stressDivergenceUCell = 0.0_RKIND
@@ -3227,7 +3226,7 @@ end subroutine variational_denominator_c_grid
              stressDivergenceUCellMetric = 0.0_RKIND
              stressDivergenceVCellMetric = 0.0_RKIND
 
-             ! loop over the edges of the surrounding cell
+             ! loop over the vertices of the surrounding cell
              do iStressVertex = 1, nEdgesOnCell(iCell)
                  
                 ! normal & metric terms
