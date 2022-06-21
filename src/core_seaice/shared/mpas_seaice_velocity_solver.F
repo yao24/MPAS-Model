@@ -3579,7 +3579,7 @@ contains
                        basisIntegralsVNewBGrid, &
                        basisIntegralsMetricNewBGrid, &
                        variationalDenominator, &
-                       tanLatEdgeRotatedOverRadius, &
+                       tanLatVertexRotatedOverRadius, &
                        cellVerticesAtVertex, &
                        solveVelocity)
             end if 
