@@ -3233,15 +3233,13 @@ end subroutine variational_denominator_c_grid
                 stressDivergenceUCell = stressDivergenceUCell - &
                      stress11(iStressVertex,iCell) * basisIntegralsUNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
                      stress12(iStressVertex,iCell) * basisIntegralsVNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
-                     2.0_RKIND * stress12(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
+                     stress12(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
                      tanLatEdgeRotatedOverRadius(iVertex)
 
                 stressDivergenceVCell = stressDivergenceVCell - &
                      stress22(iStressVertex,iCell) * basisIntegralsVNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) - &
                      stress12(iStressVertex,iCell) * basisIntegralsUNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) + &
                      stress11(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
-                     tanLatEdgeRotatedOverRadius(iVertex) - &
-                     stress22(iStressVertex,iCell) * basisIntegralsMetricNewBGrid(iVertex,iStressVertex,iVelocityVertex,iCellOnVertex) * &
                      tanLatEdgeRotatedOverRadius(iVertex) 
 
                 stressDivergenceUCellNoMetric = stressDivergenceUCellNoMetric - &
