@@ -3810,9 +3810,9 @@
 		<var name="basisIntegralsUNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"	name_in_code="basisIntegralsUNew"/>
 		<var name="basisIntegralsVNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"	name_in_code="basisIntegralsVNew"/>
 		<var name="basisIntegralsMetricNew"		type="real"	dimensions="nEdges maxEdges maxEdges TWO"	name_in_code="basisIntegralsMetricNew"/>
-		<var name="basisIntegralsUNewBGrid"		type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsUNewBGrid"/>
-		<var name="basisIntegralsVNewBGrid"		type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsVNewBGrid"/>
-		<var name="basisIntegralsMetricNewBGrid"	type="real"	dimensions="nVertices maxEdges maxEdges R3"	name_in_code="basisIntegralsMetricNewBGrid"/>
+		<var name="basisIntegralsUNewBGrid"		type="real"	dimensions="nVertices maxEdges maxEdges vertexDegree"	name_in_code="basisIntegralsUNewBGrid"/>
+		<var name="basisIntegralsVNewBGrid"		type="real"	dimensions="nVertices maxEdges maxEdges vertexDegree"	name_in_code="basisIntegralsVNewBGrid"/>
+		<var name="basisIntegralsMetricNewBGrid"	type="real"	dimensions="nVertices maxEdges maxEdges vertexDegree"	name_in_code="basisIntegralsMetricNewBGrid"/>
 		<var name="basisIntegralsUTriNew"	       	type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisIntegralsUTriNew"/>
 		<var name="basisIntegralsVTriNew"    		type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisIntegralsVTriNew"/>
 		<var name="basisIntegralsMetricTriNew"     	type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisIntegralsMetricTriNew"/>
@@ -3820,8 +3820,8 @@
 		<var name="basisGradientV"			type="real"	dimensions="maxEdges maxEdges nCells"		name_in_code="basisGradientV"/>
 		<var name="basisGradientUNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"		name_in_code="basisGradientUNew"/>
 		<var name="basisGradientVNew"			type="real"	dimensions="nEdges maxEdges maxEdges TWO"		name_in_code="basisGradientVNew"/>
-		<var name="basisGradientUNewBGrid"			type="real"	dimensions="nVertices maxEdges maxEdges R3"		name_in_code="basisGradientUNewBGrid"/>
-		<var name="basisGradientVNewBGrid"			type="real"	dimensions="nVertices maxEdges maxEdges R3"		name_in_code="basisGradientVNewBGrid"/>
+		<var name="basisGradientUNewBGrid"			type="real"	dimensions="nVertices maxEdges maxEdges vertexDegree"		name_in_code="basisGradientUNewBGrid"/>
+		<var name="basisGradientVNewBGrid"			type="real"	dimensions="nVertices maxEdges maxEdges vertexDegree"		name_in_code="basisGradientVNewBGrid"/>
 		<var name="basisGradientUTriNew"			type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisGradientUTriNew"/>
 		<var name="basisGradientVTriNew"			type="real"	dimensions="nEdges vertexDegree vertexDegree TWO"	name_in_code="basisGradientVTriNew"/>
 		<var name="principalStress1Var"		        type="real"	dimensions="maxEdges nCells Time"		name_in_code="principalStress1"/>

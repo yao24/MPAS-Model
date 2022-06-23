@@ -391,8 +391,8 @@ contains
             allocate(xLocal(maxEdges,nCells))
             allocate(yLocal(maxEdges,nCells))
         else
-            allocate(xLocalNewBGrid(nVertices,maxEdges,3))
-            allocate(yLocalNewBGrid(nVertices,maxEdges,3))
+            allocate(xLocalNewBGrid(nVertices,maxEdges,vertexDegree))
+            allocate(yLocalNewBGrid(nVertices,maxEdges,vertexDegree))
         endif
        
     else 
@@ -428,7 +428,6 @@ contains
             call seaice_calc_local_coords_projected_b_grid(&
                 xLocalNewBGrid, &
                 yLocalNewBGrid, &
-                nCells, &
                 nEdgesOnCell, &
                 verticesOnCell, &
                 nVertices, & 
@@ -926,9 +925,6 @@ contains
                      enddo ! iStressVertex
 
                   enddo ! iSurroundingCell
-
-                  ! inverse
-                  variationalDenominator(iVertex) = variationalDenominator(iVertex)
 
                enddo ! iVertex
               
@@ -1850,18 +1846,15 @@ end subroutine variational_denominator_c_grid
        vVelocity, &
        basisGradientUNewBGrid, &
        basisGradientVNewBGrid, &
-       tanLatEdgeRotatedOverRadius, &
+       tanLatVertexRotatedOverRadius, &
        solveStress)!{{{
 
     use seaice_mesh_pool, only: &
-         nCells, &
          nVertices, & 
          vertexDegree, &
          cellsOnVertex, &
          verticesOnCell, &
-         edgesOnVertex, &
-         nEdgesOnCell, &
-         verticesOnEdge
+         nEdgesOnCell
 
     type(MPAS_pool_type), pointer, intent(in) :: &
          mesh !< Input:
@@ -1872,7 +1865,7 @@ end subroutine variational_denominator_c_grid
          strain12       !< Output:
 
     real(kind=RKIND), dimension(:), intent(in) :: &
-         tanLatEdgeRotatedOverRadius !< Input:
+         tanLatVertexRotatedOverRadius !< Input:
 
     real(kind=RKIND), dimension(:), intent(inout) :: &
          uVelocity, & !< Input:
@@ -1930,8 +1923,8 @@ end subroutine variational_denominator_c_grid
                  ! metric terms
                  kVertex = verticesOnCell(iGradientVertex,iCell)
 
-                  strain11(iGradientVertex,iCell) = strain11Tmp - vVelocity(kVertex) * tanLatEdgeRotatedOverRadius(kVertex)
-                  strain12(iGradientVertex,iCell) = strain12Tmp + uVelocity(kVertex) * tanLatEdgeRotatedOverRadius(kVertex) * 0.5_RKIND
+                  strain11(iGradientVertex,iCell) = strain11Tmp - vVelocity(kVertex) * tanLatVertexRotatedOverRadius(kVertex)
+                  strain12(iGradientVertex,iCell) = strain12Tmp + uVelocity(kVertex) * tanLatVertexRotatedOverRadius(kVertex) * 0.5_RKIND
                   strain22(iGradientVertex,iCell) = strain22Tmp
 
                end do ! kVertexOnCell

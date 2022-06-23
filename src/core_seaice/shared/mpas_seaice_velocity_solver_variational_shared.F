@@ -116,7 +116,6 @@ contains
   subroutine seaice_calc_local_coords_projected_b_grid(&
        xLocalNewBGrid, &
        yLocalNewBGrid, &
-       nCells, &
        nEdgesOnCell, &
        verticesOnCell, &
        nVertices, &
@@ -136,7 +135,6 @@ contains
          yLocalNewBGrid    !< Output:
          
     integer, intent(in) :: &
-         nCells, & !< Input:
          nVertices, & !< Input:
          vertexDegree !< Input:
 
@@ -161,20 +159,20 @@ contains
 
     if (onASphere) then
 
-        call calc_local_coords_spherical_projected_b_grid(& 
+        call calc_local_coords_spherical_projected_b_grid(&
              xLocalNewBGrid, &
              yLocalNewBGrid, &
+             nEdgesOnCell, &
+             verticesOnCell, &
              nVertices, &
              cellsOnVertex, &
-             verticesOnCell, &
-             nEdgesOnCell, &
              vertexDegree, &
-             xCell, &
-             yCell, &
-             zCell, &
              xVertex, &
              yVertex, &
              zVertex, &
+             xCell, &
+             yCell, &
+             zCell, &
              rotateCartesianGrid)
 
      else
@@ -796,27 +794,27 @@ contains
   end subroutine calc_local_coords_spherical_c_grid
   
   subroutine calc_local_coords_spherical_projected_b_grid(&
-       xLocalNew, &
-       yLocalNew, &
-       nVertices, &
-       cellsOnVertex, &
-       verticesOnCell, &
-       nEdgesOnCell, &
-       vertexDegree, &
-       xCell, &
-       yCell, &
-       zCell, &
-       xVertex, &
-       yVertex, &
-       zVertex, &
-       rotateCartesianGrid)!{{{
+        xLocalNewBGrid, &
+        yLocalNewBGrid, &
+        nEdgesOnCell, &
+        verticesOnCell, &
+        nVertices, &
+        cellsOnVertex, &
+        vertexDegree, &
+        xVertex, &
+        yVertex, &
+        zVertex, &
+        xCell, &
+        yCell, &
+        zCell, &
+        rotateCartesianGrid)!{{{
 
     use seaice_mesh, only: &
          seaice_grid_rotation_forward
 
     real(kind=RKIND), dimension(:,:,:), intent(out) :: &
-         xLocalNew, & !< Output:
-         yLocalNew !< Output:
+         xLocalNewBGrid, & !< Output:
+         yLocalNewBGrid !< Output:
 
     integer, dimension(:), intent(in) :: &
          nEdgesOnCell !< Input:
@@ -910,16 +908,16 @@ contains
                  xVertex(jVertex), yVertex(jVertex), zVertex(jVertex), &
                  rotateCartesianGrid)
 
-             xLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = (xVertexRotated - xCenterRotated) * e1 + &
+             xLocalNewBGrid(iVertex,iVertexOnCell,iCellOnVertex) = (xVertexRotated - xCenterRotated) * e1 + &
                                            (yVertexRotated - yCenterRotated) * e2 + &
                                            (zVertexRotated - zCenterRotated) * e3 
 
-             yLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = (xVertexRotated - xCenterRotated) * n1 + &
+             yLocalNewBGrid(iVertex,iVertexOnCell,iCellOnVertex) = (xVertexRotated - xCenterRotated) * n1 + &
                                            (yVertexRotated - yCenterRotated) * n2 + &
                                            (zVertexRotated - zCenterRotated) * n3
 
-             xLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = xLocalNew(iVertex,iVertexOnCell,iCellOnVertex) - xCellNew
-             yLocalNew(iVertex,iVertexOnCell,iCellOnVertex) = yLocalNew(iVertex,iVertexOnCell,iCellOnVertex) - yCellNew
+             xLocalNewBGrid(iVertex,iVertexOnCell,iCellOnVertex) = xLocalNewBGrid(iVertex,iVertexOnCell,iCellOnVertex) - xCellNew
+             yLocalNewBGrid(iVertex,iVertexOnCell,iCellOnVertex) = yLocalNewBGrid(iVertex,iVertexOnCell,iCellOnVertex) - yCellNew
 
           end do
 

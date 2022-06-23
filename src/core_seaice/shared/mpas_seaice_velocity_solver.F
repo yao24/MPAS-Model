@@ -3401,7 +3401,7 @@ contains
                        vVelocity, &
                        basisGradientUNewBGrid, &
                        basisGradientVNewBGrid, &
-                       tanLatEdgeRotatedOverRadius, &
+                       tanLatVertexRotatedOverRadius, &
                        solveStress)
              end if
           else 
